@@ -85,6 +85,9 @@ class HiMARuntime:
         }
     )
 
+    # LPBFreeBlockQueue instances registered by BlockPool (one per group).
+    _lpb_queues: list[Any] = field(default_factory=list)
+
     # --------------- intra-pool helpers (used by BlockPool) --------------- #
 
     def get_or_create_queue(self, pool: PoolKind) -> LPBPriorityQueue:
@@ -94,9 +97,18 @@ class HiMARuntime:
             self.intra_queues[pool] = q
         return q
 
+    def register_lpb_queue(self, queue: Any) -> None:
+        """Register a LPBFreeBlockQueue so record_hit can push depth updates."""
+        if queue not in self._lpb_queues:
+            self._lpb_queues.append(queue)
+
     def record_hit(self, path_block_ids: list[int]) -> None:
-        """Record a prefix-cache hit; pass the full root→leaf chain."""
+        """Record a prefix-cache hit; update path-counts and LPB depths."""
         self.path_counter.record_hit(tuple(path_block_ids))
+        # Push depth info into every registered LPBFreeBlockQueue.
+        for depth, block_id in enumerate(path_block_ids, start=1):
+            for q in self._lpb_queues:
+                q.set_block_depth(block_id, depth)
 
     # --------------- admission (used by Scheduler) ------------------------ #
 

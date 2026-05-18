@@ -164,12 +164,16 @@ class BlockPool:
         ]
         # LPB-ordered queue when HiMA is on; legacy LRU queue otherwise.
         from vllm.v1.core.hima.integration import (  # noqa: PLC0415
+            get_runtime,
             maybe_get_free_queue_factory,
         )
 
         lpb_factory = maybe_get_free_queue_factory()
         if lpb_factory is not None:
-            self.free_block_queue = lpb_factory(self.blocks)
+            _hima_rt = get_runtime()
+            self.free_block_queue = lpb_factory(self.blocks, runtime=_hima_rt)
+            if _hima_rt is not None:
+                _hima_rt.register_lpb_queue(self.free_block_queue)
         else:
             self.free_block_queue = FreeKVCacheBlockQueue(self.blocks)
 

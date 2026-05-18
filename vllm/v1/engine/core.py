@@ -134,19 +134,43 @@ class EngineCore:
             from vllm.v1.core.hima.integration import (  # noqa: PLC0415
                 enable_runtime as _hima_enable_runtime,
             )
+            from vllm.v1.kv_cache_interface import MambaSpec  # noqa: PLC0415
 
             _hima_cfg = dataclasses.replace(
                 HiMAConfig.from_env(),
                 hima_enabled=True,
                 hima_page_size_bytes=vllm_config.cache_config.hima_page_size_bytes,
             )
-            _hima_enable_runtime(config=_hima_cfg)
+
+            # Derive per-pool slot budgets from the KV cache config.
+            _n_total = kv_cache_config.num_blocks
+            _n_rec = sum(
+                1
+                for g in kv_cache_config.kv_cache_groups
+                if isinstance(g.kv_cache_spec, MambaSpec)
+            )
+            # _n_rec counts mamba *groups*, use it as a weight; proportional split.
+            _n_groups = max(len(kv_cache_config.kv_cache_groups), 1)
+            _rec_slots = max(1, _n_total * _n_rec // _n_groups)
+            _kv_slots = max(1, _n_total - _rec_slots)
+
+            _hima_enable_runtime(
+                config=_hima_cfg,
+                n_pages=_kv_slots + _rec_slots,
+                kv_slots=_kv_slots,
+                rec_slots=_rec_slots,
+            )
             _page_kib = (
                 (_hima_cfg.hima_page_size_bytes // 1024)
                 if _hima_cfg.hima_page_size_bytes is not None
                 else -1
             )
-            logger.info("HiMA enabled (page=%d KiB).", _page_kib)
+            logger.info(
+                "HiMA enabled (page=%d KiB, kv_slots=%d, rec_slots=%d).",
+                _page_kib,
+                _kv_slots,
+                _rec_slots,
+            )
         self.structured_output_manager = StructuredOutputManager(vllm_config)
 
         # Setup scheduler.

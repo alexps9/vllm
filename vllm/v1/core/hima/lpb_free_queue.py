@@ -11,24 +11,36 @@ import logging
 import time
 from typing import TYPE_CHECKING
 
+from vllm.v1.core.hima.config import PoolKind
 from vllm.v1.core.hima.intra_pool.lpb_queue import LPBPriorityQueue
 
 if TYPE_CHECKING:
+    from vllm.v1.core.hima.integration import HiMARuntime
     from vllm.v1.core.kv_cache_utils import KVCacheBlock
 
 logger = logging.getLogger(__name__)
 
 
 class LPBFreeBlockQueue:
-    """Min-LPB-ordered free-block queue; drop-in for ``FreeKVCacheBlockQueue``."""
+    """Min-LPB-ordered free-block queue; drop-in for ``FreeKVCacheBlockQueue``.
+
+    Score = n_b * c_i(depth) where n_b is the path-counted hit frequency and
+    c_i(depth) is the pool's recovery cost curve. Falls back to monotonic time
+    (LRU) when the runtime is unavailable or the block is cold.
+    """
 
     def __init__(
         self,
         blocks: list[KVCacheBlock],
-        runtime: object | None = None,
+        runtime: HiMARuntime | None = None,
+        pool_kind: PoolKind = PoolKind.KV,
     ) -> None:
         self._blocks_by_id: dict[int, KVCacheBlock] = {b.block_id: b for b in blocks}
         self._queue: LPBPriorityQueue[int] = LPBPriorityQueue()
+        self._runtime = runtime
+        self.pool_kind = pool_kind
+        # block_id → prefix-tree depth (set by coordinator on cache_blocks)
+        self._block_depth: dict[int, int] = {}
         base = time.monotonic()
         for i, blk in enumerate(blocks):
             self._queue.add(blk.block_id, score=base + i * 1e-6)
@@ -87,13 +99,30 @@ class LPBFreeBlockQueue:
     def score_of(self, block: KVCacheBlock) -> float:
         return self._queue.score_of(block.block_id)
 
+    def set_block_depth(self, block_id: int, depth: int) -> None:
+        """Record prefix-tree depth for LPB scoring; called by HiMACoordinator."""
+        self._block_depth[block_id] = depth
+
+    def refresh_lpb_score(self, block: KVCacheBlock) -> None:
+        """Recompute and push the LPB score for ``block`` into the heap."""
+        if block.block_id in self._queue:
+            self._queue.update(block.block_id, self._score_for(block))
+
     # --------------------------- internals ------------------------------- #
 
     def _score_for(self, block: KVCacheBlock) -> float:
-        last_access: float | None = getattr(block, "last_accessed", None)
-        if last_access is None:
-            last_access = time.monotonic()
-        return float(last_access)
+        rt = self._runtime
+        if rt is None:
+            last_access: float | None = getattr(block, "last_accessed", None)
+            return float(last_access) if last_access is not None else time.monotonic()
+        n_b = rt.path_counter.count(block.block_id)
+        if n_b == 0:
+            # Cold block: use monotonic time so it sorts like LRU among cold blocks.
+            last_access = getattr(block, "last_accessed", None)
+            return float(last_access) if last_access is not None else time.monotonic()
+        depth = self._block_depth.get(block.block_id, 1)
+        c = rt.cost_curves.cost(self.pool_kind, depth)
+        return float(n_b) * c
 
 
 __all__ = ["LPBFreeBlockQueue"]

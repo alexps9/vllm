@@ -105,9 +105,24 @@ def _hima_find_longest_cache_hit(self: Any, request: Any) -> tuple:  # type: ign
 
 
 def _hima_cache_blocks(self: Any, request: Any, num_computed_tokens: int) -> None:
-    """Pass-through; hook reserved for future LPB metadata sync."""
+    """After caching, push LPB depth info and refresh heap scores."""
     base = _hybrid_base()
     base.cache_blocks(self, request, num_computed_tokens)
+    runtime = self._hima_runtime
+    if runtime is None:
+        return
+    # block_pool.free_block_queue may be an LPBFreeBlockQueue; refresh scores
+    # for any blocks just promoted to the free queue.
+    free_q = getattr(self.block_pool, "free_block_queue", None)
+    refresh = getattr(free_q, "refresh_lpb_score", None)
+    if refresh is None:
+        return
+    import contextlib  # noqa: PLC0415
+
+    for blk in getattr(request, "kv_cache_blocks", []):
+        if hasattr(blk, "block_id"):
+            with contextlib.suppress(Exception):
+                refresh(blk)
 
 
 __all__ = ["HiMACoordinator"]
