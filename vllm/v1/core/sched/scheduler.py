@@ -900,6 +900,20 @@ class Scheduler(SchedulerInterface):
 
         with record_function_or_nullcontext("schedule: update_after_schedule"):
             self._update_after_schedule(scheduler_output)
+        # Feed per-step signals into the HiMA telemetry (no-op when disabled).
+        from vllm.v1.core.hima.integration import get_runtime  # noqa: PLC0415
+
+        _hima_runtime = get_runtime()
+        if _hima_runtime is not None:
+            import contextlib  # noqa: PLC0415
+
+            with contextlib.suppress(Exception):
+                _hima_runtime.telemetry.observe(
+                    {
+                        "num_preempted_recent": len(preempted_reqs),
+                        "num_queue_reqs": len(self.waiting),
+                    }
+                )
         return scheduler_output
 
     def _build_kv_connector_meta(

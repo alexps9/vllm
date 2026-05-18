@@ -628,6 +628,25 @@ def get_kv_cache_coordinator(
             hash_block_size=hash_block_size,
             metrics_collector=metrics_collector,
         )
+    from vllm.v1.core.hima.integration import get_runtime  # noqa: PLC0415
+
+    runtime = get_runtime()
+    if runtime is not None:
+        from vllm.v1.core.hima.coordinator_hima import HiMACoordinator  # noqa: PLC0415
+
+        return HiMACoordinator.build(
+            kv_cache_config=kv_cache_config,
+            max_model_len=max_model_len,
+            max_num_batched_tokens=max_num_batched_tokens,
+            use_eagle=use_eagle,
+            enable_caching=enable_caching,
+            enable_kv_cache_events=enable_kv_cache_events,
+            dcp_world_size=dcp_world_size,
+            pcp_world_size=pcp_world_size,
+            hash_block_size=hash_block_size,
+            metrics_collector=metrics_collector,
+            runtime=runtime,
+        )
     return HybridKVCacheCoordinator(
         kv_cache_config,
         max_model_len,

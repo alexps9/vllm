@@ -126,6 +126,27 @@ class EngineCore:
 
         # Setup KV Caches and update CacheConfig after profiling.
         kv_cache_config = self._initialize_kv_caches(vllm_config)
+
+        if getattr(vllm_config.cache_config, "hima_enabled", False):
+            import dataclasses  # noqa: PLC0415
+
+            from vllm.v1.core.hima.config import HiMAConfig  # noqa: PLC0415
+            from vllm.v1.core.hima.integration import (  # noqa: PLC0415
+                enable_runtime as _hima_enable_runtime,
+            )
+
+            _hima_cfg = dataclasses.replace(
+                HiMAConfig.from_env(),
+                hima_enabled=True,
+                hima_page_size_bytes=vllm_config.cache_config.hima_page_size_bytes,
+            )
+            _hima_enable_runtime(config=_hima_cfg)
+            _page_kib = (
+                (_hima_cfg.hima_page_size_bytes // 1024)
+                if _hima_cfg.hima_page_size_bytes is not None
+                else -1
+            )
+            logger.info("HiMA enabled (page=%d KiB).", _page_kib)
         self.structured_output_manager = StructuredOutputManager(vllm_config)
 
         # Setup scheduler.
@@ -218,6 +239,13 @@ class EngineCore:
         self.aborts_queue = queue.Queue[list[str]]()
 
         self._idle_state_callbacks: list[Callable] = []
+
+        from vllm.v1.core.hima.budgeter_task import (  # noqa: PLC0415
+            start_if_enabled as _hima_start_budgeter,
+        )
+        from vllm.v1.core.hima.integration import get_runtime  # noqa: PLC0415
+
+        self._hima_budgeter = _hima_start_budgeter(get_runtime())
 
         # Mark the startup heap as static so that it's ignored by GC.
         # Reduces pause times of oldest generation collections.
@@ -574,6 +602,13 @@ class EngineCore:
 
     def shutdown(self):
         self.structured_output_manager.clear_backend()
+        import contextlib  # noqa: PLC0415
+
+        _hima_budgeter = getattr(self, "_hima_budgeter", None)
+        if _hima_budgeter is not None:
+            with contextlib.suppress(Exception):
+                _hima_budgeter.stop(timeout=2.0)
+            self._hima_budgeter = None
         if self.model_executor:
             self.model_executor.shutdown()
         if self.scheduler:

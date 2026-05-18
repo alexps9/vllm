@@ -117,6 +117,26 @@ class CacheConfig:
     mamba_page_size_padded: int | None = None
     """ Optional override for mamba page size; used by hybrid mamba/attention
     models to ensure exact alignment with attention page size."""
+    hima_enabled: bool = False
+    """**Experimental.** Whether to enable HiMA (Hierarchical Memory
+    Management for Agentic Systems) for hybrid models. When enabled:
+
+    * intra-pool eviction uses Loss-Per-Byte (LPB) instead of LRU;
+    * inter-pool memory is dynamically rebalanced via a Cross-Pool Planner;
+    * the actuator uses CUDA VMM (``cuMemUnmap`` / ``cuMemMap``) to migrate
+      pages atomically without invalidating CUDA Graphs.
+
+    Defaults to ``False``; only takes effect for hybrid models. Refer to
+    ``docs/usage/hima.md`` for production-readiness caveats."""
+    hima_page_size_bytes: int = 2 * 1024 * 1024
+    """HiMA actuator page granularity. Must match the GPU's VMM allocation
+    granularity (2 MiB on H200 / RTX PRO 6000 Blackwell). Ignored when
+    ``hima_enabled`` is False."""
+    hima_csigma_json: str | None = None
+    """Optional path to a JSON file produced by
+    ``benchmarks/hima_cost_curve.py`` carrying calibrated KV / mamba
+    cost-curve coefficients. When unset, HiMA falls back to the H200
+    reference defaults -- which are NOT representative on Blackwell."""
     mamba_block_size: int | None = Field(default=None, gt=0)
     """Size of a contiguous cache block in number of tokens for mamba cache.
     Can be set only when prefix caching is enabled.

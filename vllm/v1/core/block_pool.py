@@ -162,10 +162,16 @@ class BlockPool:
         self.blocks: list[KVCacheBlock] = [
             KVCacheBlock(idx) for idx in range(num_gpu_blocks)
         ]
-        # Free block queue that constructs and manipulates a doubly linked
-        # list of free blocks (including eviction candidates when caching is
-        # enabled).
-        self.free_block_queue = FreeKVCacheBlockQueue(self.blocks)
+        # LPB-ordered queue when HiMA is on; legacy LRU queue otherwise.
+        from vllm.v1.core.hima.integration import (  # noqa: PLC0415
+            maybe_get_free_queue_factory,
+        )
+
+        lpb_factory = maybe_get_free_queue_factory()
+        if lpb_factory is not None:
+            self.free_block_queue = lpb_factory(self.blocks)
+        else:
+            self.free_block_queue = FreeKVCacheBlockQueue(self.blocks)
 
         # Cache for block lookup
         self.cached_block_hash_to_block: BlockHashToBlockMap = BlockHashToBlockMap()
