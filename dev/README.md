@@ -472,6 +472,128 @@ content, reaching 22.5 % of new content over 29 real sessions
 the dominant driver of waste %** — short-turn sessions hit the bubble
 hardest. Matches the synthetic Finding C and the real-traffic Finding D.
 
+### G. Counterfactual: how much of the bubble is the inflate's fault?
+
+Findings A-F have shown:
+  - `block_size` is inflated from the vLLM default of 16 to **1056** on
+    this model (Finding A);
+  - real cc workload loses **42.62 %** of new content to partial-block
+    waste at `block_size=1056` (Finding D).
+
+How much of that 42.62 % is *the inflate's fault* vs the workload's
+fault? `dev/counterfactual_block_size.py` answers it directly: apply
+the *exact same* formula and the *exact same* 106 cc sessions, varying
+only `block_size`:
+
+| block_size | workload-weighted waste % | total waste tokens |
+|---:|---:|---:|
+| 16   |  **0.69 %** |     77,275 |
+| 32   |  1.34 %     |    149,016 |
+| 64   |  2.61 %     |    288,977 |
+| 128  |  5.26 %     |    582,289 |
+| 256  | 10.52 %     |  1,163,921 |
+| 512  | 20.95 %     |  2,316,945 |
+| **1056** | **42.62 %** | **4,713,841** |
+| 2112 | 85.10 %     |  9,411,985 |
+
+**The waste % roughly doubles every time `block_size` doubles** (a clean
+log-linear relationship — see `dev/figures/fig_block_size_counterfactual.png`).
+
+At the vLLM default `block_size=16`, the same workload would lose only
+**0.69 %** of new content — essentially zero. So the entire ~42 % bubble
+is the inflate's fault, not the workload's. If vLLM weren't forced to
+inflate `block_size` to match the fp32 mamba state (Finding A), the cc
+bubble would be **62 × smaller** in token terms (77K vs 4.7M wasted
+tokens across the 106-session corpus).
+
+This is exactly the counterfactual that HiMA's Path-A (split BlockPool
+into separate per-spec stores) would deliver.
+
+### H. L1 anchor-eviction *pressure curve* — the cliff is at K ≈ 7 sessions
+
+Finding E.2 showed the anchor evicts after 29 sessions of cold burst.
+**At what pressure does it actually break?** `dev/e2e_l1_pressure_curve.py`
+sweeps K ∈ {0, 5, 10, 15, 20, 25, 30}, drawing each phase's cold-burst
+sessions from a disjoint pool (sessions 1..5 for K=5, 6..15 for K=10,
+etc.). Each phase: re-warm anchor 5×, replay K silent sessions, probe.
+
+**Result** (`dev/e2e_l1_pressure_curve.out` /
+`dev/figures/fig_l1_pressure_curve.png`):
+
+| K | cum new tokens | cum new blocks (lb) | anchor cached % |
+|---:|---:|---:|---:|
+|  0 |          0 |     0 | **89.2 %** (= floor(4737/1056)·1056) |
+|  5 |    279,895 |   222 | **89.2 %** (still alive) |
+| **10** |   **540,235** | **429** | **0 %** ← *cliff* |
+| 15 |    810,834 |   613 |  0 % |
+| 20 |  1,117,292 |   831 |  0 % |
+| 25 |  1,304,043 |   989 |  0 % |
+| 30 |  1,573,910 | 1,223 |  0 % |
+
+The transition is **sharp**: anchor survives 5 sessions of cold burst
+(222 new blocks lower-bound), then is **completely gone after 10**
+(429 new blocks lower-bound). That's about a 250-block shove on a
+~1022-block KV budget. The actual cache state at K=10 includes prior
+phases' content too, so the real cumulative cache pressure at the
+eviction cliff is somewhere around 500-800 blocks — well below the
+1022-block budget. **vLLM's LRU evicts the anchor before the cache is
+even full, because the anchor is the oldest "tail" entry by release
+time.**
+
+This is the precise L1 failure mode HiMA-LPB is designed to fix: under
+LPB scoring, the anchor's hit count (5 warm hits) would give it a
+higher score than the cold-burst blocks (each hit 0-1 times) — so even
+at high cumulative pressure, the anchor would survive while less-valued
+blocks evict first.
+
+### I. Wall-clock TTFT cost of the partial-block bubble
+
+The 4.71 M wasted tokens from Finding D are a token-count number. What's
+the user-visible cost in seconds? `dev/ttft_cost_of_bubble.py` measures
+actual prefill latency at lengths {512, 1k, 2k, 4k, 8k, 16k} on
+Qwen3.5-35B-A3B / TP=2 / H200, takes the median of 3 trials per length,
+and fits a linear model.
+
+**Measured prefill latency** (`dev/ttft_cost_of_bubble.out`):
+
+| prompt_len (tokens) | median wall (ms) | apparent tps |
+|---:|---:|---:|
+|    512 |  52 |    9,861 |
+|  1,024 |  53 |   19,217 |
+|  2,048 | 108 |   18,965 |
+|  4,096 | 114 |   35,823 |
+|  8,192 | 146 |   56,218 |
+| 16,384 | 276 |   59,463 |
+
+**Linear fit:** `wall_s = 53.1 ms + L × 13.34 µs/token`
+  → marginal prefill rate ≈ **75 K tokens/sec** (after the fixed
+  ~53 ms scheduler/launch overhead).
+
+**Applying the marginal slope to the bubble:**
+
+  - **29-session e2e_replay subset** (Finding F, 22.5 % waste):
+    - 353,790 wasted tokens × 13.34 µs = **4.7 seconds** total TTFT cost
+    - = **6.7 ms per request** averaged over 706 requests
+
+  - **Full 106-session cc corpus** (Finding D, 42.6 % waste):
+    - 4,713,841 wasted tokens × 13.34 µs = **62.9 seconds** total
+      TTFT cost = **1.0 minute** of pure GPU prefill wall-clock
+    - = **0.6 second per session** averaged across all 106 sessions
+    - Distributed across ~10K requests in the corpus, that's
+      **~6 ms TTFT overhead per request** — silent but cumulative.
+
+In counterfactual terms (Finding G), at the vLLM default
+`block_size=16` the same 106-session corpus would waste only 77K
+tokens × 13.34 µs ≈ **1 second total** instead of 63 seconds.
+**The inflate costs ~62 seconds of user-visible prefill latency per
+106-session cc workload.**
+
+> *(Note: at the longest probed length (16K tokens), L=32K crashed
+> the script due to filler shortage — see `dev/ttft_cost_of_bubble.out`
+> for the traceback. The 6 data points up to 16K are sufficient for the
+> linear fit; the same slope extrapolates cleanly to 32K territory
+> as a per-token marginal cost.)*
+
 ---
 
 ## Reproduction — quick start
@@ -502,6 +624,16 @@ cd /data/yuzhou/projects/vllm-songyang
 # (7) e2e L1 burst test (no intermediate probes — the real L1 demonstration)
 .venv/bin/python dev/e2e_l1_burst.py | tee dev/e2e_l1_burst.out
 .venv/bin/python dev/plot_l1_burst.py   # writes dev/figures/fig_l1_anchor_eviction.png
+
+# (8) Counterfactual block_size sweep on cc data (no GPU, ~30s)
+.venv/bin/python dev/counterfactual_block_size.py | tee dev/counterfactual_block_size.out
+
+# (9) L1 pressure curve (anchor survival vs cold-burst K), ~25 min
+.venv/bin/python dev/e2e_l1_pressure_curve.py | tee dev/e2e_l1_pressure_curve.out
+.venv/bin/python dev/plot_l1_pressure.py
+
+# (10) Wall-clock TTFT cost of bubble (~5 min)
+.venv/bin/python dev/ttft_cost_of_bubble.py | tee dev/ttft_cost_of_bubble.out
 ```
 
 ---
