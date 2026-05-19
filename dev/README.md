@@ -126,6 +126,28 @@ Run:
 
 Outputs are saved to `dev/real_session_waste.out`.
 
+### `e2e_replay.py` + `plot_results.py` — end-to-end replay + figures
+
+Replays 30 cc sessions through a live vLLM engine, recording every
+request's `(prompt_len, num_cached_tokens, partial_block_waste,
+new_content_tokens)` to `dev/e2e_replay.jsonl`. Issues an anchor probe
+between every session so we have a time-series of "anchor cached %"
+(see Finding E.1 — note the probe artifact caveat).
+
+`plot_results.py` consumes the JSONL and writes six figures to
+`dev/figures/`.
+
+### `e2e_l1_burst.py` + `plot_l1_burst.py` — focused L1 test
+
+Same engine config but replays sessions 1..29 with NO intermediate
+anchor probes (probes only at BASELINE and FINAL). This removes the
+methodology artifact in Finding E.1 and gives the clean L1
+demonstration in Finding E.2.
+
+`plot_l1_burst.py` reads BOTH `e2e_replay.jsonl` (for E.1's flat blue
+line) and `e2e_l1_burst.jsonl` (for E.2's 89.2 % → 0 % drop) and
+produces the headline `fig_l1_anchor_eviction.png`.
+
 ---
 
 ## Findings
@@ -353,6 +375,103 @@ proof of the partial-block bubble's workload-sensitivity: **same engine,
 same model, same block_size; only the turn-shape changes, and the waste
 moves 25×**.
 
+### E. End-to-end L1 validation: anchor eviction on real cc workload
+
+What about the **HiMA L1 claim** — that LRU eviction on the free-block
+queue actively drops *heavily-hit anchor blocks* when a cold burst of
+unrelated traffic arrives? Two scripts test it end-to-end:
+
+#### E.1 — `dev/e2e_replay.py`: probe between every session
+
+Setup: anchor = session 0's first user message (4,737 tokens ≈ 5 KV
+blocks); warm 5×; then replay sessions 1..29 with an anchor probe
+issued *between* every session. vLLM config: TP=2, util=0.35,
+`mamba_cache_mode=align`, `max_num_seqs=64`. KV budget at startup was
+**1,079,362 tokens = ~1022 blocks**.
+
+**Result**: anchor stays at `cached = 4224/4737` (= `floor(4737/1056) ×
+1056` — every cacheable block survives) for **all 29 probes**. See
+`dev/figures/fig_anchor_survival.png` (flat line at ~89%).
+
+**Caveat — methodology artifact**: every probe HITS the anchor and
+pushes its blocks back to the *tail* of the free-block LRU queue. The
+measurement itself prevents the eviction it is trying to observe. The
+result is a (boring) tautology: "blocks that we keep touching don't
+get evicted."
+
+Total cold-burst pressure over the 29 sessions was
+**1,571,394 new tokens ≈ 1,488 new blocks** — well above the 1,017
+block threshold that should evict a 5-block anchor at the tail. So
+without probe refresh, eviction is *theoretically* forced.
+
+#### E.2 — `dev/e2e_l1_burst.py`: no intermediate probes (the real test)
+
+To remove the probe artifact: warm anchor 5×, probe once (BASELINE),
+then replay sessions 1..29 with **no probes in between**, then probe
+once at the end (FINAL).
+
+**Result** (`dev/e2e_l1_burst.out`):
+
+```
+BASELINE anchor probe (post-warm): cached=4224/4737 (89.2%)
+Phase B: replaying sessions 1..29 with NO probes in between
+  session  1: 52 turns, cum_new_tokens=  59,999, cum_new_blocks(lb)=   37
+  session  2: 37 turns, cum_new_tokens= 119,509, cum_new_blocks(lb)=   82
+  ...
+  session 29: 14 turns, cum_new_tokens=1,571,394, cum_new_blocks(lb)= 1229
+
+FINAL anchor probe (after 29 sessions of cold burst):
+  anchor_cached = 0/4737 (0.0%)
+  cum_new_tokens during workload = 1,571,394
+  cum_new_blocks (lower bound)   = 1229
+  KV budget (blocks)             = 1022 (vLLM reported)
+
+VERDICT: anchor FULLY EVICTED → L1 claim reproduced
+         (LRU dropped a high-value heavily-hit block under pressure).
+```
+
+**The anchor goes from `4224/4737` cached at BASELINE to `0/4737` at
+FINAL.** Even though we hit it 5 times at the start of the experiment,
+vLLM's LRU-on-release-time policy doesn't remember those hits — only
+the most recent release matters. The ~1.57M tokens of subsequent
+cold-burst content released ~1229 new blocks to the tail of the free
+queue, pushing the anchor from the tail (where the 5 warm hits left
+it) all the way to the head, where it got popped.
+
+See `dev/figures/fig_l1_anchor_eviction.png` for the side-by-side
+comparison of E.1 (probe artifact masks eviction) vs E.2 (true
+eviction visible).
+
+This is exactly the failure mode HiMA L1 (LPB scoring) is designed to
+prevent: under LPB, the anchor's hit count of 5 would give it a high
+score, so it would NOT be evicted even when other blocks "look" more
+recently used by release time.
+
+### F. L2 visualization: per-turn bubble accumulating over the workload
+
+The `dev/e2e_replay.py` run produces 706 session_turn rows across 29
+real cc sessions. `dev/plot_results.py` consumes that JSONL and emits
+six figures into `dev/figures/`:
+
+| figure | content |
+|---|---|
+| `fig_cumulative_waste.png` | partial-block waste vs new content, cumulative; **final workload-weighted waste = 22.5 %** annotated on chart (lower than the 42.6 % across all 106 sessions in Finding D because this subset happens to have longer mean turns) |
+| `fig_per_turn_breakdown.png` | every request's prompt as a stacked bar of {cache hit, partial-block re-prefill, new content prefill}; reveals the sawtooth structure: prompts grow turn-by-turn within a session then reset to ~0 at the session boundary |
+| `fig_per_session_waste.png` | per-session waste % sorted ascending; ranges from **4 % (sessions with 7-8 turns)** to **67 % (sessions with 67-78 turns)**; mean = 21.7 % |
+| `fig_hit_rate.png` | per-request cache-hit fraction, chronological, colored by session — shows the "session start = cold" pattern and the rapid climb to 95%+ within 2-3 turns |
+| `fig_anchor_survival.png` | anchor cached % across probes (flat at ~89 %; see E.1 caveat) |
+| `fig_l1_anchor_eviction.png` | **The L1 headline figure**: blue line (E.1, with probes) flat at 89.2 %; red line (E.2, no probes) drops from 89.2 % to **0 %** after 29 sessions of cold burst |
+| `fig_dashboard.png` | 2×2 summary grid of the four most informative panels |
+
+The headline plot is `fig_cumulative_waste.png` — the cumulative
+partial-block waste accumulates **linearly** in the workload's new
+content, reaching 22.5 % of new content over 29 real sessions
+(353,790 wasted tokens / 1,571,394 new content tokens).
+
+`fig_per_session_waste.png` clearly shows that **session turn-count is
+the dominant driver of waste %** — short-turn sessions hit the bubble
+hardest. Matches the synthetic Finding C and the real-traffic Finding D.
+
 ---
 
 ## Reproduction — quick start
@@ -374,6 +493,15 @@ cd /data/yuzhou/projects/vllm-songyang
 
 # (5) apply formula to real Claude Code traces — ~30s, tokenizer only, no GPU
 .venv/bin/python dev/real_session_waste.py | tee dev/real_session_waste.out
+
+# (6) e2e replay on real cc traces, anchor probe between sessions
+#     (~5 min: 3 min model load, ~2 min for 706 reqs across 29 sessions)
+.venv/bin/python dev/e2e_replay.py | tee dev/e2e_replay.out
+.venv/bin/python dev/plot_results.py    # writes dev/figures/*.png
+
+# (7) e2e L1 burst test (no intermediate probes — the real L1 demonstration)
+.venv/bin/python dev/e2e_l1_burst.py | tee dev/e2e_l1_burst.out
+.venv/bin/python dev/plot_l1_burst.py   # writes dev/figures/fig_l1_anchor_eviction.png
 ```
 
 ---
