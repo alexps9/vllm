@@ -50,7 +50,8 @@ from transformers import AutoTokenizer
 from vllm import LLM, SamplingParams
 
 MODEL = "Qwen/Qwen3.5-35B-A3B"
-DATA = Path("/data/yuzhou/projects/sglang/dev/eval/datasets/cc_long_traces.jsonl")
+# Bundled into dev/ so the experiment is self-contained on any host.
+DATA = Path(__file__).resolve().parent / "cc_long_traces.jsonl"
 BLOCK_SIZE = 1056
 MAX_PROMPT_TOKENS = 60_000
 N_ANCHOR_WARM = 500  # high enough that anchor's n_b dominates cc-session hits

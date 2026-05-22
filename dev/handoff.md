@@ -20,7 +20,7 @@ On a host with:
 - ≥ 2× H100 / H200 / similar (~140 GB each); script uses TP=2 and ~35 GB GPU each
 - vLLM-songyang branch `HiMA` already built (`VLLM_USE_PRECOMPILED=1 uv pip install -e .`)
 - `KMP_AFFINITY=disabled` (already set inside script)
-- The cc traces file at `/data/yuzhou/projects/sglang/dev/eval/datasets/cc_long_traces.jsonl` (44 MB, 106 sessions). If missing, copy from the source host or update `DATA = Path(...)` at top of `dev/compare_lru_lpb.py`.
+- `dev/cc_long_traces.jsonl` (44 MB, 106 sessions) — bundled in the repo; the script resolves it relative to itself. Nothing to set up.
 
 ```bash
 cd /data/yuzhou/projects/vllm-songyang
@@ -191,9 +191,9 @@ VLLM_USE_PRECOMPILED=1 uv pip install -e . --torch-backend=auto
 ```
 
 ### Dataset
-The cc traces (106 real Claude Code sessions, ~44 MB). Either:
-- Copy `/data/yuzhou/projects/sglang/dev/eval/datasets/cc_long_traces.jsonl` from the source host, OR
-- Edit the `DATA = Path(...)` line at `dev/compare_lru_lpb.py:53` to point at your copy.
+`dev/cc_long_traces.jsonl` (106 real Claude Code sessions, ~44 MB) is
+checked into the repo and the script resolves it via
+`Path(__file__).parent / "cc_long_traces.jsonl"`. Nothing to set up.
 
 ### Env vars (already set inside script, listed for reference)
 
