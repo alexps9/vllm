@@ -20,6 +20,13 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Offset that guarantees any block with n_b > 0 sorts STRICTLY ABOVE any
+# block whose score is a wall-clock time.monotonic() (~1e9 on Linux).
+# We want LPB ordering: cold/unused blocks evict first (lowest score),
+# heavily-hit blocks survive (highest score). The two paths must not
+# accidentally compare across scales.
+_HIT_SCORE_OFFSET = 1e12
+
 
 class LPBFreeBlockQueue:
     """Min-LPB-ordered free-block queue; drop-in for ``FreeKVCacheBlockQueue``.
@@ -111,18 +118,31 @@ class LPBFreeBlockQueue:
     # --------------------------- internals ------------------------------- #
 
     def _score_for(self, block: KVCacheBlock) -> float:
+        """LPB eviction score.
+
+        Layout (popmin = evict-first):
+
+          * cold blocks (never hit while in cache) → `last_accessed`
+            time.monotonic() (~1e9). Among cold, LRU still works.
+          * hit blocks → ``_HIT_SCORE_OFFSET + n_b × c_pool(depth)``,
+            which is *always* > any cold block's score, so cold evicts first.
+            Within hit blocks, lower (hits × cost) evicts first (the actual
+            HiMA LPB ordering from the paper).
+        """
         rt = self._runtime
         if rt is None:
             last_access: float | None = getattr(block, "last_accessed", None)
             return float(last_access) if last_access is not None else time.monotonic()
         n_b = rt.path_counter.count(block.block_id)
         if n_b == 0:
-            # Cold block: use monotonic time so it sorts like LRU among cold blocks.
             last_access = getattr(block, "last_accessed", None)
             return float(last_access) if last_access is not None else time.monotonic()
         depth = self._block_depth.get(block.block_id, 1)
-        c = rt.cost_curves.cost(self.pool_kind, depth)
-        return float(n_b) * c
+        if self.pool_kind == PoolKind.KV:
+            c = rt.cost_curves.c_kv_ms(depth)
+        else:
+            c = rt.cost_curves.c_m_ms(depth)
+        return _HIT_SCORE_OFFSET + float(n_b) * c
 
 
 __all__ = ["LPBFreeBlockQueue"]

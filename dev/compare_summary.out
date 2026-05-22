@@ -1,0 +1,21 @@
+
+==============================================================================
+LRU vs LPB on Qwen3.5-35B-A3B, 10 cc sessions cold-burst
+==============================================================================
+  metric                         LRU (baseline)    LPB (HiMA L1)          Δ
+  ----------------------------------------------------------------------------
+  requests issued                           238              238     +0.0%
+  total prompt tokens                   6648028          6648028     +0.0%
+  cache hit % (TTFT pass)                90.03%           90.03%     +0.0%
+  cache hit % (decode pass)              98.12%           98.12%     +0.0%
+  mean TTFT (ms)                          126.0            122.3     -2.9%
+  mean full-wall (ms)                     116.5            111.0     -4.7%
+  mean TPOT (ms/tok)                      18.38            17.69     -3.7%
+  throughput (out_tok/sec)                 90.2             94.5     +4.7%
+  total wall (s)                           57.7             55.5     -3.8%
+  BASELINE anchor cached                   4224             4224     +0.0%
+  FINAL anchor cached                         0             4224     +inf%
+
+Wrote dev/figures/fig_lru_vs_lpb_anchor.png
+Wrote dev/figures/fig_lru_vs_lpb_metrics.png
+Wrote dev/compare_summary.json

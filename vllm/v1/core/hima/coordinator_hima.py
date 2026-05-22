@@ -39,6 +39,12 @@ class HiMACoordinator:
             },
         )
         instance: Any = object.__new__(dynamic_cls)
+        # Python only auto-calls __init__ when __new__ returns an instance
+        # of cls (or a subclass). HiMACoordinatorImpl extends the base
+        # HybridKVCacheCoordinator, *not* HiMACoordinator — so we must
+        # invoke __init__ explicitly here, or it never runs and the
+        # downstream KVCacheManager finds no `block_pool` attribute.
+        instance.__init__(*args, **kwargs)  # type: ignore[misc]
         return instance
 
     @classmethod
@@ -88,10 +94,14 @@ def _hima_init(self: Any, runtime: HiMARuntime | None = None, **kwargs: Any) -> 
         )
 
 
-def _hima_find_longest_cache_hit(self: Any, request: Any) -> tuple:  # type: ignore[no-untyped-def]
+def _hima_find_longest_cache_hit(
+    self: Any, block_hashes: Any, max_cache_hit_length: int,
+) -> tuple:  # type: ignore[no-untyped-def]
     """Delegate to parent and forward the full hit chain to the path counter."""
     base = _hybrid_base()
-    hits, num_tokens = base.find_longest_cache_hit(self, request)
+    hits, num_tokens = base.find_longest_cache_hit(
+        self, block_hashes, max_cache_hit_length
+    )
     runtime = self._hima_runtime
     if runtime is not None and hits:
         block_ids: list[int] = []

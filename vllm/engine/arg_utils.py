@@ -672,6 +672,11 @@ class EngineArgs:
     mamba_block_size: int | None = get_field(CacheConfig, "mamba_block_size")
     mamba_cache_mode: MambaCacheMode = CacheConfig.mamba_cache_mode
 
+    # HiMA L1 (LPB intra-pool eviction) toggle. When True, replaces the LRU
+    # FreeKVCacheBlockQueue with LPBFreeBlockQueue (path-counted hit ×
+    # cost-curve score). Off by default.
+    hima_enabled: bool = CacheConfig.hima_enabled
+
     mamba_backend: MambaBackendEnum = MambaBackendEnum.TRITON
     enable_mamba_cache_stochastic_rounding: bool = (
         MambaConfig.enable_stochastic_rounding
@@ -1751,6 +1756,7 @@ class EngineArgs:
             mamba_ssm_cache_dtype=self.mamba_ssm_cache_dtype,
             mamba_block_size=self.mamba_block_size,
             mamba_cache_mode=self.mamba_cache_mode,
+            hima_enabled=self.hima_enabled,
             kv_offloading_size=self.kv_offloading_size,
             kv_offloading_backend=self.kv_offloading_backend,
         )

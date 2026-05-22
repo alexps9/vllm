@@ -594,6 +594,126 @@ tokens × 13.34 µs ≈ **1 second total** instead of 63 seconds.
 > linear fit; the same slope extrapolates cleanly to 32K territory
 > as a per-token marginal cost.)*
 
+### J. HiMA L1 wiring through to a runnable engine knob (LRU vs LPB)
+
+Findings A-I established the *failure modes* of vLLM's default LRU
+free-block queue (anchor eviction under cold burst, partial-block
+bubble, TTFT loss). HiMA's L1 fix — LPB scoring — was already coded in
+`vllm/v1/core/hima/lpb_free_queue.py` but it took three plumbing fixes
+before it actually flipped behavior on the running engine:
+
+  1. **`EngineArgs.hima_enabled`** added (`vllm/engine/arg_utils.py`)
+     and threaded into `CacheConfig`. Without this, `LLM(...,
+     hima_enabled=True)` was silently ignored and the engine never
+     called `enable_runtime()`, so `LPBFreeBlockQueue` was never
+     constructed.
+  2. **`HiMACoordinator.__init__` auto-invoke**
+     (`vllm/v1/core/hima/coordinator_hima.py`): `HiMACoordinator.__new__`
+     returned an instance of `HiMACoordinatorImpl` (a dynamically-built
+     subclass of `HybridKVCacheCoordinator`). Because that instance is
+     NOT an instance of `HiMACoordinator`, Python skipped `__init__`,
+     so `block_pool` was never set and `KVCacheManager.__init__` crashed
+     with `AttributeError: 'HiMACoordinatorImpl' object has no attribute
+     'block_pool'`. Fix: call `instance.__init__(*args, **kwargs)`
+     explicitly inside `__new__`.
+  3. **`_hima_find_longest_cache_hit` signature**: matched the
+     `(self, request)` shape, but the post-pull
+     `HybridKVCacheCoordinator.find_longest_cache_hit` takes
+     `(self, block_hashes, max_cache_hit_length)`. Fix: thread both
+     positional args through.
+  4. **`CostCurves.cost(pool, depth)` API mismatch**: the score function
+     called `rt.cost_curves.cost(pool_kind, depth)`, but `CostCurves`
+     exposes `c_kv_ms(L)` / `c_m_ms(L)` per pool, not a unified `cost`.
+     Fix: pick the right method by `pool_kind`.
+  5. **Score-scale inversion** (`vllm/v1/core/hima/lpb_free_queue.py`):
+     the *real* bug. Cold blocks fell back to `time.monotonic()` ≈ 1e9
+     while hit blocks got `n_b × c_kv_ms(depth)` ≈ 10² — so under
+     min-heap-pop semantics, **the anchor was always evicted before any
+     cold block**. Fix: add a constant `_HIT_SCORE_OFFSET = 1e12` to hit
+     scores so cold < hit unconditionally, restoring the paper's
+     intended ordering.
+
+After those five fixes, `hima_enabled=True` actually flips behavior.
+
+### K. End-to-end LRU vs LPB on cc workload — anchor + TTFT + TPOT + throughput
+
+`dev/compare_lru_lpb.py --mode {lru,lpb}` runs the SAME workload twice:
+
+  - **Phase A**: warm the anchor (session 0's first user message, 4737
+    tokens ≈ 5 KV blocks) with **500 hits** so its `n_b` is well above
+    anything cc traffic can accumulate (each cc turn issues 2 requests;
+    a 50-turn session ≈ 100 hits on its root block).
+  - **Phase B**: cold-burst replay of 10 cc sessions (each turn issued
+    twice: max_tokens=1 for TTFT, max_tokens=21 for throughput/TPOT).
+  - **Phase C**: probe the anchor — measures L1 outcome.
+
+vLLM: Qwen3.5-35B-A3B, TP=2, `mamba_cache_mode=align`,
+`gpu_memory_utilization=0.35`, `max_num_seqs=64`. KV budget ≈ 1.08M
+tokens (~1022 blocks at 1056 tokens/block).
+
+**Headline result** (`dev/compare_summary.out`):
+
+| metric                       | LRU (vLLM default) | LPB (HiMA L1 on)  | Δ |
+|------------------------------|-------------------:|------------------:|---:|
+| requests issued              | 238                | 238               | — |
+| BASELINE anchor cached       | 4224/4737 (89.2%)  | 4224/4737 (89.2%) | — |
+| **FINAL anchor cached**      | **0/4737 (0.0%)**  | **4224/4737 (89.2%)** | **paper claim reproduced** |
+| cache hit % (decode pass)    | 98.12 %            | 98.12 %           | — |
+| mean **TTFT** (ms)           | 126.0              | 122.3             | **−2.9 %** |
+| mean **TPOT** (ms/tok)       | 18.38              | 17.69             | **−3.7 %** |
+| **throughput** (out_tok/sec) | 90.2               | 94.5              | **+4.7 %** |
+| total wall time (s)          | 57.7               | 55.5              | **−3.8 %** |
+
+**The L1 anchor-eviction claim is reproduced end-to-end**: under
+identical workload, LRU drops the heavily-hit anchor entirely (0/4737
+tokens cached after the cold burst), LPB keeps every cacheable block
+of it (4224/4737, i.e., 89.2 % = `floor(4737/1056) × 1056 / 4737`, the
+theoretical max — the last 513 tokens are stuck in a partial last
+block that vLLM never caches; that's the Finding B / Finding C
+phenomenon, orthogonal to L1).
+
+Beyond the binary anchor-survival win, the cc workload also shows
+**TPOT −3.7 %, TTFT −2.9 %, throughput +4.7 %** for LPB. The hit-rate
+on the workload itself is identical (98 %) because cc traffic mostly
+hits each session's own KV (not the shared anchor); LPB's contribution
+to the workload metrics here comes from cheaper block-allocation
+(fewer evictions of recently-released blocks) rather than from
+re-hitting the anchor.
+
+Note: this experiment intentionally exposes only the FLOOR of LPB's
+benefit because the cc sessions never re-hit the anchor after warming.
+In a workload that re-issues anchored prompts (e.g., agent swarms with
+N parallel sub-agents that all start from the same system prompt), LPB
+would deliver an additional **TTFT savings on every anchored request**
+proportional to the anchor length × prefill-latency-per-token — for the
+4737-token anchor here, that's about **4737 × 13.34 µs ≈ 63 ms saved
+per anchored request that hits the still-cached anchor**, on top of
+the L1 anchor-survival itself.
+
+Figures:
+
+  - `dev/figures/fig_lru_vs_lpb_anchor.png` — side-by-side baseline vs
+    final anchor cached % for both modes. The headline: LRU's FINAL bar
+    is `0/4737` (gone), LPB's FINAL bar is `4224/4737` (kept).
+  - `dev/figures/fig_lru_vs_lpb_metrics.png` — four-panel grid of hit
+    rate, TTFT, TPOT, throughput, green = winner per panel.
+
+Aggregated stats: `dev/compare_summary.json`.
+
+Repro:
+
+```bash
+# (1) both modes — model load is the slowest part (~1.5 min each)
+CUDA_VISIBLE_DEVICES=0,2 .venv/bin/python -u dev/compare_lru_lpb.py --mode lru \
+    | tee dev/compare_lru.out
+
+CUDA_VISIBLE_DEVICES=0,2 .venv/bin/python -u dev/compare_lru_lpb.py --mode lpb \
+    | tee dev/compare_lpb.out
+
+# (2) figures + summary table
+.venv/bin/python dev/plot_lru_vs_lpb.py | tee dev/compare_summary.out
+```
+
 ---
 
 ## Reproduction — quick start
