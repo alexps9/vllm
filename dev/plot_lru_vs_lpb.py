@@ -16,11 +16,43 @@ FIGDIR = Path("dev/figures")
 FIGDIR.mkdir(parents=True, exist_ok=True)
 
 
-def load(path: Path) -> tuple[list[dict], list[dict]]:
+def load(path: Path) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
     rows = [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
     turns = [r for r in rows if r.get("kind") == "cc_turn"]
     probes = [r for r in rows if r.get("kind") == "anchor_probe"]
-    return turns, probes
+    rehits = [r for r in rows if r.get("kind") == "rehit_turn"]
+    colds = [r for r in rows if r.get("kind") == "cold_turn"]
+    return turns, probes, rehits, colds
+
+
+def _aggregate(rows: list[dict]) -> dict:
+    """Generic aggregator for rows with prompt_len/ttft_cached/ttft_wall_s/
+    full_cached/full_wall_s/output_tokens."""
+    if not rows:
+        return {}
+    sp = sum(r["prompt_len"] for r in rows)
+    sc_t = sum(r["ttft_cached"] for r in rows)
+    sc_f = sum(r["full_cached"] for r in rows)
+    swt = sum(r["ttft_wall_s"] for r in rows)
+    swf = sum(r["full_wall_s"] for r in rows)
+    so = sum(r["output_tokens"] for r in rows)
+    n = len(rows)
+    tpots = [
+        r["full_wall_s"] / r["output_tokens"]
+        for r in rows if r["output_tokens"] > 0
+    ]
+    return {
+        "n_requests": n,
+        "total_prompt_tokens": sp,
+        "cache_hit_pct_ttft": 100 * sc_t / sp if sp else 0,
+        "cache_hit_pct_full": 100 * sc_f / sp if sp else 0,
+        "mean_ttft_ms": 1000 * swt / n,
+        "mean_full_wall_ms": 1000 * swf / n,
+        "mean_tpot_ms": 1000 * sum(tpots) / len(tpots) if tpots else 0.0,
+        "throughput_tok_per_s": so / swf if swf else 0,
+        "total_wall_s": swf + swt,
+        "total_output_tokens": so,
+    }
 
 
 def summarize(turns: list[dict], probes: list[dict]) -> dict:
@@ -67,10 +99,14 @@ def summarize(turns: list[dict], probes: list[dict]) -> dict:
 
 
 def main() -> None:
-    lru_t, lru_p = load(JSONL_LRU)
-    lpb_t, lpb_p = load(JSONL_LPB)
+    lru_t, lru_p, lru_re, lru_co = load(JSONL_LRU)
+    lpb_t, lpb_p, lpb_re, lpb_co = load(JSONL_LPB)
     s_lru = summarize(lru_t, lru_p)
     s_lpb = summarize(lpb_t, lpb_p)
+    re_lru = _aggregate(lru_re)
+    re_lpb = _aggregate(lpb_re)
+    co_lru = _aggregate(lru_co)
+    co_lpb = _aggregate(lpb_co)
 
     print("\n" + "=" * 78)
     print("LRU vs LPB on Qwen3.5-35B-A3B, 10 cc sessions cold-burst")
@@ -104,6 +140,32 @@ def main() -> None:
     row("total wall (s)",               "total_wall_s",          "{:.1f}")
     row("BASELINE anchor cached",       "baseline_anchor_cached", "{:.0f}")
     row("FINAL anchor cached",          "final_anchor_cached",    "{:.0f}")
+
+    # --- Phase D & E breakdown ---
+    def scenario_rows(name: str, sl: dict, sp_: dict) -> None:
+        if not sl or not sp_:
+            return
+        print(f"\n  [{name}]")
+        for label, k, fmt in [
+            ("  requests",        "n_requests",            "{:.0f}"),
+            ("  hit % (TTFT)",    "cache_hit_pct_ttft",    "{:.2f}%"),
+            ("  hit % (decode)",  "cache_hit_pct_full",    "{:.2f}%"),
+            ("  mean TTFT (ms)",  "mean_ttft_ms",          "{:.1f}"),
+            ("  mean TPOT (ms)",  "mean_tpot_ms",          "{:.2f}"),
+            ("  throughput tok/s","throughput_tok_per_s",  "{:.1f}"),
+            ("  total wall (s)",  "total_wall_s",          "{:.2f}"),
+        ]:
+            v1 = sl.get(k)
+            v2 = sp_.get(k)
+            if v1 is None or v2 is None:
+                continue
+            delta = v2 - v1
+            pct = (delta / v1) * 100 if v1 else float("inf")
+            print(f"  {label:<28} {fmt.format(v1):>16} {fmt.format(v2):>16} "
+                  f"{pct:>+8.1f}%")
+
+    scenario_rows("Phase D: anchor-rehit (LPB BEST)", re_lru, re_lpb)
+    scenario_rows("Phase E: no-shared cold (LPB WORST)", co_lru, co_lpb)
 
     # --- Figure 1: anchor survival comparison ---
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -173,9 +235,55 @@ def main() -> None:
     plt.close(fig)
     print(f"Wrote {out2}")
 
+    # --- Figure 3: per-scenario throughput / TTFT (Phase B/D/E side by side) ---
+    if re_lru and co_lru and re_lpb and co_lpb:
+        fig, axes = plt.subplots(2, 2, figsize=(13, 8))
+        scenarios = ["B: cc burst", "D: anchor re-hit", "E: cold unique"]
+        ttfts_lru = [s_lru["mean_ttft_ms"], re_lru["mean_ttft_ms"], co_lru["mean_ttft_ms"]]
+        ttfts_lpb = [s_lpb["mean_ttft_ms"], re_lpb["mean_ttft_ms"], co_lpb["mean_ttft_ms"]]
+        tpots_lru = [s_lru["mean_tpot_ms"], re_lru["mean_tpot_ms"], co_lru["mean_tpot_ms"]]
+        tpots_lpb = [s_lpb["mean_tpot_ms"], re_lpb["mean_tpot_ms"], co_lpb["mean_tpot_ms"]]
+        thr_lru = [s_lru["throughput_tok_per_s"], re_lru["throughput_tok_per_s"], co_lru["throughput_tok_per_s"]]
+        thr_lpb = [s_lpb["throughput_tok_per_s"], re_lpb["throughput_tok_per_s"], co_lpb["throughput_tok_per_s"]]
+        hit_lru = [s_lru["cache_hit_pct_ttft"], re_lru["cache_hit_pct_ttft"], co_lru["cache_hit_pct_ttft"]]
+        hit_lpb = [s_lpb["cache_hit_pct_ttft"], re_lpb["cache_hit_pct_ttft"], co_lpb["cache_hit_pct_ttft"]]
+
+        def pair_bars(ax, label, vlru, vlpb, ylabel):
+            x = range(len(scenarios))
+            w = 0.35
+            ax.bar([i - w/2 for i in x], vlru, w, label="LRU", color="#a8b0b8")
+            ax.bar([i + w/2 for i in x], vlpb, w, label="LPB", color="#3d8540")
+            ax.set_xticks(list(x))
+            ax.set_xticklabels(scenarios, fontsize=9)
+            ax.set_ylabel(ylabel)
+            ax.set_title(label)
+            ax.grid(True, alpha=0.3, axis="y")
+            for i, (a, b) in enumerate(zip(vlru, vlpb)):
+                ax.annotate(f"{a:.1f}", xy=(i - w/2, a), xytext=(0, 3),
+                            textcoords="offset points", ha="center", fontsize=8)
+                ax.annotate(f"{b:.1f}", xy=(i + w/2, b), xytext=(0, 3),
+                            textcoords="offset points", ha="center", fontsize=8)
+            ax.legend(loc="upper left", fontsize=9)
+
+        pair_bars(axes[0, 0], "TTFT (ms)", ttfts_lru, ttfts_lpb, "ms")
+        pair_bars(axes[0, 1], "TPOT (ms/tok)", tpots_lru, tpots_lpb, "ms/tok")
+        pair_bars(axes[1, 0], "throughput (out_tok/s)", thr_lru, thr_lpb, "tok/s")
+        pair_bars(axes[1, 1], "hit % (TTFT pass)", hit_lru, hit_lpb, "%")
+        fig.suptitle("LRU vs LPB across 3 scenarios: best/average/worst", fontsize=13)
+        fig.tight_layout(rect=[0, 0, 1, 0.96])
+        out3 = FIGDIR / "fig_lru_vs_lpb_scenarios.png"
+        fig.savefig(out3, dpi=130)
+        plt.close(fig)
+        print(f"Wrote {out3}")
+
     # Dump aggregated stats
     out_json = Path("dev/compare_summary.json")
-    out_json.write_text(json.dumps({"lru": s_lru, "lpb": s_lpb}, indent=2))
+    payload = {
+        "phase_B_cc_burst":   {"lru": s_lru,  "lpb": s_lpb},
+        "phase_D_anchor_rehit": {"lru": re_lru, "lpb": re_lpb},
+        "phase_E_cold_unique":  {"lru": co_lru, "lpb": co_lpb},
+    }
+    out_json.write_text(json.dumps(payload, indent=2))
     print(f"Wrote {out_json}")
 
 

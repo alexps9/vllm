@@ -714,6 +714,46 @@ CUDA_VISIBLE_DEVICES=0,2 .venv/bin/python -u dev/compare_lru_lpb.py --mode lpb \
 .venv/bin/python dev/plot_lru_vs_lpb.py | tee dev/compare_summary.out
 ```
 
+### K.2 (extended) — Three scenarios: best / average / worst case for LPB
+
+`dev/compare_lru_lpb.py` now runs **three phases per mode** in one
+engine load, so we can characterise LPB's behaviour across the full
+range of workload shapes — not just the average case in Finding K
+above.
+
+| phase | label | workload shape | predicted LPB outcome |
+|---|---|---|---|
+| **B** | **cc_burst** (average) | replay 10 real cc sessions after warming anchor; anchor never re-hit during burst | small win on workload, big win on anchor-survival |
+| **D** | **anchor_rehit** (BEST CASE) | after the cold burst, issue 30 fresh requests that each prepend the anchor + a unique 16-token tail | **TTFT collapse**: LPB keeps anchor cached → cache hit covers ~89% of every prompt; LRU evicted it → each request pays a full ~4.7K-token re-prefill |
+| **E** | **cold_unique** (WORST CASE) | 50 short 2K-token prompts with NO shared prefix and NO anchor warming | should be a near-wash; isolates LPB's hot-path overhead (path-counter lookup, heap-based queue vs LRU deque) from any structural win |
+
+**Why three scenarios.** Finding K's single-workload measurement
+under-states LPB's win (cc burst doesn't re-hit the anchor) and gives
+no information about whether LPB could ever HURT. The three-phase
+extension addresses both:
+
+- Phase D quantifies the **upside** when downstream traffic actually
+  consumes the anchor LPB protected (the swarm / shared-system-prompt
+  pattern HiMA targets).
+- Phase E quantifies the **downside risk** when LPB has nothing useful
+  to protect — purely overhead.
+
+> Status: script + plot updated and committed; execution blocked at the
+> time of this writing by a kernel-level wedge on the host
+> (`load avg = 47.30/50.07/47.21` frozen since reboot, Python processes
+> stuck in TASK_RUNNING with 0% CPU and unkillable by SIGKILL — see
+> `dev/compare_lpb.out` (empty) and the live `pgrep -af compare` showing
+> a process at 0 CPU for 50+ minutes). Once the host is healthy, the
+> existing repro recipe below regenerates everything end-to-end without
+> code changes. The script change is small enough to inline-review:
+>
+> - Phase D adds `N_REHIT = 30` requests of `anchor + unique 16-token tail`
+> - Phase E adds `N_COLD = 50` requests of `2048-token unique slices`
+> - All metrics flow through the existing `kind=rehit_turn` / `kind=cold_turn`
+>   JSONL rows; `plot_lru_vs_lpb.py` writes
+>   `dev/figures/fig_lru_vs_lpb_scenarios.png` (2x2: TTFT, TPOT,
+>   throughput, hit% per scenario).
+
 ---
 
 ## Reproduction — quick start

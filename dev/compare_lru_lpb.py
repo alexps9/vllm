@@ -213,7 +213,7 @@ def main() -> None:
               f"(elapsed {time.monotonic() - t_start:.0f}s)")
     log(kind="phase", phase="B_done", elapsed_s=time.monotonic() - t_start)
 
-    # ----- Phase C: final anchor probe -----
+    # ----- Phase C: final anchor probe (LRU vs LPB headline) -----
     r = issue(anchor_ids, max_tokens=1)
     pct = 100 * r["cached"] / anchor_len
     print(f"\n[{mode}] FINAL anchor probe: cached={r['cached']}/{anchor_len} "
@@ -221,6 +221,66 @@ def main() -> None:
     log(kind="anchor_probe", label="final",
         cached=r["cached"], anchor_len=anchor_len, wall_s=r["wall_s"],
         elapsed_s=time.monotonic() - t_start)
+
+    # ----- Phase D: anchor-rehit workload (LPB BEST CASE) ----- #
+    # Downstream traffic that *does* re-issue anchored prompts. Each request
+    # = anchor + small unique tail. Under LPB, the anchor (now still cached)
+    # gives near-full prefix hit; under LRU (anchor was evicted in Phase B/C)
+    # every such request pays a fresh prefill. This is the headline win the
+    # paper claims for shared system-prompt agent fleets.
+    print(f"\n[{mode}] Phase D: anchor-rehit workload (30 anchored requests).")
+    N_REHIT = 30
+    for j in range(N_REHIT):
+        # Append a unique 16-token tail so the prompt is anchor + small new
+        # content (no inter-rehit caching of the tail).
+        tail_text = f"\n<|im_start|>user\n[rehit-{j:03d}] continue\n<|im_end|>\n"
+        tail_ids = tokenizer.encode(tail_text, add_special_tokens=False)
+        prompt = anchor_ids + tail_ids
+        r_t = issue(prompt, max_tokens=1)
+        r_d = issue(prompt, max_tokens=N_TPOT_TOKENS + 1)
+        log(
+            kind="rehit_turn", j=j,
+            prompt_len=len(prompt),
+            ttft_cached=r_t["cached"], ttft_wall_s=r_t["wall_s"],
+            full_cached=r_d["cached"], full_wall_s=r_d["wall_s"],
+            output_tokens=r_d["output_tokens"],
+            elapsed_s=time.monotonic() - t_start,
+        )
+        if j in (0, 1, N_REHIT // 2, N_REHIT - 1):
+            print(f"  rehit[{j:>2}] ttft_cached={r_t['cached']:>5} "
+                  f"ttft_wall={r_t['wall_s']*1000:.0f}ms")
+
+    # ----- Phase E: no-shared-prefix cold flow (LPB WORST CASE) ----- #
+    # Many short *unique* prompts that share NO prefix with anchor or with
+    # each other. There's no anchor to protect; LPB has nothing useful to
+    # do. This isolates the hot-path overhead of HiMA's path counter +
+    # depth tracking + heap-based queue vs the simple LRU deque.
+    print(f"\n[{mode}] Phase E: no-shared-prefix cold flow "
+          "(50 unique 2k-token prompts).")
+    N_COLD = 50
+    PROMPT_LEN_COLD = 2048
+    # Long filler so each prompt is distinct.
+    filler_text = (
+        "The quick brown fox jumps over the lazy dog. " * 6000
+    )
+    filler_ids = tokenizer.encode(filler_text, add_special_tokens=False)
+    assert len(filler_ids) >= N_COLD * PROMPT_LEN_COLD
+    for k in range(N_COLD):
+        prompt = filler_ids[k * PROMPT_LEN_COLD: (k + 1) * PROMPT_LEN_COLD]
+        # Each prompt is a unique slice → no shared prefix across cold queries
+        r_t = issue(prompt, max_tokens=1)
+        r_d = issue(prompt, max_tokens=N_TPOT_TOKENS + 1)
+        log(
+            kind="cold_turn", k=k,
+            prompt_len=len(prompt),
+            ttft_cached=r_t["cached"], ttft_wall_s=r_t["wall_s"],
+            full_cached=r_d["cached"], full_wall_s=r_d["wall_s"],
+            output_tokens=r_d["output_tokens"],
+            elapsed_s=time.monotonic() - t_start,
+        )
+        if k in (0, N_COLD // 2, N_COLD - 1):
+            print(f"  cold[{k:>2}] cached={r_t['cached']:>3} "
+                  f"wall={r_t['wall_s']*1000:.0f}ms")
 
     fout.close()
     print(f"\n[{mode}] Done. {time.monotonic() - t_start:.0f}s total. "
