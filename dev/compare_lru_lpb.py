@@ -34,6 +34,11 @@ from pathlib import Path
 _VENV_BIN = os.path.dirname(sys.executable)
 if _VENV_BIN not in os.environ.get("PATH", ""):
     os.environ["PATH"] = f"{_VENV_BIN}:{os.environ.get('PATH', '')}"
+# Intel OpenMP (which torch+vllm pull in via MKL) auto-pins the process to a
+# single CPU based on GPU NUMA topology. On hosts with hot CPU contention
+# this starves the python interpreter to ~0.2% CPU. Disable BEFORE any
+# torch import.
+os.environ.setdefault("KMP_AFFINITY", "disabled")
 # Extend HiMA's path-counted-hit window beyond the default 60s — our run
 # takes several minutes and we don't want anchor's hits to expire from the
 # counter between warm and final probe.
@@ -259,12 +264,15 @@ def main() -> None:
           "(50 unique 2k-token prompts).")
     N_COLD = 50
     PROMPT_LEN_COLD = 2048
-    # Long filler so each prompt is distinct.
+    # Long filler so each prompt is distinct. Need N_COLD × PROMPT_LEN_COLD
+    # = 50 × 2048 = ~102K tokens; multiply the base sentence enough times.
     filler_text = (
-        "The quick brown fox jumps over the lazy dog. " * 6000
+        "The quick brown fox jumps over the lazy dog. " * 30000
     )
     filler_ids = tokenizer.encode(filler_text, add_special_tokens=False)
-    assert len(filler_ids) >= N_COLD * PROMPT_LEN_COLD
+    assert len(filler_ids) >= N_COLD * PROMPT_LEN_COLD, (
+        f"filler too short: {len(filler_ids)} < {N_COLD * PROMPT_LEN_COLD}"
+    )
     for k in range(N_COLD):
         prompt = filler_ids[k * PROMPT_LEN_COLD: (k + 1) * PROMPT_LEN_COLD]
         # Each prompt is a unique slice → no shared prefix across cold queries
