@@ -1,33 +1,37 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Aggregate dev/compare_{lru,lpb}.jsonl and produce LRU vs LPB figures."""
+"""Aggregate dev/compare_{lru,lpb}_t*.jsonl across trials and produce
+mean ± stddev figures for LRU vs LPB across Phase B / D / E / F.
+
+Loads all trial files for each mode (dev/compare_{mode}_t{N}.jsonl) and
+computes per-phase statistics across trials so we can tell stable signal
+from per-run noise.
+
+Headline anchor-survival signal uses rehit_turn[j=0].ttft_cached (the
+post-burst state, observed before Phase D's first request mutates the
+cache). The Phase C final probe is now diagnostic only.
+"""
 
 from __future__ import annotations
 
 import json
+import math
 from pathlib import Path
 
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-JSONL_LRU = Path("dev/compare_lru.jsonl")
-JSONL_LPB = Path("dev/compare_lpb.jsonl")
 FIGDIR = Path("dev/figures")
 FIGDIR.mkdir(parents=True, exist_ok=True)
+ROOT = Path("dev")
 
 
-def load(path: Path) -> tuple[list[dict], list[dict], list[dict], list[dict]]:
-    rows = [json.loads(l) for l in path.read_text().splitlines() if l.strip()]
-    turns = [r for r in rows if r.get("kind") == "cc_turn"]
-    probes = [r for r in rows if r.get("kind") == "anchor_probe"]
-    rehits = [r for r in rows if r.get("kind") == "rehit_turn"]
-    colds = [r for r in rows if r.get("kind") == "cold_turn"]
-    return turns, probes, rehits, colds
+# ---------------------------------------------------------------------------
+# Per-trial aggregation
+# ---------------------------------------------------------------------------
 
 
 def _aggregate(rows: list[dict]) -> dict:
-    """Generic aggregator for rows with prompt_len/ttft_cached/ttft_wall_s/
-    full_cached/full_wall_s/output_tokens."""
     if not rows:
         return {}
     sp = sum(r["prompt_len"] for r in rows)
@@ -55,145 +59,216 @@ def _aggregate(rows: list[dict]) -> dict:
     }
 
 
-def summarize(turns: list[dict], probes: list[dict]) -> dict:
-    if not turns:
-        return {}
-    sum_prompt = sum(t["prompt_len"] for t in turns)
-    sum_cached_ttft = sum(t["ttft_cached"] for t in turns)
-    sum_cached_full = sum(t["full_cached"] for t in turns)
-    sum_ttft_wall = sum(t["ttft_wall_s"] for t in turns)
-    sum_full_wall = sum(t["full_wall_s"] for t in turns)
-    sum_out = sum(t["output_tokens"] for t in turns)
-    n = len(turns)
-    # TPOT proxy: full_wall / output_tokens for the throughput pass. The
-    # throughput pass benefits from the TTFT pass's cache priming so prefill
-    # is ~free; full_wall is dominated by decode-per-token cost.
-    # (We avoid (full - ttft)/(out-1) because cache priming inverts the sign.)
-    tpots = [
-        t["full_wall_s"] / t["output_tokens"]
-        for t in turns if t["output_tokens"] > 0
-    ]
-    mean_tpot = sum(tpots) / len(tpots) if tpots else 0.0
+def trial_summary(trial_path: Path) -> dict[str, dict]:
+    """Return per-phase aggregated metrics for a single trial."""
+    rows = [json.loads(l) for l in trial_path.read_text().splitlines() if l.strip()]
+    turns = [r for r in rows if r.get("kind") == "cc_turn"]
+    rehits = [r for r in rows if r.get("kind") == "rehit_turn"]
+    colds = [r for r in rows if r.get("kind") == "cold_turn"]
+    decoys = [r for r in rows if r.get("kind") == "decoy_turn"]
+    probes = [r for r in rows if r.get("kind") == "anchor_probe"]
 
-    base = next(
-        (p for p in probes if p.get("label") == "baseline"), None
-    )
-    fin = next(
-        (p for p in probes if p.get("label") == "final"), None
-    )
+    anchor_len = 4737
+    base = next((p for p in probes if p.get("label") == "baseline"), None)
+    final = next((p for p in probes if p.get("label") == "final"), None)
+    if base:
+        anchor_len = base["anchor_len"]
+
+    # Post-burst anchor survival from rehit[0] — the very first rehit hasn't
+    # yet mutated the cache, so its ttft_cached truthfully reports the state
+    # after Phase B's cold burst.
+    rehit0 = next((r for r in rehits if r.get("j") == 0), None)
+    post_burst_cached = rehit0["ttft_cached"] if rehit0 else None
+
     return {
-        "n_requests": n,
-        "total_prompt_tokens": sum_prompt,
-        "cache_hit_pct_ttft": 100 * sum_cached_ttft / sum_prompt if sum_prompt else 0,
-        "cache_hit_pct_full": 100 * sum_cached_full / sum_prompt if sum_prompt else 0,
-        "mean_ttft_ms": 1000 * sum_ttft_wall / n,
-        "mean_full_wall_ms": 1000 * sum_full_wall / n,
-        "mean_tpot_ms": 1000 * mean_tpot,
-        "throughput_tok_per_s": sum_out / sum_full_wall if sum_full_wall else 0,
-        "total_wall_s": sum_full_wall + sum_ttft_wall,
-        "total_output_tokens": sum_out,
+        "phase_B": _aggregate(turns),
+        "phase_D": _aggregate(rehits),
+        "phase_E": _aggregate(colds),
+        "phase_F": _aggregate(decoys),
+        "anchor_len": anchor_len,
         "baseline_anchor_cached": base["cached"] if base else None,
-        "final_anchor_cached": fin["cached"] if fin else None,
-        "anchor_len": base["anchor_len"] if base else 4737,
+        "final_anchor_cached": final["cached"] if final else None,  # diagnostic
+        "post_burst_cached": post_burst_cached,  # the headline signal now
     }
 
 
+def discover_trials(mode: str) -> list[Path]:
+    """Return all dev/compare_{mode}_t*.jsonl files, sorted by trial index."""
+    paths = sorted(ROOT.glob(f"compare_{mode}_t*.jsonl"))
+    if paths:
+        return paths
+    # Fallback: legacy single-trial file
+    legacy = ROOT / f"compare_{mode}.jsonl"
+    return [legacy] if legacy.exists() else []
+
+
+# ---------------------------------------------------------------------------
+# Trial aggregation: mean + stddev across trials
+# ---------------------------------------------------------------------------
+
+
+def _mean_std(xs: list[float]) -> tuple[float, float]:
+    if not xs:
+        return float("nan"), 0.0
+    m = sum(xs) / len(xs)
+    if len(xs) < 2:
+        return m, 0.0
+    var = sum((x - m) ** 2 for x in xs) / (len(xs) - 1)
+    return m, math.sqrt(var)
+
+
+def aggregate_trials(trial_summaries: list[dict]) -> dict:
+    """Given per-trial summaries, compute mean ± stddev per phase per metric."""
+    out: dict = {}
+    phase_keys = ["phase_B", "phase_D", "phase_E", "phase_F"]
+    metric_keys = [
+        "n_requests", "total_prompt_tokens", "cache_hit_pct_ttft",
+        "cache_hit_pct_full", "mean_ttft_ms", "mean_full_wall_ms",
+        "mean_tpot_ms", "throughput_tok_per_s", "total_wall_s",
+        "total_output_tokens",
+    ]
+    for ph in phase_keys:
+        out[ph] = {}
+        for k in metric_keys:
+            xs = [t[ph].get(k) for t in trial_summaries
+                  if t.get(ph) and t[ph].get(k) is not None]
+            if xs:
+                m, s = _mean_std(xs)
+                out[ph][k] = {"mean": m, "std": s, "n": len(xs),
+                              "trials": xs}
+
+    # Anchor survival across trials (rehit[0].ttft_cached)
+    pburst = [t["post_burst_cached"] for t in trial_summaries
+              if t.get("post_burst_cached") is not None]
+    if pburst:
+        m, s = _mean_std(pburst)
+        out["post_burst_cached"] = {"mean": m, "std": s, "n": len(pburst),
+                                    "trials": pburst}
+    base = [t["baseline_anchor_cached"] for t in trial_summaries
+            if t.get("baseline_anchor_cached") is not None]
+    if base:
+        m, s = _mean_std(base)
+        out["baseline_anchor_cached"] = {"mean": m, "std": s, "n": len(base),
+                                         "trials": base}
+    final = [t["final_anchor_cached"] for t in trial_summaries
+             if t.get("final_anchor_cached") is not None]
+    if final:
+        m, s = _mean_std(final)
+        out["final_anchor_cached"] = {"mean": m, "std": s, "n": len(final),
+                                      "trials": final}
+    out["anchor_len"] = trial_summaries[0]["anchor_len"] if trial_summaries else 4737
+    return out
+
+
+# ---------------------------------------------------------------------------
+# Reporting
+# ---------------------------------------------------------------------------
+
+
+def _fmt(val: dict | None, fmt: str = "{:.2f}") -> str:
+    if not val:
+        return "       —      "
+    m, s, n = val["mean"], val["std"], val["n"]
+    if n < 2:
+        return f"{fmt.format(m):>10}  (n=1)"
+    return f"{fmt.format(m):>10} ±{fmt.format(s)}"
+
+
+def _delta_pct(a: dict | None, b: dict | None) -> str:
+    if not a or not b or a["mean"] == 0:
+        return "   —    "
+    pct = (b["mean"] - a["mean"]) / a["mean"] * 100
+    return f"{pct:>+7.1f}%"
+
+
+def print_phase(name: str, lru: dict, lpb: dict) -> None:
+    if not lru or not lpb:
+        return
+    print(f"\n  [{name}]   (mean ± sample stddev across "
+          f"{lru.get('mean_ttft_ms', {}).get('n', '?')} LRU trials, "
+          f"{lpb.get('mean_ttft_ms', {}).get('n', '?')} LPB trials)")
+    for label, k, fmt in [
+        ("requests",        "n_requests",            "{:.0f}"),
+        ("hit % (TTFT)",    "cache_hit_pct_ttft",    "{:.2f}"),
+        ("hit % (decode)",  "cache_hit_pct_full",    "{:.2f}"),
+        ("mean TTFT (ms)",  "mean_ttft_ms",          "{:.2f}"),
+        ("mean TPOT (ms)",  "mean_tpot_ms",          "{:.3f}"),
+        ("throughput tok/s","throughput_tok_per_s",  "{:.2f}"),
+        ("total wall (s)",  "total_wall_s",          "{:.2f}"),
+    ]:
+        a = lru.get(k); b = lpb.get(k)
+        print(f"    {label:<18} LRU: {_fmt(a, fmt)}   "
+              f"LPB: {_fmt(b, fmt)}   Δ: {_delta_pct(a, b)}")
+
+
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
+
 def main() -> None:
-    lru_t, lru_p, lru_re, lru_co = load(JSONL_LRU)
-    lpb_t, lpb_p, lpb_re, lpb_co = load(JSONL_LPB)
-    s_lru = summarize(lru_t, lru_p)
-    s_lpb = summarize(lpb_t, lpb_p)
-    re_lru = _aggregate(lru_re)
-    re_lpb = _aggregate(lpb_re)
-    co_lru = _aggregate(lru_co)
-    co_lpb = _aggregate(lpb_co)
+    lru_paths = discover_trials("lru")
+    lpb_paths = discover_trials("lpb")
+    print(f"Found {len(lru_paths)} LRU trial files, {len(lpb_paths)} LPB trial files.")
+    for p in lru_paths + lpb_paths:
+        print(f"  {p}")
 
-    print("\n" + "=" * 78)
-    print("LRU vs LPB on Qwen3.5-35B-A3B, 10 cc sessions cold-burst")
-    print("=" * 78)
-    print(f"  {'metric':<28} {'LRU (baseline)':>16} {'LPB (HiMA L1)':>16} "
-          f"{'Δ':>10}")
-    print("  " + "-" * 76)
+    lru_summaries = [trial_summary(p) for p in lru_paths]
+    lpb_summaries = [trial_summary(p) for p in lpb_paths]
 
-    def row(label: str, k: str, fmt: str, better: str = "lower") -> None:
-        v1 = s_lru.get(k)
-        v2 = s_lpb.get(k)
-        if v1 is None or v2 is None:
-            return
-        delta = v2 - v1
-        # for "lower better" metrics, report as Δ%; same for "higher better"
-        if v1 != 0:
-            pct = (delta / v1) * 100
-        else:
-            pct = float("inf")
-        print(f"  {label:<28} {fmt.format(v1):>16} {fmt.format(v2):>16} "
-              f"{pct:>+8.1f}%")
+    lru_agg = aggregate_trials(lru_summaries)
+    lpb_agg = aggregate_trials(lpb_summaries)
 
-    row("requests issued",              "n_requests",            "{:.0f}")
-    row("total prompt tokens",          "total_prompt_tokens",   "{:.0f}")
-    row("cache hit % (TTFT pass)",      "cache_hit_pct_ttft",    "{:.2f}%")
-    row("cache hit % (decode pass)",    "cache_hit_pct_full",    "{:.2f}%")
-    row("mean TTFT (ms)",               "mean_ttft_ms",          "{:.1f}")
-    row("mean full-wall (ms)",          "mean_full_wall_ms",     "{:.1f}")
-    row("mean TPOT (ms/tok)",           "mean_tpot_ms",          "{:.2f}")
-    row("throughput (out_tok/sec)",     "throughput_tok_per_s",  "{:.1f}")
-    row("total wall (s)",               "total_wall_s",          "{:.1f}")
-    row("BASELINE anchor cached",       "baseline_anchor_cached", "{:.0f}")
-    row("FINAL anchor cached",          "final_anchor_cached",    "{:.0f}")
+    print("\n" + "=" * 82)
+    print("LRU vs LPB on Qwen3.5-35B-A3B — multi-trial aggregate (mean ± stddev)")
+    print("=" * 82)
 
-    # --- Phase D & E breakdown ---
-    def scenario_rows(name: str, sl: dict, sp_: dict) -> None:
-        if not sl or not sp_:
-            return
-        print(f"\n  [{name}]")
-        for label, k, fmt in [
-            ("  requests",        "n_requests",            "{:.0f}"),
-            ("  hit % (TTFT)",    "cache_hit_pct_ttft",    "{:.2f}%"),
-            ("  hit % (decode)",  "cache_hit_pct_full",    "{:.2f}%"),
-            ("  mean TTFT (ms)",  "mean_ttft_ms",          "{:.1f}"),
-            ("  mean TPOT (ms)",  "mean_tpot_ms",          "{:.2f}"),
-            ("  throughput tok/s","throughput_tok_per_s",  "{:.1f}"),
-            ("  total wall (s)",  "total_wall_s",          "{:.2f}"),
-        ]:
-            v1 = sl.get(k)
-            v2 = sp_.get(k)
-            if v1 is None or v2 is None:
-                continue
-            delta = v2 - v1
-            pct = (delta / v1) * 100 if v1 else float("inf")
-            print(f"  {label:<28} {fmt.format(v1):>16} {fmt.format(v2):>16} "
-                  f"{pct:>+8.1f}%")
+    anchor_len = lru_agg.get("anchor_len", 4737)
+    print(f"\n  ANCHOR SURVIVAL (post Phase-B burst, observed via rehit[0].ttft_cached)")
+    print(f"    anchor full length: {anchor_len} tokens")
+    a = lru_agg.get("post_burst_cached")
+    b = lpb_agg.get("post_burst_cached")
+    print(f"    LRU rehit[0].ttft_cached: {_fmt(a, '{:.0f}')}")
+    print(f"    LPB rehit[0].ttft_cached: {_fmt(b, '{:.0f}')}")
+    if a and b:
+        print(f"      → LRU anchor survival: {100*a['mean']/anchor_len:.1f}% of full anchor")
+        print(f"      → LPB anchor survival: {100*b['mean']/anchor_len:.1f}% of full anchor")
 
-    scenario_rows("Phase D: anchor-rehit (LPB BEST)", re_lru, re_lpb)
-    scenario_rows("Phase E: no-shared cold (LPB WORST)", co_lru, co_lpb)
+    print_phase("Phase B: cc burst (average)",                   lru_agg["phase_B"], lpb_agg["phase_B"])
+    print_phase("Phase D: anchor re-hit (LPB BEST)",             lru_agg["phase_D"], lpb_agg["phase_D"])
+    print_phase("Phase E: cold-unique random (LPB hot-path)",    lru_agg["phase_E"], lpb_agg["phase_E"])
+    print_phase("Phase F: decoy waste (LPB WORST, adversarial)", lru_agg["phase_F"], lpb_agg["phase_F"])
 
-    # --- Figure 1: anchor survival comparison ---
+    # ----- Figure 1: anchor survival (now uses rehit[0]) -----
     fig, ax = plt.subplots(figsize=(8, 5))
-    anchor_len = s_lru.get("anchor_len", 4737)
     modes = ["LRU\n(vLLM default)", "LPB\n(HiMA L1)"]
-    baseline = [s_lru.get("baseline_anchor_cached", 0),
-                s_lpb.get("baseline_anchor_cached", 0)]
-    final = [s_lru.get("final_anchor_cached", 0),
-             s_lpb.get("final_anchor_cached", 0)]
+    base_a = lru_agg.get("baseline_anchor_cached", {"mean": 0, "std": 0})
+    base_b = lpb_agg.get("baseline_anchor_cached", {"mean": 0, "std": 0})
+    burst_a = lru_agg.get("post_burst_cached", {"mean": 0, "std": 0})
+    burst_b = lpb_agg.get("post_burst_cached", {"mean": 0, "std": 0})
     x = range(len(modes))
     w = 0.35
-    ax.bar([i - w/2 for i in x], baseline, w, label="BASELINE probe",
-           color="#7ca8c8")
-    ax.bar([i + w/2 for i in x], final, w,
-           label="FINAL probe (after 10 cc sessions cold burst)",
+    ax.bar([i - w/2 for i in x], [base_a["mean"], base_b["mean"]], w,
+           yerr=[base_a["std"], base_b["std"]], capsize=4,
+           label="BASELINE probe", color="#7ca8c8")
+    ax.bar([i + w/2 for i in x], [burst_a["mean"], burst_b["mean"]], w,
+           yerr=[burst_a["std"], burst_b["std"]], capsize=4,
+           label="POST-BURST (rehit[0])",
            color="#c74848")
     ax.set_xticks(list(x))
     ax.set_xticklabels(modes)
     ax.set_ylabel(f"anchor cached tokens (out of {anchor_len})")
-    ax.set_title("L1: anchor survival under cold burst — LRU vs LPB")
+    ax.set_title("L1 anchor survival under cold burst — LRU vs LPB "
+                 f"(mean ± stddev, n={base_a['n']} trials)")
     ax.axhline(anchor_len, color="gray", ls="--", lw=0.7, alpha=0.5,
                label=f"full anchor ({anchor_len} tokens)")
-    for i, (b, f_) in enumerate(zip(baseline, final)):
-        ax.annotate(f"{b}\n({100*b/anchor_len:.1f}%)",
-                    xy=(i - w/2, b), xytext=(0, 4),
+    for i, (bm, fm) in enumerate(zip([base_a["mean"], base_b["mean"]],
+                                     [burst_a["mean"], burst_b["mean"]])):
+        ax.annotate(f"{bm:.0f}\n({100*bm/anchor_len:.1f}%)",
+                    xy=(i - w/2, bm), xytext=(0, 4),
                     textcoords="offset points", ha="center", fontsize=9)
-        ax.annotate(f"{f_}\n({100*f_/anchor_len:.1f}%)",
-                    xy=(i + w/2, f_), xytext=(0, 4),
+        ax.annotate(f"{fm:.0f}\n({100*fm/anchor_len:.1f}%)",
+                    xy=(i + w/2, fm), xytext=(0, 4),
                     textcoords="offset points", ha="center", fontsize=9)
     ax.legend(loc="center right")
     ax.grid(True, alpha=0.3, axis="y")
@@ -203,87 +278,108 @@ def main() -> None:
     plt.close(fig)
     print(f"\nWrote {out}")
 
-    # --- Figure 2: side-by-side metrics ---
-    fig, axes = plt.subplots(1, 4, figsize=(16, 5))
-    metrics = [
-        ("cache hit %\n(decode pass)", "cache_hit_pct_full", "higher", "%"),
-        ("mean TTFT (ms)", "mean_ttft_ms", "lower", "ms"),
-        ("mean TPOT (ms/tok)", "mean_tpot_ms", "lower", "ms"),
-        ("throughput (tok/s)", "throughput_tok_per_s", "higher", "tok/s"),
+    # ----- Figure 2: 4-scenario grid (B, D, E, F) with error bars -----
+    scenarios = [
+        ("B: cc burst",           "phase_B"),
+        ("D: anchor re-hit",      "phase_D"),
+        ("E: cold random",        "phase_E"),
+        ("F: decoy waste (adv)",  "phase_F"),
     ]
-    for ax, (label, key, direction, unit) in zip(axes, metrics):
-        vs = [s_lru.get(key, 0), s_lpb.get(key, 0)]
-        colors = ["#7ca8c8", "#3d8540"] if direction == "higher" else ["#c74848", "#3d8540"]
-        # Make LPB green if it wins, otherwise show LRU green.
-        winner_idx = 1 if (
-            (direction == "higher" and vs[1] > vs[0])
-            or (direction == "lower" and vs[1] < vs[0])
-        ) else 0
-        colors = ["#a8b0b8", "#a8b0b8"]
-        colors[winner_idx] = "#3d8540"
-        ax.bar(["LRU", "LPB"], vs, color=colors)
-        for i, v in enumerate(vs):
-            ax.annotate(f"{v:.2f}", xy=(i, v), xytext=(0, 4),
-                        textcoords="offset points", ha="center", fontsize=10)
-        ax.set_title(label)
+    fig, axes = plt.subplots(2, 2, figsize=(14, 9))
+    metric_panels = [
+        ("TTFT (ms)",            "mean_ttft_ms",           "ms"),
+        ("TPOT (ms/tok)",        "mean_tpot_ms",           "ms/tok"),
+        ("throughput (tok/s)",   "throughput_tok_per_s",   "tok/s"),
+        ("hit % (TTFT pass)",    "cache_hit_pct_ttft",     "%"),
+    ]
+    for ax, (title, key, unit) in zip(axes.flat, metric_panels):
+        labels = [s[0] for s in scenarios]
+        vlru_m, vlru_s = [], []
+        vlpb_m, vlpb_s = [], []
+        for _, ph in scenarios:
+            v = lru_agg[ph].get(key)
+            vlru_m.append(v["mean"] if v else 0.0)
+            vlru_s.append(v["std"] if v else 0.0)
+            v = lpb_agg[ph].get(key)
+            vlpb_m.append(v["mean"] if v else 0.0)
+            vlpb_s.append(v["std"] if v else 0.0)
+        x = range(len(scenarios))
+        w = 0.35
+        ax.bar([i - w/2 for i in x], vlru_m, w, yerr=vlru_s, capsize=4,
+               label="LRU", color="#a8b0b8")
+        ax.bar([i + w/2 for i in x], vlpb_m, w, yerr=vlpb_s, capsize=4,
+               label="LPB", color="#3d8540")
+        ax.set_xticks(list(x))
+        ax.set_xticklabels(labels, fontsize=9)
+        ax.set_title(title)
         ax.set_ylabel(unit)
         ax.grid(True, alpha=0.3, axis="y")
-    fig.suptitle("L1 wiring: LRU vs LPB workload metrics", fontsize=13)
+        ax.legend(loc="upper left", fontsize=9)
+        for i, (a, b) in enumerate(zip(vlru_m, vlpb_m)):
+            ax.annotate(f"{a:.1f}", xy=(i - w/2, a), xytext=(0, 3),
+                        textcoords="offset points", ha="center", fontsize=8)
+            ax.annotate(f"{b:.1f}", xy=(i + w/2, b), xytext=(0, 3),
+                        textcoords="offset points", ha="center", fontsize=8)
+    n_trials_lru = len(lru_paths)
+    n_trials_lpb = len(lpb_paths)
+    fig.suptitle(
+        f"LRU vs LPB across 4 scenarios — mean ± stddev "
+        f"(LRU n={n_trials_lru}, LPB n={n_trials_lpb})",
+        fontsize=13,
+    )
     fig.tight_layout(rect=[0, 0, 1, 0.96])
-    out2 = FIGDIR / "fig_lru_vs_lpb_metrics.png"
+    out2 = FIGDIR / "fig_lru_vs_lpb_scenarios.png"
     fig.savefig(out2, dpi=130)
     plt.close(fig)
     print(f"Wrote {out2}")
 
-    # --- Figure 3: per-scenario throughput / TTFT (Phase B/D/E side by side) ---
-    if re_lru and co_lru and re_lpb and co_lpb:
-        fig, axes = plt.subplots(2, 2, figsize=(13, 8))
-        scenarios = ["B: cc burst", "D: anchor re-hit", "E: cold unique"]
-        ttfts_lru = [s_lru["mean_ttft_ms"], re_lru["mean_ttft_ms"], co_lru["mean_ttft_ms"]]
-        ttfts_lpb = [s_lpb["mean_ttft_ms"], re_lpb["mean_ttft_ms"], co_lpb["mean_ttft_ms"]]
-        tpots_lru = [s_lru["mean_tpot_ms"], re_lru["mean_tpot_ms"], co_lru["mean_tpot_ms"]]
-        tpots_lpb = [s_lpb["mean_tpot_ms"], re_lpb["mean_tpot_ms"], co_lpb["mean_tpot_ms"]]
-        thr_lru = [s_lru["throughput_tok_per_s"], re_lru["throughput_tok_per_s"], co_lru["throughput_tok_per_s"]]
-        thr_lpb = [s_lpb["throughput_tok_per_s"], re_lpb["throughput_tok_per_s"], co_lpb["throughput_tok_per_s"]]
-        hit_lru = [s_lru["cache_hit_pct_ttft"], re_lru["cache_hit_pct_ttft"], co_lru["cache_hit_pct_ttft"]]
-        hit_lpb = [s_lpb["cache_hit_pct_ttft"], re_lpb["cache_hit_pct_ttft"], co_lpb["cache_hit_pct_ttft"]]
-
-        def pair_bars(ax, label, vlru, vlpb, ylabel):
-            x = range(len(scenarios))
-            w = 0.35
-            ax.bar([i - w/2 for i in x], vlru, w, label="LRU", color="#a8b0b8")
-            ax.bar([i + w/2 for i in x], vlpb, w, label="LPB", color="#3d8540")
-            ax.set_xticks(list(x))
-            ax.set_xticklabels(scenarios, fontsize=9)
-            ax.set_ylabel(ylabel)
-            ax.set_title(label)
+    # ----- Per-trial scatter for the noisy scenarios (E and F) -----
+    if n_trials_lru >= 2 and n_trials_lpb >= 2:
+        fig, axes = plt.subplots(1, 2, figsize=(13, 5))
+        for ax, (title, ph) in zip(axes, [("E: cold-unique random", "phase_E"),
+                                           ("F: decoy waste (adv)",  "phase_F")]):
+            keys = ["mean_ttft_ms", "mean_tpot_ms", "throughput_tok_per_s"]
+            xs = range(len(keys))
+            for j, k in enumerate(keys):
+                lru_trials = lru_agg[ph][k]["trials"] if lru_agg[ph].get(k) else []
+                lpb_trials = lpb_agg[ph][k]["trials"] if lpb_agg[ph].get(k) else []
+                # Normalize each metric by the LRU mean of that metric so
+                # they're plottable on a shared axis.
+                lru_m = lru_agg[ph][k]["mean"] if lru_agg[ph].get(k) else 1.0
+                lru_m = lru_m if lru_m else 1.0
+                jitter_l = [j - 0.15] * len(lru_trials)
+                jitter_p = [j + 0.15] * len(lpb_trials)
+                ax.scatter(jitter_l, [v / lru_m for v in lru_trials],
+                           color="#888", s=60, label="LRU" if j == 0 else None)
+                ax.scatter(jitter_p, [v / lru_m for v in lpb_trials],
+                           color="#3d8540", s=60, label="LPB" if j == 0 else None)
+            ax.set_xticks(list(xs))
+            ax.set_xticklabels(["TTFT", "TPOT", "throughput"], fontsize=10)
+            ax.set_ylabel("trial value / LRU mean")
+            ax.set_title(title)
+            ax.axhline(1.0, color="black", ls="--", lw=0.7, alpha=0.5)
             ax.grid(True, alpha=0.3, axis="y")
-            for i, (a, b) in enumerate(zip(vlru, vlpb)):
-                ax.annotate(f"{a:.1f}", xy=(i - w/2, a), xytext=(0, 3),
-                            textcoords="offset points", ha="center", fontsize=8)
-                ax.annotate(f"{b:.1f}", xy=(i + w/2, b), xytext=(0, 3),
-                            textcoords="offset points", ha="center", fontsize=8)
-            ax.legend(loc="upper left", fontsize=9)
-
-        pair_bars(axes[0, 0], "TTFT (ms)", ttfts_lru, ttfts_lpb, "ms")
-        pair_bars(axes[0, 1], "TPOT (ms/tok)", tpots_lru, tpots_lpb, "ms/tok")
-        pair_bars(axes[1, 0], "throughput (out_tok/s)", thr_lru, thr_lpb, "tok/s")
-        pair_bars(axes[1, 1], "hit % (TTFT pass)", hit_lru, hit_lpb, "%")
-        fig.suptitle("LRU vs LPB across 3 scenarios: best/average/worst", fontsize=13)
-        fig.tight_layout(rect=[0, 0, 1, 0.96])
-        out3 = FIGDIR / "fig_lru_vs_lpb_scenarios.png"
+            ax.legend(loc="upper right", fontsize=9)
+        fig.suptitle("Per-trial dispersion — is the signal stable?", fontsize=13)
+        fig.tight_layout(rect=[0, 0, 1, 0.95])
+        out3 = FIGDIR / "fig_lru_vs_lpb_trial_dispersion.png"
         fig.savefig(out3, dpi=130)
         plt.close(fig)
         print(f"Wrote {out3}")
 
-    # Dump aggregated stats
-    out_json = Path("dev/compare_summary.json")
+    # ----- JSON dump -----
     payload = {
-        "phase_B_cc_burst":   {"lru": s_lru,  "lpb": s_lpb},
-        "phase_D_anchor_rehit": {"lru": re_lru, "lpb": re_lpb},
-        "phase_E_cold_unique":  {"lru": co_lru, "lpb": co_lpb},
+        "n_trials_lru": n_trials_lru,
+        "n_trials_lpb": n_trials_lpb,
+        "trial_files": {
+            "lru": [str(p) for p in lru_paths],
+            "lpb": [str(p) for p in lpb_paths],
+        },
+        "lru": lru_agg,
+        "lpb": lpb_agg,
     }
-    out_json.write_text(json.dumps(payload, indent=2))
+    out_json = Path("dev/compare_summary.json")
+    out_json.write_text(json.dumps(payload, indent=2, default=str))
     print(f"Wrote {out_json}")
 
 

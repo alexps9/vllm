@@ -27,6 +27,7 @@ import argparse
 import gc
 import json
 import os
+import random
 import sys
 import time
 from pathlib import Path
@@ -110,14 +111,22 @@ def msg_to_chunk(m: dict) -> str:
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", choices=["lru", "lpb"], required=True)
+    ap.add_argument("--trial", type=int, default=1,
+                    help="Trial index; writes dev/compare_{mode}_t{trial}.jsonl. "
+                         "Use 1,2,3,… to capture noise via independent engine loads.")
     args = ap.parse_args()
     mode = args.mode
     hima_on = mode == "lpb"
+    trial = args.trial
+    # Deterministic per (mode, trial) so Phase E/F's random content is
+    # comparable between LRU and LPB on the same trial index.
+    rng = random.Random(1000 + trial)
 
-    out_jsonl = Path(f"dev/compare_{mode}.jsonl")
+    out_jsonl = Path(f"dev/compare_{mode}_t{trial}.jsonl")
     out_jsonl.unlink(missing_ok=True)
     fout = out_jsonl.open("w")
     log = lambda **kw: (fout.write(json.dumps(kw) + "\n"), fout.flush())  # noqa: E731
+    log(kind="meta", mode=mode, trial=trial, model=MODEL)
 
     tokenizer = AutoTokenizer.from_pretrained(MODEL, trust_remote_code=True)
 
@@ -219,21 +228,14 @@ def main() -> None:
               f"(elapsed {time.monotonic() - t_start:.0f}s)")
     log(kind="phase", phase="B_done", elapsed_s=time.monotonic() - t_start)
 
-    # ----- Phase C: final anchor probe (LRU vs LPB headline) -----
-    r = issue(anchor_ids, max_tokens=1)
-    pct = 100 * r["cached"] / anchor_len
-    print(f"\n[{mode}] FINAL anchor probe: cached={r['cached']}/{anchor_len} "
-          f"({pct:.1f}%)")
-    log(kind="anchor_probe", label="final",
-        cached=r["cached"], anchor_len=anchor_len, wall_s=r["wall_s"],
-        elapsed_s=time.monotonic() - t_start)
-
     # ----- Phase D: anchor-rehit workload (LPB BEST CASE) ----- #
-    # Downstream traffic that *does* re-issue anchored prompts. Each request
-    # = anchor + small unique tail. Under LPB, the anchor (now still cached)
-    # gives near-full prefix hit; under LRU (anchor was evicted in Phase B/C)
-    # every such request pays a fresh prefill. This is the headline win the
-    # paper claims for shared system-prompt agent fleets.
+    # MOVED here from after Phase C. Reason: the Phase C probe is itself a
+    # real anchor request whose prefill side-effect re-populates the anchor
+    # blocks at LRU's MRU end — by the time we hit Phase D, LRU's cache
+    # holds the anchor again and we cannot observe the predicted gap. By
+    # running D *before* C, rehit[0]'s ttft_cached truthfully reports the
+    # post-burst anchor-survival state (the very first rehit hasn't yet
+    # mutated the cache itself).
     print(f"\n[{mode}] Phase D: anchor-rehit workload (30 anchored requests).")
     N_REHIT = 30
     for j in range(N_REHIT):
@@ -256,27 +258,23 @@ def main() -> None:
             print(f"  rehit[{j:>2}] ttft_cached={r_t['cached']:>5} "
                   f"ttft_wall={r_t['wall_s']*1000:.0f}ms")
 
-    # ----- Phase E: no-shared-prefix cold flow (LPB WORST CASE) ----- #
-    # Many short *unique* prompts that share NO prefix with anchor or with
-    # each other. There's no anchor to protect; LPB has nothing useful to
-    # do. This isolates the hot-path overhead of HiMA's path counter +
-    # depth tracking + heap-based queue vs the simple LRU deque.
-    print(f"\n[{mode}] Phase E: no-shared-prefix cold flow "
-          "(50 unique 2k-token prompts).")
+    # ----- Phase E: no-shared-prefix cold flow (LPB hot-path overhead) ----- #
+    # 50 short unique 2K-token prompts with TRULY random tokens (per-trial
+    # deterministic seed). Replaces the prior "the quick brown fox" filler
+    # which caused ~50% block-level aliasing between adjacent unique slices,
+    # contaminating the no-shared-prefix claim.
     N_COLD = 50
+    N_DECOY = 50  # Phase F's cold flow draws from the same random pool
     PROMPT_LEN_COLD = 2048
-    # Long filler so each prompt is distinct. Need N_COLD × PROMPT_LEN_COLD
-    # = 50 × 2048 = ~102K tokens; multiply the base sentence enough times.
-    filler_text = (
-        "The quick brown fox jumps over the lazy dog. " * 30000
-    )
-    filler_ids = tokenizer.encode(filler_text, add_special_tokens=False)
-    assert len(filler_ids) >= N_COLD * PROMPT_LEN_COLD, (
-        f"filler too short: {len(filler_ids)} < {N_COLD * PROMPT_LEN_COLD}"
-    )
+    print(f"\n[{mode}] Phase E: no-shared-prefix cold flow "
+          f"({N_COLD} unique 2K-token random prompts; "
+          f"trial seed = {1000 + trial}).")
+    # Sample random ints from a safe vocab range; Qwen3.5's vocab is ~152K,
+    # we cap at 50K to stay clear of any special-token regions.
+    total_tokens = (N_COLD + N_DECOY) * PROMPT_LEN_COLD
+    cold_ids = [rng.randint(10, 50_000) for _ in range(total_tokens)]
     for k in range(N_COLD):
-        prompt = filler_ids[k * PROMPT_LEN_COLD: (k + 1) * PROMPT_LEN_COLD]
-        # Each prompt is a unique slice → no shared prefix across cold queries
+        prompt = cold_ids[k * PROMPT_LEN_COLD: (k + 1) * PROMPT_LEN_COLD]
         r_t = issue(prompt, max_tokens=1)
         r_d = issue(prompt, max_tokens=N_TPOT_TOKENS + 1)
         log(
@@ -291,8 +289,88 @@ def main() -> None:
             print(f"  cold[{k:>2}] cached={r_t['cached']:>3} "
                   f"wall={r_t['wall_s']*1000:.0f}ms")
 
+    # ----- Phase F: decoy-warming (LPB ADVERSARIAL WORST CASE) ----- #
+    # Warm 5 large decoy prefixes 100 hits each — each decoy sized to ~10K
+    # tokens (~10 KV blocks). After warming, the 5 decoys collectively hold
+    # ~50 blocks (~5% of KV budget) at high LPB scores, but we never re-hit
+    # them again. Then a cold-unique flow needs those blocks: under LRU the
+    # decoys are evicted by the cold flow's pressure; under LPB they're
+    # protected by their hit-count score, forcing the cold flow to evict
+    # other (potentially useful) blocks instead.
+    #
+    # This is the "past hit count does NOT predict future utility" failure
+    # mode that the LPB heuristic is structurally vulnerable to.
+    N_DECOYS = 5
+    DECOY_LEN_TARGET = 10_000  # ~10 KV blocks each
+    N_DECOY_WARM = 100         # high enough to outrank cold flow's hit counts
+    print(f"\n[{mode}] Phase F: decoy-warming adversarial worst case "
+          f"({N_DECOYS} decoys × {N_DECOY_WARM} hits, then {N_DECOY} "
+          "cold-unique prompts).")
+    # Build distinct decoys by tokenizing varied prose; each decoy is unique
+    # so LPB scores them independently from the real anchor.
+    base_phrases = [
+        "Alpha vector indices traversal: ",
+        "Beta sentinel coordinator dispatch: ",
+        "Gamma reduction pipeline metadata: ",
+        "Delta consensus quorum tracker: ",
+        "Epsilon backpressure buffer manifold: ",
+    ]
+    decoys_ids: list[list[int]] = []
+    for d_idx, phrase in enumerate(base_phrases[:N_DECOYS]):
+        decoy_text = phrase + (
+            f"decoy-{d_idx}-payload word{rng.randint(0, 999)} " * 1500
+        )
+        d_ids = tokenizer.encode(decoy_text, add_special_tokens=False)
+        # Truncate / pad to DECOY_LEN_TARGET so each decoy is the same size
+        d_ids = d_ids[:DECOY_LEN_TARGET]
+        decoys_ids.append(d_ids)
+        print(f"  decoy[{d_idx}]: {len(d_ids)} tokens "
+              f"(~{len(d_ids) / BLOCK_SIZE:.1f} blocks)")
+    # Warm all decoys round-robin (interleave so none is too recent at end)
+    for hit in range(N_DECOY_WARM):
+        for d_idx in range(N_DECOYS):
+            r = issue(decoys_ids[d_idx], max_tokens=1)
+        if hit in (0, 1, N_DECOY_WARM // 2, N_DECOY_WARM - 1):
+            print(f"  decoy_warm[{hit:>3}] last cached={r['cached']}/"
+                  f"{len(decoys_ids[-1])} wall={r['wall_s']*1000:.0f}ms")
+    log(kind="phase", phase="F_warm_done", elapsed_s=time.monotonic() - t_start)
+    # Cold-unique flow (uses the second half of cold_ids so it doesn't alias
+    # Phase E's slices)
+    for k in range(N_DECOY):
+        prompt = cold_ids[
+            (N_COLD + k) * PROMPT_LEN_COLD: (N_COLD + k + 1) * PROMPT_LEN_COLD
+        ]
+        r_t = issue(prompt, max_tokens=1)
+        r_d = issue(prompt, max_tokens=N_TPOT_TOKENS + 1)
+        log(
+            kind="decoy_turn", k=k,
+            prompt_len=len(prompt),
+            ttft_cached=r_t["cached"], ttft_wall_s=r_t["wall_s"],
+            full_cached=r_d["cached"], full_wall_s=r_d["wall_s"],
+            output_tokens=r_d["output_tokens"],
+            elapsed_s=time.monotonic() - t_start,
+        )
+        if k in (0, N_DECOY // 2, N_DECOY - 1):
+            print(f"  decoy[{k:>2}] cached={r_t['cached']:>3} "
+                  f"wall={r_t['wall_s']*1000:.0f}ms")
+
+    # ----- Phase C: final anchor probe (DIAGNOSTIC ONLY) -----
+    # Now meaningless as a "post-burst survival" signal because Phase D
+    # rehit[0] already covered that, and Phases D/E/F have churned the
+    # cache. Kept for diagnostic completeness — under LPB this should
+    # still show anchor cached (high LPB score from Phase A), under LRU
+    # it will likely show anchor evicted by the Phase E/F cold flows.
+    r = issue(anchor_ids, max_tokens=1)
+    pct = 100 * r["cached"] / anchor_len
+    print(f"\n[{mode}] FINAL anchor probe (diagnostic, post-D/E/F): "
+          f"cached={r['cached']}/{anchor_len} ({pct:.1f}%)")
+    log(kind="anchor_probe", label="final",
+        cached=r["cached"], anchor_len=anchor_len, wall_s=r["wall_s"],
+        elapsed_s=time.monotonic() - t_start)
+
     fout.close()
-    print(f"\n[{mode}] Done. {time.monotonic() - t_start:.0f}s total. "
+    print(f"\n[{mode}] Done (trial {trial}). "
+          f"{time.monotonic() - t_start:.0f}s total. "
           f"Log: {out_jsonl}")
 
 
