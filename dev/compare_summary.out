@@ -8,14 +8,33 @@ LRU vs LPB on Qwen3.5-35B-A3B, 10 cc sessions cold-burst
   total prompt tokens                   6648028          6648028     +0.0%
   cache hit % (TTFT pass)                90.03%           90.03%     +0.0%
   cache hit % (decode pass)              98.12%           98.12%     +0.0%
-  mean TTFT (ms)                          126.0            122.3     -2.9%
-  mean full-wall (ms)                     116.5            111.0     -4.7%
-  mean TPOT (ms/tok)                      18.38            17.69     -3.7%
-  throughput (out_tok/sec)                 90.2             94.5     +4.7%
-  total wall (s)                           57.7             55.5     -3.8%
+  mean TTFT (ms)                           95.8             93.2     -2.6%
+  mean full-wall (ms)                      87.3             87.9     +0.7%
+  mean TPOT (ms/tok)                      13.06            12.76     -2.3%
+  throughput (out_tok/sec)                121.4            121.8     +0.3%
+  total wall (s)                           43.6             43.1     -1.0%
   BASELINE anchor cached                   4224             4224     +0.0%
   FINAL anchor cached                         0             4224     +inf%
 
+  [Phase D: anchor-rehit (LPB BEST)]
+    requests                                 30               30     +0.0%
+    hit % (TTFT)                         88.87%           88.87%     +0.0%
+    hit % (decode)                       88.87%           88.87%     +0.0%
+    mean TTFT (ms)                         35.8             35.0     -2.3%
+    mean TPOT (ms)                         5.64             5.79     +2.8%
+    throughput tok/s                      177.4            172.6     -2.7%
+    total wall (s)                         4.63             4.70     +1.6%
+
+  [Phase E: no-shared cold (LPB WORST)]
+    requests                                 50               50     +0.0%
+    hit % (TTFT)                         45.38%           45.38%     +0.0%
+    hit % (decode)                       51.56%           51.56%     +0.0%
+    mean TTFT (ms)                         37.9             36.1     -4.9%
+    mean TPOT (ms)                         5.61             5.74     +2.4%
+    throughput tok/s                      178.3            174.1     -2.4%
+    total wall (s)                         7.79             7.84     +0.6%
+
 Wrote dev/figures/fig_lru_vs_lpb_anchor.png
 Wrote dev/figures/fig_lru_vs_lpb_metrics.png
+Wrote dev/figures/fig_lru_vs_lpb_scenarios.png
 Wrote dev/compare_summary.json

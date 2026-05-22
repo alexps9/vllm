@@ -738,21 +738,56 @@ extension addresses both:
 - Phase E quantifies the **downside risk** when LPB has nothing useful
   to protect — purely overhead.
 
-> Status: script + plot updated and committed; execution blocked at the
-> time of this writing by a kernel-level wedge on the host
-> (`load avg = 47.30/50.07/47.21` frozen since reboot, Python processes
-> stuck in TASK_RUNNING with 0% CPU and unkillable by SIGKILL — see
-> `dev/compare_lpb.out` (empty) and the live `pgrep -af compare` showing
-> a process at 0 CPU for 50+ minutes). Once the host is healthy, the
-> existing repro recipe below regenerates everything end-to-end without
-> code changes. The script change is small enough to inline-review:
->
-> - Phase D adds `N_REHIT = 30` requests of `anchor + unique 16-token tail`
-> - Phase E adds `N_COLD = 50` requests of `2048-token unique slices`
-> - All metrics flow through the existing `kind=rehit_turn` / `kind=cold_turn`
->   JSONL rows; `plot_lru_vs_lpb.py` writes
->   `dev/figures/fig_lru_vs_lpb_scenarios.png` (2x2: TTFT, TPOT,
->   throughput, hit% per scenario).
+**Measured table** (Qwen3.5-35B-A3B, TP=2, H200 ×2, `gpu_memory_utilization=0.35`;
+single-process per mode, runs sequentially on the same GPU pair):
+
+| phase | metric                | LRU   | LPB   | Δ        |
+|-------|-----------------------|------:|------:|---------:|
+| **B (avg)** | mean TTFT (ms)  | 95.8  | 93.2  | **−2.6 %** |
+|       | mean TPOT (ms/tok)    | 13.06 | 12.76 | **−2.3 %** |
+|       | throughput (tok/s)    | 121.4 | 121.8 | +0.3 %   |
+|       | total wall (s)        | 43.6  | 43.1  | −1.0 %   |
+|       | **FINAL anchor cached** | **0 / 4737** | **4224 / 4737** | **paper claim reproduced** |
+| **D (anchor re-hit)** | mean TTFT (ms) | 35.8  | 35.0  | −2.3 %  |
+|       | mean TPOT (ms/tok)    |  5.64 |  5.79 | +2.8 %   |
+|       | throughput (tok/s)    | 177.4 | 172.6 | −2.7 %   |
+|       | hit % (TTFT)          | 88.87 | 88.87 | (tied)   |
+| **E (cold unique)** | mean TTFT (ms)  | 37.9  | 36.1  | −4.9 %   |
+|       | mean TPOT (ms/tok)    |  5.61 |  5.74 | +2.4 %   |
+|       | throughput (tok/s)    | 178.3 | 174.1 | −2.4 %   |
+
+**Phase B holds**: the headline anchor-survival win (0 vs 4224 cached)
+is fully reproduced and matches Finding K. Workload metrics (TTFT,
+TPOT, throughput) sit within ±3 % of K's earlier numbers — same
+direction, slightly smaller magnitude on this host (cleaner CPU
+fairshare, no contention).
+
+**Phase D didn't expose the predicted 5–8× LRU disadvantage.** Root
+cause: Phase C's final anchor probe is itself a real request whose
+prefill re-populates the anchor blocks in LRU's free queue at the MRU
+end. By the time Phase D rehit[0] arrives, LRU's cache already holds
+the anchor again — `ttft_cached = 4224` on the very first rehit, same
+as LPB. So Phase D as currently structured measures *steady state with
+anchor in cache*, not LPB-protected-vs-LRU-evicted. Both modes hit
+~88.87 % and TTFT is within ~1 ms. The Phase D upside claim ("TTFT
+collapse for LPB swarms") is **not falsified** — it just isn't
+isolated by this measurement. Fix for a future iteration: skip the
+Phase C probe, or do the probe on a token-id alias that doesn't share
+hashes with the anchor's blocks.
+
+**Phase E worst-case overhead is small and asymmetric.** TTFT is
+−4.9 % (LPB faster); TPOT is +2.4 % (LPB slightly slower); throughput
+is −2.4 % (LPB slightly slower). All under the handoff's >5 % regression
+threshold. Note: the repeating filler produces ~50 % block-level hit
+rate (`cached = 1056 / 2048` on most cold prompts) — not the pure
+no-share workload the phase was designed to be, but the contamination
+hits both modes equally so the LPB-vs-LRU delta is still informative.
+
+Figures:
+  - `dev/figures/fig_lru_vs_lpb_anchor.png` — the headline (LRU 0,
+    LPB 4224 anchor tokens cached after the burst).
+  - `dev/figures/fig_lru_vs_lpb_scenarios.png` — 2×2 grid (TTFT, TPOT,
+    throughput, hit %) across Phase B / D / E.
 
 ---
 
