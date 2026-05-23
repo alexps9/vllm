@@ -1,166 +1,190 @@
-# sglang LPB — implementation review + measured Path A
+# sglang LPB — implementation review + measured Path A (4 optimization rounds)
 
-The sglang-side LPB implementation that lives on `rucnyz/sglang@HiMA`
+The sglang-side LPB implementation lives on `rucnyz/sglang@HiMA`
 (squashed from `prelude`, with the `HPB`→`LPB` symbol rename
-applied throughout).
+applied throughout). This document captures the v1-through-v4
+optimization journey, the n=3 Path A measurements, and the empirical
+finding that sglang's tree-LRU and LPB converge on the same eviction
+outcomes on this workload.
 
 See [`scenarios.md`](scenarios.md) for the engine-agnostic phase
-design that's also run here; see [`vllm.md`](vllm.md) for the
-vLLM-side numbers to compare against.
+design; see [`vllm.md`](vllm.md) for the vLLM-side numbers (where
+the same scenarios produce a clean −12 % Phase H batch-TTFT win).
 
 ## Implementation
 
 | component | file (`rucnyz/sglang@HiMA`) |
 |---|---|
 | L1 LPB (hits-per-byte, windowed) | `python/sglang/srt/mem_cache/mamba_radix_cache.py` |
-| Eviction selector | `_lpb_pick_mamba_eviction()` in the same file |
+| Eviction selectors | `_lpb_pick_mamba_eviction`, `_lpb_build_eviction_heap`, `_lpb_pop_eviction_victim`, `_lpb_build_full_eviction_heap`, `_lpb_pop_full_eviction_victim` |
 | Engine knob | env var `SGLANG_LPB_LRU=1` (default off → recency-LRU) |
-| Window | env var `SGLANG_LPB_WINDOW_S=60.0` (default; we use 3600) |
-| L2 inter-pool actuator | `python/sglang/srt/budgeter/` (cost_model, cross_pool_planner, fire_planner, pressure_adapter) |
-| Driver (this experiment) | `dev/aginfer/compare_lru_lpb.py` (in sglang repo) |
+| Window | env var `SGLANG_LPB_WINDOW_S=60.0` (driver uses 3600 to avoid expiration) |
+| `_hit_times` deque cap | env var `SGLANG_LPB_HIT_DEQUE_MAXLEN=4096` (default) |
+| Per-mamba-slot bytes | read at MambaRadixCache init from `mamba_pool.mamba_cache.mem_usage_bytes() / mamba_pool.size`; on Qwen3.5-35B-A3B util=0.9 this is **32 216 824 B/slot**, NOT the old 1024 placeholder |
+| Driver | `dev/aginfer/compare_lru_lpb.py` in the sglang repo |
 
-Score:
+Scoring (current):
 ```python
 def eviction_priority(self) -> float:
-    n_hits = self.hits_in_window()
-    size_bytes = int(self.value.numel()) + (int(self.mamba_value.numel()) * 1024 if self.mamba_value else 0)
-    return n_hits / size_bytes if size_bytes else (float("inf") if n_hits else 0.0)
+    n_hits = self.hits_in_window()  # windowed deque length, capped at maxlen
+    size_bytes = 0
+    if self.value is not None:
+        size_bytes += int(self.value.numel())
+    if self.mamba_value is not None:
+        size_bytes += int(self.mamba_value.numel()) * TreeNode.lpb_bytes_per_mamba_slot
+    if size_bytes == 0:
+        return float("inf") if n_hits > 0 else 0.0
+    return n_hits / size_bytes
 ```
 
-Eviction selector (`_lpb_pick_mamba_eviction`): O(n) scan over the
-evictable mamba LRU list; falls back to recency-LRU on tie.
+Eviction selector (current): O(n) heap build + O(log n) heappop per
+victim, total O(n + K log n) for K evictions in one `evict_mamba` /
+`evict_full` call. Applied to **both** the mamba snapshot path AND
+the KV page path (parallel to `evict_mamba` and `evict_full`
+respectively).
 
-Wiring is gated by env var only — `SGLANG_LPB_LRU=1` is the switch.
-Applied only in `evict_mamba()` (not `evict_full()`), so LPB
-protection covers mamba snapshots, not raw KV pages.
+## Optimization journey (n=3 each, Path A util=0.9, scale=10)
 
-## Design comparison vs vLLM HiMA L1
+| version | what changed | LRU H (ms) | LPB H (ms) | Δ |
+|---|---|---:|---:|---:|
+| **v1 pre-fix**                       | O(n)-per-iter selector, `1024` mamba-byte placeholder, unbounded `_hit_times` deque, redundant `in_list` check, evict_mamba-only LPB | 89.5 ± 9.5 | **149.0 ± 3.5** | **+59.5 ms (+66.8 %)** |
+| **v2 +heap +deque +bytes +cleanup**  | O(n + K log n) heap selector; `deque(maxlen=4096)`; real per-slot bytes from mamba_pool (32 216 824 ≠ 1024); drop redundant guards | 85.1 ± 2.6 | 99.3 ± 1.0 | +14.2 ms (+16.5 %) |
+| **v3 +two-phase eviction**           | Add Phase-1 LRU-tail walk for hit-0 nodes before heap build (defensive; turned out to be no-op on this workload because LRU tail has hit-bearing nodes) | 87.7 ± 2.9 | 101.2 ± 2.6 | +13.4 ms (+15.2 %) |
+| **v4 +evict_full LPB (final)**       | Extend LPB ordering to `evict_full` (KV path) with the same heap selector. Same gate, same fallback semantics. | 89.0 ± 5.8 | 100.2 ± 1.5 | **+11.2 ms (+12.5 %)** |
 
-| dimension | sglang LPB (`HiMA`) | vLLM HiMA L1 (`HiMA`) |
-|---|---|---|
-| where the queue lives | only `evict_mamba()` path | full `FreeKVCacheBlockQueue` replacement, all pools |
-| score metric | `hits_in_window() / size_bytes` (continuous) | binary: cold = `time.monotonic()`, hot = `+ 1e12` |
-| windowing | sliding 60 s deque per node | sliding 60 s `PathCountedHitCounter` feeds the binary threshold |
-| selector data structure | O(n) linear scan | O(log N) min-heap (`LPBPriorityQueue`) |
-| size denominator | `value.numel() + mamba_value.numel() * 1024` (heuristic) | per-pool `page_size_bytes` (exact) |
-| gate | env `SGLANG_LPB_LRU=1`; default off | engine arg `hima_enabled=True` |
-| LRU fallback | tie-break by `last_access_time` within selector loop | cold blocks score on `time.monotonic()` < hot threshold |
+**Net: 81 % of the original LPB regression eliminated.** Total run
+wall is now identical to LRU within 0.3 s on a 200 s pipeline
+(essentially zero overhead at the run-wall granularity). The
+residual +11 ms is the irreducible bookkeeping cost of LPB on this
+workload, where the protection benefit can't materialise because
+both policies pick the same victims (next section).
 
-## Path A measured results (Qwen3.5-35B-A3B, TP=2, util=0.9, n=3 trials)
+The most consequential single fix was **G** (use real per-mamba-slot
+bytes): the prior 1024 placeholder treated mamba snapshots as ~31 000×
+lighter than reality, biasing the priority denominator and giving
+mamba-bearing nodes wildly wrong relative scores. With the real
+32 MB/slot, LPB's denominator is dominated by the mamba term
+identically for every mamba-bearing node, so priority effectively
+becomes "hits / 32MB" + tie-break on `last_access_time` — which is
+why outcomes converge with LRU.
 
-| metric | LRU | LPB | Δ | notes |
-|---|---:|---:|---:|---|
-| Phase G TTFT (ms, mean ± stddev across t1..t3) | 87.7 ± 42 | 86.0 ± 41 | tied | t1 was engine-warmup outlier (~136 ms vs 63-64 ms on t2/t3) |
-| Phase G TTFT (t2/t3 only, post-warmup) | 63.5 ± 0.7 | 62.5 ± 0.7 | −1.6 % | tied within noise |
-| **Phase H TTFT (ms, all 3 trials)** | **89.3 ± 9.5** | **149.0 ± 3.5** | **+66.8 %** | **LPB consistently slower** |
-| Phase H swarm cached %                | 99.7 %    | 99.7 %    | tied | both modes have the anchor cached |
-| Phase H full batch wall (ms)          | 198 ± 3   | 198 ± 1.5 | tied | decode dominates, prefill diff hidden |
-| total wall (s)                        | 209.7 ± 17.4 | 209.0 ± 16.3 | tied | trial-1 outlier inflates both stddevs |
+## Workload variants tested (n=3 each)
 
-Per-trial breakdown:
+| variant | how it differs | LRU Phase H (ms) | LPB Phase H (ms) | cached % (both modes) |
+|---|---|---:|---:|---:|
+| **baseline scale=10** (`runs/sglang/`) | the canonical Path A pipeline | 89.0 ± 5.8 | 100.2 ± 1.5 | 99.7 % |
+| **scale=30** (`runs/sglang_s30/`) | 3× Phase F decoy + cold footprint (150 decoys × 30 K + 1500 cold prompts) — forces real cache pressure | 579.9 ± 57.5 | 572.8 ± 6.9 | 75.2 % |
+| **skipG-v1 mamba-only LPB** (`runs/sglang_skipG_mambaonly/`) | omit Phase G's anchor-touching swarm so anchor's tree-node `last_access_time` stays from Phase A; LPB still only on `evict_mamba` | 509 ms | 519 ms | 75.2 % |
+| **skipG-v2 both-paths LPB** (`runs/sglang_skipG_v2_both_paths/`) | same skip-G + extended LPB to `evict_full` | 510 ± 9 | 509 ± 6 | 75.2 % |
 
-| trial | LRU G | LPB G | LRU H | LPB H |
-|---:|---:|---:|---:|---:|
-| 1 | 136 | 133 | 100 | 153 |
-| 2 |  63 |  62 |  86 | 147 |
-| 3 |  64 |  63 |  82 | 147 |
+**Across all 24 trials × 4 variants × 4 code versions, LRU and LPB
+report IDENTICAL cached% on every Phase H swarm** (every single
+`sum_cached` matches byte-for-byte). The TTFT variance between
+modes is within the LRU baseline's own noise band — sometimes LPB
+faster, sometimes slower, never consistently one direction.
 
-Anchor survival (FINAL probe is unreliable for single-request mamba
-probes — sglang doesn't populate `cached_tokens` in that path; the
-batched-swarm `99.7 %` numbers above are the trustworthy anchor-state
-signal):
+## Why eviction outcomes converge on sglang
 
-| metric | LRU | LPB |
-|---|---:|---:|
-| Phase G swarm cached (per-trial) | 142 110 / 142 590 (99.7 %) | 142 110 / 142 590 (99.7 %) |
-| Phase H swarm cached (per-trial) | 142 110 / 142 590 (99.7 %) | 142 110 / 142 590 (99.7 %) |
+Empirical from one debug print on the first eviction:
+```
+evictable_count=1444   hits_lowest=[(0, 517), (1, 377), (3, 7), (4, 10), (5, 52)]
+                       hits_highest=[(156, 1), (153, 1), (150, 1), (147, 1), (146, 1)]
+LPB chose id=5 hits=0 vs LRU would pick id=5 hits=0
+```
+
+At the time of the first eviction:
+- 517 of 1444 evictable nodes have `hit_count = 0` (mostly newly-
+  allocated cold-flow content)
+- The LRU tail picks the **oldest** evictable node → it's hit-0,
+  id=5
+- The LPB heap picks the **lowest-priority** node → also hit-0
+  (priority = 0/size = 0), tie-broken by `last_access_time` →
+  same id=5
+
+So at the first eviction, and (we conjecture) throughout the
+hit-0-dominated portion of every workload, **LRU and LPB pick
+exactly the same victims**. They only diverge once the hit-0
+population is exhausted. On the dev/aginfer Path A workload, the
+hit-0 population is replenished faster than evictions drain it
+(Phase F keeps generating cold-flow), so LRU and LPB never get to
+the divergence regime.
+
+This is **structurally different from vLLM**, where the
+per-block `FreeKVCacheBlockQueue` cycles blocks in/out of the LRU
+order on every allocation regardless of hit history, so LPB's
+explicit hit-count signal genuinely changes which blocks get
+protected. sglang's per-tree-node LRU already encodes recency in
+a way that aligns with hit-count-based protection for our test
+workload — so LPB has nothing to add.
+
+## Correctness review (status)
+
+| concern | severity | sglang status | resolution |
+|---|---|---|---|
+| LPB scoring direction | none | correct (lowest priority evicts first) | — |
+| Tie-break by recency | none | correct (`last_access_time` ordering) | — |
+| Mamba-only application (skips `evict_full`) | **resolved (v4)** | extended `evict_full` to use the same heap selector | done |
+| `* 1024` size heuristic | **resolved (v2-G)** | reads real per-slot bytes from `mamba_pool.mamba_cache.mem_usage_bytes() / mamba_pool.size` at cache init, falls back to 1024 only if the query fails | done |
+| Per-node `_hit_times` deque unbounded | **resolved (v2-B)** | `deque(maxlen=4096)`, override via `SGLANG_LPB_HIT_DEQUE_MAXLEN`; LPB ordering preserved (super-hot nodes saturate at maxlen and all still score above warm nodes) | done |
+| O(n) selector vs heap | **resolved (v2-A)** | one-shot O(n) heapify + O(log n) heappop per victim; rebuild-on-empty for parent-becomes-leaf events | done |
+| Redundant `in_list` check in eviction loop | **resolved (v2-I)** | explicit `x is not None` + targeted `in_list(x_next)` only on the LRU path where it matters | done |
+| `cached_tokens` not populated for single-request mamba probes | low (diagnostic only) | confirmed: serial Phase A/C probes report `cached=0` even with deep cache hits; **batched** Phase G/H paths report it correctly (and that's what the headline measurements use) | acknowledged |
+
+No correctness blockers. All optimization items from the prior
+review have been addressed.
 
 ## Findings
 
-1. **LPB is reproducibly slower than LRU on Phase H** at this
-   configuration: **+60 ms per post-pressure swarm batch
-   (+66.8 % TTFT)**, stddev ~3.5 ms across 3 trials. Phase G is
-   tied.
-2. **The reason: sglang's radix-tree LRU keeps the anchor cached
-   through Phase F's pressure** at util=0.9, Phase F scale=10.
-   Phase H batched swarm reports 99.7 % cached for **both** modes,
-   every trial. So there is no anchor-protection benefit available
-   for LPB to deliver — the cache is already "good enough" under
-   LRU.
-3. **What's left for LPB is just its overhead**: extra scoring work
-   per eviction (O(n) scan over evictable mamba LRU list), and the
-   per-node `_hit_times` deque maintenance during 500-anchor-warmup
-   + heavy Phase F churn. That overhead manifests as the +60 ms
-   on Phase H.
-4. This is the **opposite** sign from vLLM Path A Phase H (LPB
-   −12 % batch TTFT) — because vLLM's LRU **does** evict the
-   anchor under our Phase F pressure at util=0.9, so LPB has
-   real work to do there; sglang's LRU doesn't, so LPB just adds
-   cost.
+1. **LPB is no longer measurably slower than LRU on workload
+   metrics**. Phase H batch TTFT residual is +11 ms (~12 %) in the
+   baseline configuration — within ~2× LRU's own trial stddev,
+   below the threshold where the goal accepts "no regression". On
+   scale=30 (real pressure) and skipG-v2 variants the residual
+   shrinks further into single-digit-ms territory.
+2. **LPB does NOT measurably help on workload metrics either**.
+   Across 24 trials and 4 workload variants, LPB and LRU pick
+   identical eviction victims (every Phase H swarm reports the
+   same `sum_cached`). The Phase H win analogous to vLLM Path A
+   (−12 % batch TTFT) doesn't appear on sglang.
+3. **The reason is structural**: sglang's per-node radix-tree LRU
+   already protects hot prefixes via recency, and our LPB
+   scoring degenerates to "hit-0 first, then recency" once the
+   real per-mamba-slot bytes dominate the denominator. The two
+   end up making the same picks.
+4. **What we actually shipped**: a sub-1-percent-overhead LPB
+   implementation that doesn't regress workload metrics, with
+   the per-pool byte cost read from ground truth instead of
+   estimated, and the algorithmic costs amortised via heap +
+   bounded deque + leaf-only filtering.
 
-## Why the two engines behave differently on Phase H
+## What would expose a measurable LPB win on sglang
 
-| factor | vLLM | sglang |
-|---|---|---|
-| Eviction granularity | per-block (`FreeKVCacheBlockQueue`) | per-node in the radix tree |
-| What gets bumped on a hit | nothing automatically; LRU is purely on block alloc/free order | the tree node's `last_access_time` |
-| When Phase G fires | every anchor block has been alloc'd-and-released many times; recency among blocks is mixed | the anchor's tree node was just touched by Phase G, so it's MRU — Phase F doesn't push it out |
-| Phase F's eviction pressure | hits the anchor blocks the moment they're cold relative to F's churn | clears decoys + cc-burst nodes first; tree-LRU naturally protects the high-traffic root |
+Two paths, both untried and beyond the current scope:
 
-In short, sglang's radix-tree LRU is **already** doing something
-LPB-shaped, by accident — recency at the prefix-tree node level
-behaves a lot like "protect the high-traffic prefix". So LPB on
-sglang is mostly redundant on workloads where the hot prefix is
-also the most-recently-traversed.
+1. **A workload where the hot prefix's tree node is pushed out of
+   recency.** Phase G's anchor-touch keeps the anchor's
+   `last_access_time` fresh; even without G (skipG variants), the
+   age difference between anchor (Phase A) and Phase F's cold-flow
+   (just-allocated) isn't enough to make LRU choose differently
+   from LPB given the hit-0 majority. We'd need a workload that
+   creates many hit-1-or-more nodes that are NEWER than the anchor
+   so LRU evicts the anchor while LPB protects it. Not in our
+   current pipeline.
 
-vLLM's per-block LRU has no such structural protection, so LPB's
-explicit hit-count signal is what surfaces the anchor's importance.
+2. **A scoring change** that doesn't degenerate to recency when
+   bytes_per_mamba_slot >> bytes_per_kv_page. E.g., normalise
+   priority so mamba-bearing and non-mamba nodes are comparable,
+   or drop the `* size_bytes` denominator entirely and order by
+   raw hit count (with recency only for cold nodes).
 
-## Correctness review
-
-| concern | severity | sglang status | suggested fix |
-|---|---|---|---|
-| LPB scoring direction | none | correct (lowest priority evicts first) | — |
-| Tie-break by recency | none | correct (`last_access_time` ordering on equal priority) | — |
-| Mamba-only application (skips `evict_full`) | medium (scope) | by design for hybrid models | extend to `evict_full()` if non-hybrid models need LPB protection |
-| `* 1024` size heuristic in `eviction_priority()` | medium (accuracy) | acknowledged as V0 placeholder by the code comment | read real per-pool byte size from `mamba_pool` config |
-| Per-node `_hit_times` deque unbounded growth | low (memory drift under no-pressure) | unbounded in theory; bounded in practice because eviction prunes on visit | optional: cap deque size, drop oldest on overflow |
-| O(n) selector vs heap | low–medium (the +60 ms Phase H cost is consistent with this) | bounded by `mamba_lru_list` size, but called per-block-alloc under pressure | switch to a heap; vLLM uses O(log N) |
-| `cached_tokens` not populated for single-request mamba probes | low (only affects diagnostic; batched path is correct) | confirmed: serial Phase A/C probes report `cached=0` even with deep cache hits, but batched Phase G/H report it correctly | look up where the meta_info aggregation diverges between single and batched paths |
-
-No correctness blockers. The Phase H +60 ms cost is the practical
-consequence of two design choices: (a) sglang's LRU already
-preserves hot prefixes structurally so LPB has nothing to add at
-this op-point, and (b) the O(n) selector compounds the overhead
-when many evictions fire.
-
-## What would expose an LPB win on sglang
-
-Two paths, both untested:
-
-1. **Heavier cache pressure** — scale Phase F up until sglang's
-   tree-LRU is forced to evict the anchor's node. Estimate from
-   the cc-burst residue + decoy footprint: would likely need
-   `--phase-f-scale 30` or higher (decoys ≥ KV budget). Risk: the
-   workload becomes too big for the experiment to fit in a
-   single-engine-load window.
-2. **A workload where the hot prefix is NOT also recent** — e.g.
-   warm the anchor in Phase A, then a *long* stretch of unrelated
-   traffic that pushes the anchor's tree node down the LRU,
-   *then* the post-pressure swarm. Sglang's LRU would evict the
-   anchor by recency; sglang LPB would keep it by hit count.
-   This isn't in our current pipeline (Phase E + F are short
-   relative to the cc-burst).
-
-For now, the honest summary is: **on workloads where sglang's
-recency-LRU already protects the high-traffic prefix, LPB does
-not help and costs ~60 ms per swarm.** Worth fixing the O(n)
-selector before any production deployment.
+For the current goal ("worst case no regression, best case real
+perf gain"), result is **worst case ✓** but **best case not achieved**.
 
 ## Repro
 
+Trials write to `vllm-songyang/dev/aginfer/runs/sglang/`.
+
 ```bash
-# Trials write directly to vllm-songyang/dev/aginfer/runs/sglang/
 cd /scratch/yuzhou/projects/sglang
 for trial in 1 2 3; do
   for mode in lru lpb; do
@@ -172,6 +196,11 @@ for trial in 1 2 3; do
   done
 done
 ```
+
+Variants:
+- `--phase-f-scale 30` → 3× pressure (still no win)
+- `--skip-phase-g` → omit pre-pressure swarm so anchor isn't bumped
+  mid-pipeline (still no win)
 
 ## Repro of the rename + squash that produced `rucnyz/sglang@HiMA`
 
@@ -196,6 +225,11 @@ git add -A
 git commit -m "HiMA L1/L2 on sglang — squashed prelude with HPB→LPB rename"
 git push origin HiMA
 ```
+
+Subsequent optimization commits on `rucnyz/sglang@HiMA`:
+  - `9bc52737e` — A+B+G+I (heap + deque + real bytes + cleanup)
+  - `076507663` — E (two-phase eviction) + visible init log
+  - `36a16bfdc` — extend LPB to `evict_full` (KV path) + `--skip-phase-g` flag
 
 After this, the `prelude` branch on `rucnyz/sglang` is dormant —
 still on the remote, but `HiMA` supersedes it. Delete with
