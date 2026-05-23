@@ -635,86 +635,7 @@ before it actually flipped behavior on the running engine:
 
 After those five fixes, `hima_enabled=True` actually flips behavior.
 
-### K. End-to-end LRU vs LPB on cc workload — anchor + TTFT + TPOT + throughput
-
-`dev/compare_lru_lpb.py --mode {lru,lpb}` runs the SAME workload twice:
-
-  - **Phase A**: warm the anchor (session 0's first user message, 4737
-    tokens ≈ 5 KV blocks) with **500 hits** so its `n_b` is well above
-    anything cc traffic can accumulate (each cc turn issues 2 requests;
-    a 50-turn session ≈ 100 hits on its root block).
-  - **Phase B**: cold-burst replay of 10 cc sessions (each turn issued
-    twice: max_tokens=1 for TTFT, max_tokens=21 for throughput/TPOT).
-  - **Phase C**: probe the anchor — measures L1 outcome.
-
-vLLM: Qwen3.5-35B-A3B, TP=2, `mamba_cache_mode=align`,
-`gpu_memory_utilization=0.35`, `max_num_seqs=64`. KV budget ≈ 1.08M
-tokens (~1022 blocks at 1056 tokens/block).
-
-**Headline result** (`dev/compare_summary.out`):
-
-| metric                       | LRU (vLLM default) | LPB (HiMA L1 on)  | Δ |
-|------------------------------|-------------------:|------------------:|---:|
-| requests issued              | 238                | 238               | — |
-| BASELINE anchor cached       | 4224/4737 (89.2%)  | 4224/4737 (89.2%) | — |
-| **FINAL anchor cached**      | **0/4737 (0.0%)**  | **4224/4737 (89.2%)** | **paper claim reproduced** |
-| cache hit % (decode pass)    | 98.12 %            | 98.12 %           | — |
-| mean **TTFT** (ms)           | 126.0              | 122.3             | **−2.9 %** |
-| mean **TPOT** (ms/tok)       | 18.38              | 17.69             | **−3.7 %** |
-| **throughput** (out_tok/sec) | 90.2               | 94.5              | **+4.7 %** |
-| total wall time (s)          | 57.7               | 55.5              | **−3.8 %** |
-
-**The L1 anchor-eviction claim is reproduced end-to-end**: under
-identical workload, LRU drops the heavily-hit anchor entirely (0/4737
-tokens cached after the cold burst), LPB keeps every cacheable block
-of it (4224/4737, i.e., 89.2 % = `floor(4737/1056) × 1056 / 4737`, the
-theoretical max — the last 513 tokens are stuck in a partial last
-block that vLLM never caches; that's the Finding B / Finding C
-phenomenon, orthogonal to L1).
-
-Beyond the binary anchor-survival win, the cc workload also shows
-**TPOT −3.7 %, TTFT −2.9 %, throughput +4.7 %** for LPB. The hit-rate
-on the workload itself is identical (98 %) because cc traffic mostly
-hits each session's own KV (not the shared anchor); LPB's contribution
-to the workload metrics here comes from cheaper block-allocation
-(fewer evictions of recently-released blocks) rather than from
-re-hitting the anchor.
-
-Note: this experiment intentionally exposes only the FLOOR of LPB's
-benefit because the cc sessions never re-hit the anchor after warming.
-In a workload that re-issues anchored prompts (e.g., agent swarms with
-N parallel sub-agents that all start from the same system prompt), LPB
-would deliver an additional **TTFT savings on every anchored request**
-proportional to the anchor length × prefill-latency-per-token — for the
-4737-token anchor here, that's about **4737 × 13.34 µs ≈ 63 ms saved
-per anchored request that hits the still-cached anchor**, on top of
-the L1 anchor-survival itself.
-
-Figures:
-
-  - `dev/figures/fig_lru_vs_lpb_anchor.png` — side-by-side baseline vs
-    final anchor cached % for both modes. The headline: LRU's FINAL bar
-    is `0/4737` (gone), LPB's FINAL bar is `4224/4737` (kept).
-  - `dev/figures/fig_lru_vs_lpb_metrics.png` — four-panel grid of hit
-    rate, TTFT, TPOT, throughput, green = winner per panel.
-
-Aggregated stats: `dev/compare_summary.json`.
-
-Repro:
-
-```bash
-# (1) both modes — model load is the slowest part (~1.5 min each)
-CUDA_VISIBLE_DEVICES=0,2 .venv/bin/python -u dev/compare_lru_lpb.py --mode lru \
-    | tee dev/compare_lru.out
-
-CUDA_VISIBLE_DEVICES=0,2 .venv/bin/python -u dev/compare_lru_lpb.py --mode lpb \
-    | tee dev/compare_lpb.out
-
-# (2) figures + summary table
-.venv/bin/python dev/plot_lru_vs_lpb.py | tee dev/compare_summary.out
-```
-
-### K.2 (extended, n=3 trials) — Four scenarios: best / average / cold / adversarial worst case for LPB
+### K. End-to-end LRU vs LPB on cc workload — multi-scenario, n=3 trials
 
 `dev/compare_lru_lpb.py` runs **four measurement phases per mode** in
 one engine load, plus an anchor warmup. Driven via `--trial N`, the
@@ -731,25 +652,31 @@ trial files and produces mean ± sample-stddev tables and figures.
 | **F** | **decoy waste** (LPB ADVERSARIAL WORST) | 5 decoys ×10 K tokens, each warmed 100×, then 50 cold-unique prompts | does LPB protect useless-but-hot blocks at LRU's expense? |
 | **C** | final anchor probe (diagnostic) | last anchor probe at end of run | sanity check; **no longer the headline** — replaced by `rehit[0].ttft_cached` |
 
-**Critical fix vs the earlier single-trial run** (commit `9f93dcfb6`):
+vLLM: Qwen3.5-35B-A3B, TP=2, `mamba_cache_mode=align`,
+`gpu_memory_utilization=0.35`, `max_num_seqs=64`. KV budget ≈ 1.08 M
+tokens (~1022 blocks at 1056 tokens/block).
 
-1. **Phase reorder**: D moved before C. The old order (`A → B → C → D → E`)
-   caused C's final-probe request to repopulate the anchor in LRU's MRU
-   slot before Phase D could observe the evicted state. Now `A → B → D → E
-   → F → C`. The headline anchor-survival signal comes from
-   `rehit[0].ttft_cached`, not the Phase C probe.
-2. **Phase E filler is now truly random tokens** (seeded per-trial). The
-   prior `"the quick brown fox … " × 30 000` filler aliased at block
-   boundaries → ~50 % cached on every "cold" prompt. With random tokens
-   we get the intended `cached = 0`.
-3. **Phase F new**: an adversarial worst-case constructed specifically
-   to expose LPB's "past hit count does not predict future utility"
-   failure mode. Five 10 K-token decoys are warmed 100× each (~5 % of KV
-   budget at high LPB score), then never re-hit; subsequent cold flow
-   has to compete with them for cache slots.
-4. **N=3 trials per mode** with deterministic per-trial seeds so Phases
-   E/F's random content is comparable between LRU and LPB on the same
-   trial index.
+**Design notes** (these matter — earlier iterations of this experiment
+got bitten by each one in turn):
+
+1. **Phase D runs before Phase C, not after.** An earlier ordering of
+   `A → B → C → D → E` had Phase C's final-probe request re-populate the
+   anchor in LRU's MRU slot before Phase D could observe the evicted
+   state, hiding the LPB best-case win. The current order
+   `A → B → D → E → F → C` means `rehit[0].ttft_cached` is the
+   true post-burst signal (the first rehit hasn't yet mutated the cache).
+2. **Phase E uses truly random tokens** (per-trial seed). An earlier
+   `"the quick brown fox … " × 30 000` filler aliased at block boundaries
+   so every "cold" prompt got ~50 % hit. Random tokens give the intended
+   `cached = 0`.
+3. **Phase F is adversarial-by-construction**: 5 decoys × 10 K tokens
+   warmed 100× each (~5 % of KV budget at high LPB score), then never
+   re-hit. Designed to expose LPB's "past hit count does not predict
+   future utility" failure mode if it exists.
+4. **N=3 trials per mode**, deterministic per-trial seed, separate
+   engine loads. Earlier single-trial Phase E gave `−4.9 %` TTFT; the
+   3-trial mean is `−1.4 % ± 0.5–0.75` — the single value was on the
+   high end of trial noise.
 
 #### Headline result — anchor survival (n=3 each, **stddev = 0**)
 

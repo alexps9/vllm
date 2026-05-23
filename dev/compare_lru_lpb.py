@@ -112,23 +112,48 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--mode", choices=["lru", "lpb"], required=True)
     ap.add_argument("--trial", type=int, default=1,
-                    help="Trial index; writes dev/compare_{mode}_t{trial}.jsonl. "
+                    help="Trial index; writes dev/compare_{mode}{tag}_t{trial}.jsonl. "
                          "Use 1,2,3,… to capture noise via independent engine loads.")
+    ap.add_argument("--util", type=float, default=0.35,
+                    help="gpu_memory_utilization for the engine. Path-0 ran "
+                         "at 0.35 (KV ≈ 1.08M tokens). Path-A uses 0.9 for "
+                         "realistic operating point.")
+    ap.add_argument("--tp", type=int, default=2,
+                    help="tensor_parallel_size. Bigger models need TP=4 or 8.")
+    ap.add_argument("--model", default=MODEL,
+                    help="HF model id. Default keeps Qwen3.5-35B-A3B; bigger "
+                         "models (e.g. Qwen3.5-122B-A10B) feed Path B.")
+    ap.add_argument("--tag", default="",
+                    help="Suffix tag baked into the output filename (e.g. "
+                         "'_pathA' / '_pathB') so different sweeps don't "
+                         "clobber each other.")
+    ap.add_argument("--phase-f-scale", type=int, default=1,
+                    help="Multiplier for Phase F's adversarial size. "
+                         "scale=1 = 5 decoys × 10K (baseline, ~5% of "
+                         "util-0.35 KV budget). scale=10 = 50 decoys × 30K "
+                         "(~54% of util-0.9 KV budget) — designed to "
+                         "actually expose LPB's worst case.")
     args = ap.parse_args()
     mode = args.mode
     hima_on = mode == "lpb"
     trial = args.trial
+    model_id = args.model
+    tag = args.tag
+    util = args.util
+    tp = args.tp
+    pf_scale = args.phase_f_scale
     # Deterministic per (mode, trial) so Phase E/F's random content is
     # comparable between LRU and LPB on the same trial index.
     rng = random.Random(1000 + trial)
 
-    out_jsonl = Path(f"dev/compare_{mode}_t{trial}.jsonl")
+    out_jsonl = Path(f"dev/compare_{mode}{tag}_t{trial}.jsonl")
     out_jsonl.unlink(missing_ok=True)
     fout = out_jsonl.open("w")
     log = lambda **kw: (fout.write(json.dumps(kw) + "\n"), fout.flush())  # noqa: E731
-    log(kind="meta", mode=mode, trial=trial, model=MODEL)
+    log(kind="meta", mode=mode, trial=trial, model=model_id, tag=tag,
+        util=util, tp=tp, phase_f_scale=pf_scale)
 
-    tokenizer = AutoTokenizer.from_pretrained(MODEL, trust_remote_code=True)
+    tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
 
     sessions: list[list[dict]] = [
         json.loads(l)["messages"]
@@ -144,16 +169,16 @@ def main() -> None:
     print(f"[{mode}] Anchor: {anchor_len} tokens "
           f"(~{anchor_len / BLOCK_SIZE:.1f} blocks)")
 
-    print(f"[{mode}] Loading {MODEL} (TP=2, util=0.35, "
-          f"hima_enabled={hima_on})...")
+    print(f"[{mode}] Loading {model_id} (TP={tp}, util={util}, "
+          f"hima_enabled={hima_on}, phase_f_scale={pf_scale})...")
     llm = LLM(
-        model=MODEL,
-        tensor_parallel_size=2,
+        model=model_id,
+        tensor_parallel_size=tp,
         dtype="bfloat16",
         enable_prefix_caching=True,
         mamba_cache_mode="align",
         max_model_len=MAX_PROMPT_TOKENS + 1024,
-        gpu_memory_utilization=0.35,
+        gpu_memory_utilization=util,
         max_num_seqs=64,
         trust_remote_code=True,
         hima_enabled=hima_on,
@@ -264,7 +289,10 @@ def main() -> None:
     # which caused ~50% block-level aliasing between adjacent unique slices,
     # contaminating the no-shared-prefix claim.
     N_COLD = 50
-    N_DECOY = 50  # Phase F's cold flow draws from the same random pool
+    # Phase F's cold flow scales with pf_scale to actually saturate KV at
+    # high gpu_memory_utilization; Phase E stays small (it measures hot-path
+    # overhead, not pressure).
+    N_DECOY = 50 * pf_scale
     PROMPT_LEN_COLD = 2048
     print(f"\n[{mode}] Phase E: no-shared-prefix cold flow "
           f"({N_COLD} unique 2K-token random prompts; "
@@ -300,12 +328,16 @@ def main() -> None:
     #
     # This is the "past hit count does NOT predict future utility" failure
     # mode that the LPB heuristic is structurally vulnerable to.
-    N_DECOYS = 5
-    DECOY_LEN_TARGET = 10_000  # ~10 KV blocks each
-    N_DECOY_WARM = 100         # high enough to outrank cold flow's hit counts
+    # Phase F sizing scales with pf_scale. The LPB-_HIT_SCORE_OFFSET = 1e12
+    # means any block with a single hit outranks cold blocks, so
+    # N_DECOY_WARM=5 is plenty — keeping it small lets us afford many more
+    # decoys without exploding wall time.
+    N_DECOYS = 5 * pf_scale
+    DECOY_LEN_TARGET = 10_000 + 20_000 * (pf_scale > 1)
+    N_DECOY_WARM = 100 if pf_scale == 1 else 5
     print(f"\n[{mode}] Phase F: decoy-warming adversarial worst case "
-          f"({N_DECOYS} decoys × {N_DECOY_WARM} hits, then {N_DECOY} "
-          "cold-unique prompts).")
+          f"({N_DECOYS} decoys × {DECOY_LEN_TARGET}-tok × {N_DECOY_WARM} hits, "
+          f"then {N_DECOY} cold-unique prompts).")
     # Build distinct decoys by tokenizing varied prose; each decoy is unique
     # so LPB scores them independently from the real anchor.
     base_phrases = [
@@ -314,18 +346,29 @@ def main() -> None:
         "Gamma reduction pipeline metadata: ",
         "Delta consensus quorum tracker: ",
         "Epsilon backpressure buffer manifold: ",
+        "Zeta hyperscale ingress shuttle: ",
+        "Eta stochastic gradient resonance: ",
+        "Theta meridian arbitration loop: ",
+        "Iota holographic dispatch fabric: ",
+        "Kappa coalesced retrieval pipeline: ",
     ]
     decoys_ids: list[list[int]] = []
-    for d_idx, phrase in enumerate(base_phrases[:N_DECOYS]):
+    for d_idx in range(N_DECOYS):
+        phrase = base_phrases[d_idx % len(base_phrases)]
         decoy_text = phrase + (
-            f"decoy-{d_idx}-payload word{rng.randint(0, 999)} " * 1500
+            f"decoy-{d_idx}-payload word{rng.randint(0, 999_999)} "
+            * max(1500, DECOY_LEN_TARGET // 6 + 100)
         )
         d_ids = tokenizer.encode(decoy_text, add_special_tokens=False)
-        # Truncate / pad to DECOY_LEN_TARGET so each decoy is the same size
+        # Truncate to DECOY_LEN_TARGET so each decoy is the same size
         d_ids = d_ids[:DECOY_LEN_TARGET]
         decoys_ids.append(d_ids)
-        print(f"  decoy[{d_idx}]: {len(d_ids)} tokens "
-              f"(~{len(d_ids) / BLOCK_SIZE:.1f} blocks)")
+        if d_idx in (0, N_DECOYS // 2, N_DECOYS - 1):
+            print(f"  decoy[{d_idx}]: {len(d_ids)} tokens "
+                  f"(~{len(d_ids) / BLOCK_SIZE:.1f} blocks)")
+    print(f"  total decoy footprint: "
+          f"{N_DECOYS * DECOY_LEN_TARGET} tokens "
+          f"(~{N_DECOYS * DECOY_LEN_TARGET / BLOCK_SIZE:.0f} blocks)")
     # Warm all decoys round-robin (interleave so none is too recent at end)
     for hit in range(N_DECOY_WARM):
         for d_idx in range(N_DECOYS):
