@@ -639,20 +639,34 @@ After those five fixes, `hima_enabled=True` actually flips behavior.
 
 #### TL;DR
 
-* **No regression**: across 18 independent engine loads (3 op-points
-  × 3 trials × 2 modes), LPB is never measurably worse than LRU on
-  TTFT / TPOT / throughput. The largest sub-noise hint of LPB-slower
-  is +1.3 % TPOT (Path A, Phase F) — well inside trial-spread.
-* **Anchor protection holds**: LRU 0/4737 vs LPB 4224/4737 tokens
-  cached in the FINAL probe, every trial, every sweep
+* **Production workload-metric win, all 3 op-points**: in Phase H
+  (concurrent swarm submitted *after* the cache pressure that
+  evicts the anchor under LRU), LPB delivers:
+
+  | sweep | LRU batch TTFT (ms) | LPB batch TTFT (ms) | Δ |
+  |---|---:|---:|---:|
+  | Path-0 (util=0.35, 35B)   | 372.23 ± 1.92  | 329.05 ± 2.04  | **−11.6 %** (≈21σ) |
+  | Path A (util=0.9, 35B)    | 370.03 ± 7.40  | 325.51 ± 7.41  | **−12.0 %** (≈6σ) |
+  | Path B (util=0.9, 122 B)  | 565.35 ± 2.79  | 465.30 ± 18.07 | **−17.7 %** (≈5σ) |
+
+  Total batch wall on the production 122 B setup: −8.5 % (Path B saves
+  100 ms per swarm). Hit-rate: LRU 85.91 % (29/30) vs LPB 88.87 % (30/30),
+  stddev = 0 across all 9 LRU / 9 LPB trials.
+
+* **No regression on workload metrics elsewhere**: across the other
+  phases (B / D / E / F / G) at all 3 op-points, LPB is never
+  measurably worse than LRU on TTFT / TPOT / throughput. Largest
+  sub-noise LPB-slower is +1.3 % TPOT (Path A, Phase F) — inside trial
+  spread.
+
+* **Anchor protection holds, always**: LRU 0/4737 vs LPB 4224/4737
+  tokens in the FINAL probe, every trial, every sweep
   (stddev = 0 across 9/9 LRU vs 9/9 LPB).
-* **LPB workload win materialises only when KV pressure is high
-  enough that LRU actually evicts the anchor.** When that happens
-  (Path-0, util=0.35), the concurrent-swarm Phase G shows
-  −12.2 % ± 0.6/2.5 batch TTFT. At production util=0.9 the anchor
-  survives Phase B in both modes — no eviction → no Phase G win to
-  measure → workload metrics tied. The protection is silent insurance
-  here: it pays nothing on tied workloads and pays when pressure spikes.
+
+* **Phase G alone wasn't enough at util=0.9** — it runs before
+  Phase F's pressure, so at high util the anchor was still in LRU's
+  cache when G measured. Phase H closes that gap by re-running the
+  swarm *after* the pressure.
 
 #### Method
 
@@ -671,6 +685,7 @@ sweep and produces mean ± sample-stddev tables and figures.
 | **D** | anchor re-hit (serial follow-up) | 30 fresh requests serial = anchor + unique 16-token tail | serial steady-state — by now Phase G has re-warmed any evicted anchor; tied at high util by design |
 | **E** | cold_unique random (LPB hot-path) | 50 unique 2 K-token prompts with truly random per-trial-seeded tokens | LPB heap/path-counter overhead vs LRU deque, zero block aliasing |
 | **F** | decoy waste (LPB ADVERSARIAL WORST) | N decoys × ~10–30 K tokens each warmed 5–100× then `N_DECOY` cold prompts | does LPB protect useless-but-hot blocks at LRU's expense? Scale via `--phase-f-scale`. |
+| **H** | **POST-pressure swarm** (LPB BEST, decisive) | same 30-batch as Phase G, fired *after* Phases D/E/F have churned the cache | the production-pattern win at *any* op-point — by now LRU has lost the anchor even at util=0.9, and the swarm reveals the difference |
 | **C** | final anchor probe (diagnostic) | last anchor probe at end of run | binary anchor-survival check; the headline anchor metric at high util |
 
 Three sweeps:
@@ -784,36 +799,72 @@ edge of statistical significance, not clearly inside it. Direction
 is consistent with LPB's heap/path-counter being non-zero overhead,
 but the magnitude is sub-2 % across all sweeps.
 
+##### Phase H (POST-pressure SWARM) — **the production LPB win**
+
+This is what Phase G *would* have measured at util=0.9 if it ran
+later. Phase H fires the same 30-request concurrent swarm *after*
+Phases D/E/F have churned the cache enough to evict the anchor
+under LRU. At every op-point, LPB still has the anchor; LRU does
+not. The swarm reveals the difference.
+
+| sweep      | LRU batch TTFT (ms) | LPB batch TTFT (ms) | Δ | LRU thr (tok/s) | LPB thr (tok/s) | LRU cached | LPB cached |
+|------------|--------------------:|--------------------:|---:|----------------:|----------------:|-----------:|-----------:|
+| Path-0     | 372.23 ± 1.92       | 329.05 ± 2.04       | **−11.6 %** (≈21σ) | 1609.81 ± 1.42 | 1608.90 ± 8.06 | 122 496 ±0 | 126 720 ±0 |
+| Path A     | 370.03 ± 7.40       | 325.51 ± 7.41       | **−12.0 %** (≈6σ)  | 1616.98 ± 5.18 | 1606.90 ± 1.28 | 122 496 ±0 | 126 720 ±0 |
+| Path B     | 565.35 ± 2.79       | 465.30 ± 18.07      | **−17.7 %** (≈5σ)  | 1070.02 ± 2.32 | 1065.67 ± 9.85 | 122 496 ±0 | 126 720 ±0 |
+
+Total batch wall (TTFT pass + throughput pass) on the production
+122 B setup: **1.15 s → 1.06 s, −8.5 %** per swarm — 100 ms saved
+end-to-end per N=30 swarm under LPB at util=0.9.
+
+Hit-rate is binary, perfectly reproducible: LRU 85.91 % (29/30 hit
+— one request pays the anchor prefill, the other 29 share via
+vLLM's prefix-cache merge) vs LPB 88.87 % (30/30 hit — all share
+the still-cached anchor). The ~43 ms (Path-0/A) → ~100 ms (Path B)
+gap is exactly one anchor-prefill cost on the respective hardware.
+
+The TPOT delta in Phase H is again a batched-mode artifact (the
+LPB column "TPOT" looks higher because LRU's decode pass adds
+little wall on top of the prefill-dominated TTFT pass, while LPB's
+decode pass adds proportionally more). Throughput and total wall
+are the meaningful per-batch numbers, and both favour LPB.
+
 #### Findings
 
-1. **No regression** (the main answer to "can we ship LPB?"): every
-   metric × phase × sweep is either tied within noise or LPB
-   slightly faster. The single worst LPB outcome across 18 runs is
-   Path A Phase F +1.3 % TPOT — sub-2 % and at the noise edge.
-2. **Anchor protection is binary and free**: 9/9 LRU evicts vs 9/9
-   LPB protects, regardless of model size or op-point.
-3. **The workload-metric LPB win exists** but is conditional on KV
-   pressure being high enough that LRU evicts the anchor before
-   the production swarm arrives. Path-0 sees a clean −12 % batch
-   TTFT under concurrent swarm. Path A/B don't, because the anchor
-   doesn't get evicted to begin with at util=0.9.
+1. **Production-pattern win** (Phase H): −11.6 % to −17.7 % batch
+   TTFT on a concurrent swarm fired *after* the cache pressure that
+   evicts the anchor under LRU. 5–21σ separation, perfectly
+   reproducible binary hit-rate. The bigger the model, the bigger
+   the win (122 B saves 100 ms per swarm vs 35 B's 44 ms — anchor
+   prefill is the dominant per-batch cost and skipping it scales
+   with model FLOPs).
+2. **No regression elsewhere**: every other metric × phase × sweep
+   is tied within noise or LPB slightly faster. The single worst
+   LPB outcome across all runs is Path A Phase F +1.3 % TPOT —
+   sub-2 % and at the noise edge.
+3. **Anchor protection is binary and reproducible**: 9/9 LRU evicts
+   vs 9/9 LPB protects, regardless of model size or op-point.
 4. **LPB's "worst case" still hasn't been triggered**: Phase F at
    scale=10 reaches ~49 % KV occupancy on 122 B and produces no
-   measurable regression. Triggering would need scale=20+ or a
-   workload pattern that creates >100 % KV demand. Logged.
+   measurable regression. Triggering the protect-useless-blocks
+   failure mode would need scale=20+ or a workload pattern that
+   creates >100 % KV demand. Logged.
 
 #### Production implications
 
-* For a typical production deployment (util=0.9, generous KV), LPB
-  is **free insurance**: no measurable cost on workload metrics,
-  guaranteed anchor protection when bursts spike pressure beyond
-  the budget.
-* For a swarm-pattern workload where many agents simultaneously
-  share an anchor *and* the anchor sometimes gets evicted (small
-  KV / tight memory / large bursts), LPB delivers **~12 % batch
-  TTFT** on those swarms.
-* For a strictly sub-saturated workload, LPB and LRU are
-  indistinguishable; no reason not to enable LPB.
+* **Production swarm pattern** (N concurrent agents sharing an
+  anchor, after the cache has churned): LPB delivers
+  **−12 % to −18 % batch TTFT**, saves 44–100 ms per swarm
+  depending on model size. Reproducible across all 3 op-points
+  in 3-trial runs.
+* **Average workload metrics** (Phase B/D/E/F): LPB and LRU are
+  indistinguishable. No regression on cc-burst, on cold-unique, or
+  on adversarial decoy patterns.
+* **Anchor protection is the structural guarantee** behind both:
+  when LRU evicts useful hot blocks (the anchor), LPB doesn't —
+  so any workload that benefits from re-using that anchor (swarms,
+  long-context multi-user agents, shared system prompts) sees the
+  win, while workloads that don't are unaffected.
 
 #### Figures
 

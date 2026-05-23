@@ -108,6 +108,8 @@ def trial_summary(trial_path: Path) -> dict[str, dict]:
     probes = [r for r in rows if r.get("kind") == "anchor_probe"]
     swarm_batch = next((r for r in rows if r.get("kind") == "swarm_batch"), None)
     swarm_turns = [r for r in rows if r.get("kind") == "swarm_turn"]
+    swarm2_batch = next((r for r in rows if r.get("kind") == "swarm2_batch"), None)
+    swarm2_turns = [r for r in rows if r.get("kind") == "swarm2_turn"]
 
     anchor_len = 4737
     base = next((p for p in probes if p.get("label") == "baseline"), None)
@@ -130,6 +132,9 @@ def trial_summary(trial_path: Path) -> dict[str, dict]:
         # Cache hit % of TTFT batch — under LRU with anchor evicted, all N
         # miss (≈0%); under LPB with anchor protected, all N hit (≈89%).
         swarm_anchor_signal = swarm_batch["ttft_batch_cached_total"]
+    swarm2_anchor_signal = None
+    if swarm2_batch:
+        swarm2_anchor_signal = swarm2_batch["ttft_batch_cached_total"]
 
     return {
         "phase_B": _aggregate(turns),
@@ -137,11 +142,13 @@ def trial_summary(trial_path: Path) -> dict[str, dict]:
         "phase_E": _aggregate(colds),
         "phase_F": _aggregate(decoys),
         "phase_G": _aggregate_swarm(swarm_batch),
+        "phase_H": _aggregate_swarm(swarm2_batch),  # post-pressure swarm
         "anchor_len": anchor_len,
         "baseline_anchor_cached": base["cached"] if base else None,
         "final_anchor_cached": final["cached"] if final else None,  # diagnostic
         "post_burst_cached": post_burst_cached,  # rehit[0] signal
-        "swarm_batch_cached": swarm_anchor_signal,  # swarm batch aggregate
+        "swarm_batch_cached": swarm_anchor_signal,  # G batch aggregate
+        "swarm2_batch_cached": swarm2_anchor_signal,  # H batch aggregate
     }
 
 
@@ -180,7 +187,7 @@ def _mean_std(xs: list[float]) -> tuple[float, float]:
 def aggregate_trials(trial_summaries: list[dict]) -> dict:
     """Given per-trial summaries, compute mean ± stddev per phase per metric."""
     out: dict = {}
-    phase_keys = ["phase_B", "phase_D", "phase_E", "phase_F", "phase_G"]
+    phase_keys = ["phase_B", "phase_D", "phase_E", "phase_F", "phase_G", "phase_H"]
     metric_keys = [
         "n_requests", "total_prompt_tokens", "cache_hit_pct_ttft",
         "cache_hit_pct_full", "mean_ttft_ms", "mean_full_wall_ms",
@@ -222,6 +229,12 @@ def aggregate_trials(trial_summaries: list[dict]) -> dict:
         m, s = _mean_std(swarm)
         out["swarm_batch_cached"] = {"mean": m, "std": s, "n": len(swarm),
                                      "trials": swarm}
+    swarm2 = [t["swarm2_batch_cached"] for t in trial_summaries
+              if t.get("swarm2_batch_cached") is not None]
+    if swarm2:
+        m, s = _mean_std(swarm2)
+        out["swarm2_batch_cached"] = {"mean": m, "std": s, "n": len(swarm2),
+                                      "trials": swarm2}
     out["anchor_len"] = trial_summaries[0]["anchor_len"] if trial_summaries else 4737
     return out
 
@@ -327,18 +340,25 @@ def main() -> None:
         print(f"      → LPB anchor survival: {100*b['mean']/anchor_len:.1f}% of full anchor")
 
     print_phase("Phase B: cc burst (average)",                   lru_agg["phase_B"], lpb_agg["phase_B"])
-    print_phase("Phase G: concurrent SWARM (LPB BEST, real)",    lru_agg["phase_G"], lpb_agg["phase_G"])
+    print_phase("Phase G: PRE-pressure concurrent swarm",        lru_agg["phase_G"], lpb_agg["phase_G"])
     print_phase("Phase D: anchor re-hit (serial, post-G)",       lru_agg["phase_D"], lpb_agg["phase_D"])
     print_phase("Phase E: cold-unique random (LPB hot-path)",    lru_agg["phase_E"], lpb_agg["phase_E"])
     print_phase("Phase F: decoy waste (LPB WORST, adversarial)", lru_agg["phase_F"], lpb_agg["phase_F"])
+    print_phase("Phase H: POST-pressure swarm (decisive test)",  lru_agg["phase_H"], lpb_agg["phase_H"])
 
-    # Phase G headline: anchor cached in the concurrent swarm batch
+    # Phase G/H headline: anchor cached in the concurrent swarm batch
     sb_l = lru_agg.get("swarm_batch_cached")
     sb_p = lpb_agg.get("swarm_batch_cached")
+    s2_l = lru_agg.get("swarm2_batch_cached")
+    s2_p = lpb_agg.get("swarm2_batch_cached")
     if sb_l or sb_p:
-        print(f"\n  PHASE G — swarm batch cache hit (anchor protection in production swarm pattern)")
-        print(f"    LRU swarm batch sum cached: {_fmt(sb_l, '{:.0f}')}")
-        print(f"    LPB swarm batch sum cached: {_fmt(sb_p, '{:.0f}')}")
+        print(f"\n  PHASE G — swarm batch cache hit (PRE-pressure)")
+        print(f"    LRU sum cached: {_fmt(sb_l, '{:.0f}')}")
+        print(f"    LPB sum cached: {_fmt(sb_p, '{:.0f}')}")
+    if s2_l or s2_p:
+        print(f"\n  PHASE H — swarm batch cache hit (POST-pressure, decisive)")
+        print(f"    LRU sum cached: {_fmt(s2_l, '{:.0f}')}")
+        print(f"    LPB sum cached: {_fmt(s2_p, '{:.0f}')}")
 
     # ----- Figure 1: anchor survival (now uses rehit[0]) -----
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -384,11 +404,12 @@ def main() -> None:
     # scenario (concurrent swarm), while D is now the post-G serial
     # follow-up.
     all_scenarios = [
-        ("B: cc burst",           "phase_B"),
-        ("G: swarm (concurrent)", "phase_G"),
-        ("D: anchor re-hit",      "phase_D"),
-        ("E: cold random",        "phase_E"),
-        ("F: decoy waste (adv)",  "phase_F"),
+        ("B: cc burst",                      "phase_B"),
+        ("G: swarm (pre-pressure)",          "phase_G"),
+        ("D: anchor re-hit",                 "phase_D"),
+        ("E: cold random",                   "phase_E"),
+        ("F: decoy waste (adv)",             "phase_F"),
+        ("H: swarm (POST-pressure, decisive)", "phase_H"),
     ]
     # Only include phases that have data for at least one mode
     scenarios = [

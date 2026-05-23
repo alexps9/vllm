@@ -21,50 +21,63 @@ LRU vs LPB on Qwen/Qwen3.5-122B-A10B — multi-trial aggregate (mean ± stddev)
     requests           LRU:        238 ±0   LPB:        238 ±0   Δ:    +0.0%
     hit % (TTFT)       LRU:      90.03 ±0.00   LPB:      90.03 ±0.00   Δ:    +0.0%
     hit % (decode)     LRU:      98.12 ±0.00   LPB:      98.12 ±0.00   Δ:    +0.0%
-    mean TTFT (ms)     LRU:     125.12 ±0.38   LPB:     125.61 ±0.40   Δ:    +0.4%
-    mean TPOT (ms)     LRU:      8.909 ±0.073   LPB:      8.821 ±0.023   Δ:    -1.0%
-    throughput tok/s   LRU:     126.34 ±0.54   LPB:     126.51 ±0.13   Δ:    +0.1%
-    total wall (s)     LRU:      65.01 ±0.57   LPB:      65.13 ±0.17   Δ:    +0.2%
+    mean TTFT (ms)     LRU:     127.08 ±1.19   LPB:     128.51 ±0.17   Δ:    +1.1%
+    mean TPOT (ms)     LRU:      8.735 ±0.068   LPB:      8.759 ±0.163   Δ:    +0.3%
+    throughput tok/s   LRU:     127.12 ±1.34   LPB:     126.04 ±1.00   Δ:    -0.9%
+    total wall (s)     LRU:      65.75 ±0.57   LPB:      66.02 ±0.08   Δ:    +0.4%
 
-  [Phase G: concurrent SWARM (LPB BEST, real)]   (mean ± sample stddev across 3 LRU trials, 3 LPB trials)
+  [Phase G: PRE-pressure concurrent swarm]   (mean ± sample stddev across 3 LRU trials, 3 LPB trials)
     requests           LRU:         30 ±0   LPB:         30 ±0   Δ:    +0.0%
     hit % (TTFT)       LRU:      88.87 ±0.00   LPB:      88.87 ±0.00   Δ:    +0.0%
     hit % (decode)     LRU:      88.87 ±0.00   LPB:      88.87 ±0.00   Δ:    +0.0%
-    mean TTFT (ms)     LRU:     481.40 ±2.42   LPB:     478.32 ±0.81   Δ:    -0.6%
-    mean TPOT (ms)     LRU:      5.454 ±0.098   LPB:      5.634 ±0.158   Δ:    +3.3%
-    throughput tok/s   LRU:    1066.94 ±2.36   LPB:    1065.99 ±4.26   Δ:    -0.1%
-    total wall (s)     LRU:       1.07 ±0.00   LPB:       1.07 ±0.00   Δ:    -0.2%
+    mean TTFT (ms)     LRU:     483.99 ±5.07   LPB:     484.01 ±3.02   Δ:    +0.0%
+    mean TPOT (ms)     LRU:      5.347 ±0.138   LPB:      5.394 ±0.253   Δ:    +0.9%
+    throughput tok/s   LRU:    1066.14 ±4.26   LPB:    1064.43 ±7.31   Δ:    -0.2%
+    total wall (s)     LRU:       1.07 ±0.01   LPB:       1.08 ±0.01   Δ:    +0.1%
 
   [Phase D: anchor re-hit (serial, post-G)]   (mean ± sample stddev across 3 LRU trials, 3 LPB trials)
     requests           LRU:         30 ±0   LPB:         30 ±0   Δ:    +0.0%
     hit % (TTFT)       LRU:      88.87 ±0.00   LPB:      88.87 ±0.00   Δ:    +0.0%
     hit % (decode)     LRU:      88.87 ±0.00   LPB:      88.87 ±0.00   Δ:    +0.0%
-    mean TTFT (ms)     LRU:      38.28 ±0.41   LPB:      38.56 ±0.61   Δ:    +0.7%
-    mean TPOT (ms)     LRU:      7.144 ±0.048   LPB:      7.117 ±0.026   Δ:    -0.4%
-    throughput tok/s   LRU:     139.98 ±0.94   LPB:     140.51 ±0.51   Δ:    +0.4%
-    total wall (s)     LRU:       5.65 ±0.03   LPB:       5.64 ±0.03   Δ:    -0.2%
+    mean TTFT (ms)     LRU:      38.15 ±0.45   LPB:      38.71 ±0.37   Δ:    +1.5%
+    mean TPOT (ms)     LRU:      7.107 ±0.022   LPB:      7.112 ±0.026   Δ:    +0.1%
+    throughput tok/s   LRU:     140.72 ±0.43   LPB:     140.61 ±0.52   Δ:    -0.1%
+    total wall (s)     LRU:       5.62 ±0.03   LPB:       5.64 ±0.02   Δ:    +0.4%
 
   [Phase E: cold-unique random (LPB hot-path)]   (mean ± sample stddev across 3 LRU trials, 3 LPB trials)
     requests           LRU:         50 ±0   LPB:         50 ±0   Δ:    +0.0%
     hit % (TTFT)       LRU:       0.00 ±0.00   LPB:       0.00 ±0.00   Δ:    —    
     hit % (decode)     LRU:      51.56 ±0.00   LPB:      51.56 ±0.00   Δ:    +0.0%
-    mean TTFT (ms)     LRU:      86.93 ±0.19   LPB:      87.24 ±0.16   Δ:    +0.4%
-    mean TPOT (ms)     LRU:     12.428 ±0.646   LPB:     12.473 ±0.635   Δ:    +0.4%
-    throughput tok/s   LRU:     114.20 ±0.60   LPB:     115.11 ±2.02   Δ:    +0.8%
-    total wall (s)     LRU:       9.54 ±0.12   LPB:       9.62 ±0.17   Δ:    +0.8%
+    mean TTFT (ms)     LRU:      86.69 ±0.26   LPB:      86.84 ±0.18   Δ:    +0.2%
+    mean TPOT (ms)     LRU:     12.106 ±0.455   LPB:     12.302 ±0.686   Δ:    +1.6%
+    throughput tok/s   LRU:     116.17 ±1.21   LPB:     116.41 ±1.18   Δ:    +0.2%
+    total wall (s)     LRU:       9.60 ±0.08   LPB:       9.66 ±0.14   Δ:    +0.7%
 
   [Phase F: decoy waste (LPB WORST, adversarial)]   (mean ± sample stddev across 3 LRU trials, 3 LPB trials)
     requests           LRU:        500 ±0   LPB:        500 ±0   Δ:    +0.0%
     hit % (TTFT)       LRU:       0.00 ±0.00   LPB:       0.00 ±0.00   Δ:    —    
     hit % (decode)     LRU:      51.56 ±0.00   LPB:      51.56 ±0.00   Δ:    +0.0%
-    mean TTFT (ms)     LRU:      86.53 ±0.12   LPB:      86.90 ±0.11   Δ:    +0.4%
-    mean TPOT (ms)     LRU:     11.833 ±0.143   LPB:     11.842 ±0.066   Δ:    +0.1%
-    throughput tok/s   LRU:     118.68 ±1.29   LPB:     118.92 ±0.93   Δ:    +0.2%
-    total wall (s)     LRU:      99.38 ±0.41   LPB:      99.51 ±1.01   Δ:    +0.1%
+    mean TTFT (ms)     LRU:      86.61 ±0.12   LPB:      86.76 ±0.17   Δ:    +0.2%
+    mean TPOT (ms)     LRU:     11.681 ±0.214   LPB:     11.786 ±0.145   Δ:    +0.9%
+    throughput tok/s   LRU:     119.43 ±0.20   LPB:     118.91 ±0.67   Δ:    -0.4%
+    total wall (s)     LRU:      99.31 ±0.40   LPB:      99.19 ±0.77   Δ:    -0.1%
 
-  PHASE G — swarm batch cache hit (anchor protection in production swarm pattern)
-    LRU swarm batch sum cached:     126720 ±0
-    LPB swarm batch sum cached:     126720 ±0
+  [Phase H: POST-pressure swarm (decisive test)]   (mean ± sample stddev across 3 LRU trials, 3 LPB trials)
+    requests           LRU:         30 ±0   LPB:         30 ±0   Δ:    +0.0%
+    hit % (TTFT)       LRU:      85.91 ±0.00   LPB:      88.87 ±0.00   Δ:    +3.4%
+    hit % (decode)     LRU:      88.87 ±0.00   LPB:      88.87 ±0.00   Δ:    +0.0%
+    mean TTFT (ms)     LRU:     565.35 ±2.79   LPB:     465.30 ±18.07   Δ:   -17.7%
+    mean TPOT (ms)     LRU:      1.172 ±0.079   LPB:      6.296 ±0.700   Δ:  +437.4%
+    throughput tok/s   LRU:    1070.02 ±2.32   LPB:    1065.67 ±9.85   Δ:    -0.4%
+    total wall (s)     LRU:       1.15 ±0.00   LPB:       1.06 ±0.02   Δ:    -8.5%
+
+  PHASE G — swarm batch cache hit (PRE-pressure)
+    LRU sum cached:     126720 ±0
+    LPB sum cached:     126720 ±0
+
+  PHASE H — swarm batch cache hit (POST-pressure, decisive)
+    LRU sum cached:     122496 ±0
+    LPB sum cached:     126720 ±0
 
 Wrote dev/figures/fig_lru_vs_lpb_anchor_pathB.png
 Wrote dev/figures/fig_lru_vs_lpb_scenarios_pathB.png

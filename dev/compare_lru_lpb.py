@@ -478,6 +478,68 @@ def main() -> None:
             print(f"  decoy[{k:>2}] cached={r_t['cached']:>3} "
                   f"wall={r_t['wall_s']*1000:.0f}ms")
 
+    # ----- Phase H: post-pressure SWARM (the decisive LPB test) ----- #
+    # By now Phases E + F have created enough cache churn to evict the
+    # anchor under LRU at any op-point (including util=0.9). LPB has
+    # protected the anchor throughout. *Now* we send a concurrent swarm
+    # — the production swarm pattern fired AFTER the cache pressure that
+    # creates the LRU/LPB divergence.
+    #
+    # This closes the gap that Phase G alone couldn't measure: at
+    # util=0.9 Phase G runs before the pressure (when LRU hasn't yet
+    # evicted the anchor) so both modes start with anchor cached → no
+    # delta. Phase H runs *after* the pressure — LRU has lost the
+    # anchor, LPB hasn't, swarm requests reveal the difference.
+    print(f"\n[{mode}] Phase H: POST-pressure concurrent swarm "
+          f"({N_SWARM} anchored requests, batched after Phase F's churn).")
+    sp_h_ttft = SamplingParams(max_tokens=1, temperature=0.0)
+    t0 = time.monotonic()
+    outs_h_ttft = llm.generate(
+        prompts=swarm_prompts, sampling_params=sp_h_ttft, use_tqdm=False
+    )
+    h_ttft_wall = time.monotonic() - t0
+    h_ttft_cached_total = sum(o.num_cached_tokens or 0 for o in outs_h_ttft)
+    print(f"  H swarm TTFT batch_wall={h_ttft_wall*1000:.0f}ms  "
+          f"sum_cached={h_ttft_cached_total}/{swarm_total_prompt} "
+          f"({100*h_ttft_cached_total/swarm_total_prompt:.1f}%)")
+
+    sp_h_full = SamplingParams(max_tokens=N_TPOT_TOKENS + 1, temperature=0.0)
+    t0 = time.monotonic()
+    outs_h_full = llm.generate(
+        prompts=swarm_prompts, sampling_params=sp_h_full, use_tqdm=False
+    )
+    h_full_wall = time.monotonic() - t0
+    h_full_output_tokens = sum(
+        len(o.outputs[0].token_ids) if o.outputs else 0 for o in outs_h_full
+    )
+    h_full_cached_total = sum(o.num_cached_tokens or 0 for o in outs_h_full)
+    print(f"  H swarm full batch_wall={h_full_wall*1000:.0f}ms  "
+          f"throughput={h_full_output_tokens / h_full_wall:.1f} tok/s")
+
+    for j in range(N_SWARM):
+        log(
+            kind="swarm2_turn", j=j,
+            prompt_len=len(swarm_prompts[j]),
+            ttft_cached=outs_h_ttft[j].num_cached_tokens or 0,
+            full_cached=outs_h_full[j].num_cached_tokens or 0,
+            full_output_tokens=(
+                len(outs_h_full[j].outputs[0].token_ids)
+                if outs_h_full[j].outputs else 0
+            ),
+            elapsed_s=time.monotonic() - t_start,
+        )
+    log(
+        kind="swarm2_batch",
+        n_requests=N_SWARM,
+        total_prompt_tokens=swarm_total_prompt,
+        ttft_batch_wall_s=h_ttft_wall,
+        ttft_batch_cached_total=h_ttft_cached_total,
+        full_batch_wall_s=h_full_wall,
+        full_batch_cached_total=h_full_cached_total,
+        full_total_output_tokens=h_full_output_tokens,
+        elapsed_s=time.monotonic() - t_start,
+    )
+
     # ----- Phase C: final anchor probe (DIAGNOSTIC ONLY) -----
     # Now meaningless as a "post-burst survival" signal because Phase D
     # rehit[0] already covered that, and Phases D/E/F have churned the
