@@ -635,232 +635,32 @@ before it actually flipped behavior on the running engine:
 
 After those five fixes, `hima_enabled=True` actually flips behavior.
 
-### K. End-to-end LRU vs LPB on cc workload — 2 sweeps × 5 phases × 3 trials
+### K. End-to-end LRU vs LPB on cc workload — see `dev/aginfer/`
 
-#### TL;DR
+The big LRU vs LPB study (workload design, multi-sweep runs on
+Qwen3.5-35B-A3B / Qwen3.5-122B-A10B, Phase H production-pattern
+−12 % to −18 % batch TTFT win, sglang cross-implementation review)
+moved out of this README to keep the engine-vs-engine notes
+together:
 
-* **Production workload-metric win** (Phase H, concurrent swarm fired
-  *after* the cache pressure that evicts the anchor under LRU). n=3
-  trials per mode, mean ± sample stddev:
+- **[`dev/aginfer/scenarios.md`](aginfer/scenarios.md)** — shared
+  benchmark design (A → B → G → E → F → H → C), pitfalls, expected
+  outcomes. Engine-agnostic.
+- **[`dev/aginfer/vllm.md`](aginfer/vllm.md)** — vLLM HiMA L1
+  implementation pointers, driver (`dev/compare_lru_lpb.py`),
+  measured results table (2 sweeps × n=3, headline Phase H
+  numbers, anchor protection binary across 6/6 trials each).
+- **[`dev/aginfer/sglang.md`](aginfer/sglang.md)** — sibling
+  sglang implementation review (`rucnyz/sglang@hima`), design
+  comparison, correctness notes, Phase H driver still open.
 
-  | sweep | LRU batch TTFT (ms) | LPB batch TTFT (ms) | Δ |
-  |---|---:|---:|---:|
-  | Path A (util=0.9, Qwen3.5-35B-A3B)  | 370.03 ± 7.40  | 325.51 ± 7.41  | **−12.0 %** (≈6σ) |
-  | Path B (util=0.9, Qwen3.5-122B-A10B)| 565.35 ± 2.79  | 465.30 ± 18.07 | **−17.7 %** (≈5σ) |
-
-  Total batch wall on Path B: **1.15 s → 1.06 s, −8.5 %** — 100 ms saved
-  per N=30 swarm at production util=0.9 on a 122 B MoE. Hit-rate is
-  binary and stddev=0 across 6/6 LRU vs 6/6 LPB trials: LRU 85.91 %
-  (29/30 hit, 1 pays the anchor prefill, 29 share via vLLM's prefix-
-  cache merge) vs LPB 88.87 % (30/30 hit, anchor still cached).
-
-* **No regression elsewhere**: across the other phases (B / G / E / F)
-  at both op-points, LPB is never measurably worse than LRU on
-  TTFT / TPOT / throughput. Largest sub-noise LPB-slower is +1.3 %
-  TPOT (Path A, Phase F) — inside trial spread.
-
-* **Anchor protection holds**: LRU 0/4737 vs LPB 4224/4737 tokens
-  cached in the FINAL probe, every trial, every sweep (stddev = 0
-  across 6/6 LRU vs 6/6 LPB).
-
-* **Phase G alone wasn't enough at util=0.9** — it runs *before*
-  Phase F's pressure, so the anchor was still in LRU's cache when
-  G measured. Phase H closes the gap by re-running the swarm *after*
-  the pressure.
-
-#### Method
-
-`dev/compare_lru_lpb.py` runs 5 measurement phases per mode in one
-engine load, plus an anchor warmup. Driven via `--trial N`, the
-script writes `dev/compare_{mode}{tag}_t{N}.jsonl` so multiple
-independent engine loads can be aggregated.
-`dev/plot_lru_vs_lpb.py --tag {tag}` consumes all trial files for a
-sweep and produces mean ± sample-stddev tables and figures.
-
-| phase | label | workload shape | what it measures |
-|---|---|---|---|
-| **A** | anchor warm-up | 500× anchor probes (4737-token prefix) | seeds anchor's hit-count and recency |
-| **B** | **cc_burst** (average) | replay 10 real cc sessions after Phase A | anchor-survival under cold pressure + workload metrics |
-| **G** | **swarm** (pre-pressure baseline) | 30 anchored requests submitted as one batch via `llm.generate(prompts=[...])` | the production swarm pattern fired *before* the cache has been churned; control for Phase H |
-| **E** | cold_unique random (LPB hot-path) | 50 unique 2 K-token prompts with truly random per-trial-seeded tokens | LPB heap/path-counter overhead vs LRU deque, zero block aliasing |
-| **F** | decoy waste (LPB ADVERSARIAL WORST) | N decoys × ~30 K tokens each warmed 5× then `N_DECOY` cold prompts | does LPB protect useless-but-hot blocks at LRU's expense? Scale via `--phase-f-scale`. |
-| **H** | **POST-pressure swarm** (LPB BEST, headline) | same 30-batch as Phase G, fired *after* Phases E/F have churned the cache | the production-pattern win — by now LRU has lost the anchor even at util=0.9, and the swarm reveals the difference |
-| **C** | final anchor probe (diagnostic) | last anchor probe at end of run | binary anchor-survival check |
-
-Two sweeps:
-
-| tag | model | util | TP | KV budget | Phase F scale |
-|---|---|---|---|---|---|
-| `_pathA` | Qwen3.5-35B-A3B   | 0.9 | 2 | 8.46 M tokens | 10 (50 decoys × 30 K + 500 cold) |
-| `_pathB` | Qwen3.5-122B-A10B | 0.9 | 4 | 5.08 M tokens | 10 |
-
-Design notes (each one is a lesson from an earlier iteration that got
-bitten):
-
-1. **Phase ordering: `A → B → G → E → F → H → C`.** G must come
-   before any further churn so it observes the post-B cache state;
-   H must come after E + F so it observes the post-pressure state
-   where LRU has dropped the anchor and LPB hasn't.
-2. **Phase E uses truly random per-trial tokens.** An earlier
-   repeating filler aliased at block boundaries → ~50 % cached on
-   every "cold" prompt. Random tokens give the intended `cached = 0`.
-3. **N=3 trials per mode**, separate engine loads. An earlier
-   single-trial Phase E reported −4.9 % TTFT; 3-trial mean is
-   −1.4 % ± 0.7 — the single value was on the high end of noise.
-4. **Phase G / H TPOT is a batched-mode artifact** — the formula
-   `(full_batch_wall − ttft_batch_wall) / N_TPOT_TOKENS` measures
-   incremental decode wall, which in batched mode is sensitive to
-   prefill timing. The plotter drops G and H from the TPOT panel;
-   their headline is **batch TTFT (= worst-case wait)**.
-
-#### Headline: anchor protection (2 sweeps × 3 trials each, stddev=0)
-
-|                                       | LRU         | LPB           | Sweeps × trials confirming |
-|---------------------------------------|------------:|--------------:|---:|
-| BASELINE anchor probe (after warmup)  | 4224 / 4737 | 4224 / 4737   | 6/6 each |
-| FINAL probe (post all phases)         | **0 / 4737** | **4224 / 4737** | 6/6 each |
-
-LRU evicts every cacheable block of the anchor by end-of-run; LPB
-protects every cacheable block. Binary outcome, perfectly
-reproducible across model size (35 B / 122 B).
-
-#### Workload metrics: TTFT / TPOT / throughput
-
-##### Phase B (cc-burst average) — no regression
-
-| sweep | LRU TTFT (ms) | LPB TTFT (ms) | Δ | LRU TPOT | LPB TPOT | Δ | LRU thr (tok/s) | LPB thr (tok/s) | Δ |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| Path A |  92.20 ± 0.68 |  92.41 ± 0.27 | +0.2 % | 12.57 ± 0.10 | 12.58 ± 0.05 | +0.1 % | 124.30 ± 0.75 | 124.73 ± 0.45 | +0.3 % |
-| Path B | 125.51 ± 0.60 | 124.61 ± 2.29 | −0.7 % |  8.85 ± 0.13 |  8.75 ± 0.12 | −1.1 % | 126.36 ± 0.30 | 126.42 ± 0.95 | +0.0 % |
-
-##### Phase G (pre-pressure swarm) — tied at util=0.9
-
-| sweep | LRU batch TTFT (ms) | LPB batch TTFT (ms) | Δ | LRU thr (tok/s) | LPB thr (tok/s) | Δ | LRU cached | LPB cached |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|
-| Path A | 331.66 ± 2.51 | 331.20 ± 3.08 | −0.1 % | 1605.56 ± 6.10 | 1612.12 ± 16.1 | +0.4 % | 126 720 ±0 | 126 720 ±0 |
-| Path B | 481.40 ± 2.42 | 478.32 ± 0.81 | −0.6 % | 1066.94 ± 2.36 | 1065.99 ± 4.26 | −0.1 % | 126 720 ±0 | 126 720 ±0 |
-
-At util=0.9 the anchor survives Phase B in both modes (KV budget
-5–8 M >> cc-burst's 6.6 M content), so Phase G sees both modes with
-anchor cached → all 30 hit → no measurable delta. The G/H pair is
-designed so G is the control that confirms "no win when the anchor
-is still cached for both" and H is the test that shows "win when LRU
-has lost the anchor but LPB hasn't".
-
-##### Phase E (cold-unique random) — tied within noise
-
-| sweep | LRU TTFT (ms) | LPB TTFT (ms) | Δ | LRU TPOT | LPB TPOT | Δ | LRU thr | LPB thr | Δ |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| Path A | 63.25 ± 0.61 | 62.82 ± 0.76 | −0.7 % |  6.32 ± 0.67 |  6.37 ± 0.57 | +0.8 % | 173.3 ± 1.9 | 171.8 ± 1.3 | −0.8 % |
-| Path B | 87.15 ± 0.17 | 86.60 ± 0.55 | −0.6 % | 12.36 ± 0.85 | 12.52 ± 0.70 | +1.2 % | 115.7 ± 2.8 | 114.9 ± 2.2 | −0.7 % |
-
-##### Phase F (decoy adversarial) — tied within noise
-
-| sweep | LRU TTFT (ms) | LPB TTFT (ms) | Δ | LRU TPOT | LPB TPOT | Δ | LRU thr | LPB thr | Δ |
-|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|
-| Path A | 62.56 ± 0.26 | 63.18 ± 0.61 | +1.0 % |  6.51 ± 0.12 |  6.59 ± 0.16 | +1.3 % | 172.97 ± 0.36 | 171.33 ± 0.19 | −0.9 % |
-| Path B | 86.37 ± 0.19 | 86.58 ± 0.28 | +0.2 % | 11.83 ± 0.07 | 11.84 ± 0.09 | +0.1 % | 119.15 ± 1.22 | 119.11 ± 1.07 | −0.0 % |
-
-Path A Phase F is the worst LPB number across all runs: +1.0 % TTFT,
-+1.3 % TPOT, −0.9 % throughput. Gap is ~2.4× LRU's stddev — at the
-edge of significance, magnitude sub-2 %. Consistent with LPB's
-heap/path-counter overhead being non-zero per request.
-
-##### Phase H (POST-pressure SWARM) — **the production LPB win**
-
-The same 30-request concurrent swarm as Phase G, but fired *after*
-Phases E + F have churned the cache enough to evict the anchor under
-LRU. LPB still has it; the swarm reveals the difference.
-
-| sweep | LRU batch TTFT (ms) | LPB batch TTFT (ms) | Δ | LRU thr (tok/s) | LPB thr (tok/s) | LRU cached | LPB cached |
-|---|---:|---:|---:|---:|---:|---:|---:|
-| Path A | 370.03 ± 7.40 | 325.51 ± 7.41  | **−12.0 %** (≈6σ) | 1616.98 ± 5.18 | 1606.90 ± 1.28 | 122 496 ±0 | 126 720 ±0 |
-| Path B | 565.35 ± 2.79 | 465.30 ± 18.07 | **−17.7 %** (≈5σ) | 1070.02 ± 2.32 | 1065.67 ± 9.85 | 122 496 ±0 | 126 720 ±0 |
-
-Total batch wall (TTFT pass + throughput pass) on Path B: **1.15 s
-→ 1.06 s, −8.5 %** per swarm. Per-batch request throughput therefore
-rises by 5.5–8.5 % (Path A: 39.5 → 41.7 req/s; Path B: 26.1 → 28.3
-req/s). Token throughput is essentially unchanged because the saved
-anchor prefill (~46–100 ms) is amortised against decode that already
-dominates the full-pass wall.
-
-Hit-rate is binary, perfectly reproducible: LRU 85.91 % (29/30 hit,
-one pays the anchor prefill, the other 29 share via vLLM's prefix-
-cache merge) vs LPB 88.87 % (30/30 hit, anchor still cached). The
-44 ms (Path A) → 100 ms (Path B) gap is exactly one anchor-prefill
-cost on the respective hardware — bigger model → slower per-token
-prefill → bigger saving.
-
-#### Findings
-
-1. **Production-pattern win** (Phase H): −12.0 % to −17.7 % batch
-   TTFT on a concurrent swarm at util=0.9. 5–6σ separation,
-   perfectly reproducible binary hit-rate. The bigger the model,
-   the bigger the win (122 B saves 100 ms per swarm vs 35 B's 44 ms
-   — anchor prefill is the dominant per-batch cost and skipping it
-   scales with model FLOPs).
-2. **No regression elsewhere**: every other metric × phase × sweep
-   is tied within noise or LPB slightly faster. The single worst
-   LPB outcome across all runs is Path A Phase F +1.3 % TPOT —
-   sub-2 % and at the noise edge.
-3. **Anchor protection is binary and reproducible**: 6/6 LRU evicts
-   vs 6/6 LPB protects, regardless of model size.
-4. **LPB's "worst case" hasn't been triggered**: Phase F at
-   scale=10 reaches ~49 % KV occupancy on 122 B and produces no
-   measurable regression. The protect-useless-blocks failure mode
-   would need scale=20+ or a workload pattern that creates >100 %
-   KV demand. Logged.
-
-#### Production implications
-
-* **Production swarm pattern** (N concurrent agents sharing an
-  anchor, after the cache has been churned): LPB delivers
-  **−12 % to −18 % batch TTFT**, saves 44–100 ms per swarm
-  depending on model size. Request throughput rises 5.5–8.5 %.
-* **Average workload metrics** (Phases B / E / F): LPB and LRU are
-  indistinguishable. No regression on cc-burst, on cold-unique, or
-  on adversarial decoy patterns.
-* **Anchor protection is the structural guarantee** behind both:
-  when LRU evicts useful hot blocks (the anchor), LPB doesn't —
-  so any workload that benefits from re-using that anchor (swarms,
-  long-context multi-user agents, shared system prompts) sees the
-  win, while workloads that don't are unaffected.
-
-#### Figures
-
-| Path | anchor survival | per-phase grid |
-|---|---|---|
-| A | `dev/figures/fig_lru_vs_lpb_anchor_pathA.png` | `dev/figures/fig_lru_vs_lpb_scenarios_pathA.png` |
-| B | `dev/figures/fig_lru_vs_lpb_anchor_pathB.png` | `dev/figures/fig_lru_vs_lpb_scenarios_pathB.png` |
-
-#### Repro
-
-```bash
-# Path A (util=0.9, 35B) — ~5 min per trial
-for trial in 1 2 3; do
-  for mode in lru lpb; do
-    CUDA_VISIBLE_DEVICES=0,1 .venv/bin/python -u dev/compare_lru_lpb.py \
-      --mode $mode --trial $trial \
-      --tag _pathA --util 0.9 --tp 2 --phase-f-scale 10 \
-      > dev/compare_${mode}_pathA_t${trial}.out 2>&1
-  done
-done
-.venv/bin/python dev/plot_lru_vs_lpb.py --tag _pathA | tee dev/compare_summary_pathA.out
-
-# Path B (Qwen3.5-122B-A10B, TP=4, util=0.9) — ~7 min per trial
-for trial in 1 2 3; do
-  for mode in lru lpb; do
-    CUDA_VISIBLE_DEVICES=0,1,2,3 .venv/bin/python -u dev/compare_lru_lpb.py \
-      --mode $mode --trial $trial \
-      --tag _pathB --util 0.9 --tp 4 --phase-f-scale 10 \
-      --model Qwen/Qwen3.5-122B-A10B \
-      > dev/compare_${mode}_pathB_t${trial}.out 2>&1
-  done
-done
-.venv/bin/python dev/plot_lru_vs_lpb.py --tag _pathB | tee dev/compare_summary_pathB.out
-```
-
----
+TL;DR for vLLM specifically: at production util=0.9 in the
+concurrent swarm pattern that fires after Phase F's pressure has
+evicted the anchor under LRU, LPB delivers
+**−12.0 % batch TTFT on Qwen3.5-35B-A3B** (~6σ) and
+**−17.7 % on Qwen3.5-122B-A10B** (~5σ, saves 100 ms per
+30-request swarm). On every other phase × metric LPB is tied
+with LRU within trial noise.
 
 ## Reproduction — quick start
 
