@@ -1,0 +1,91 @@
+[lpb] Anchor: 4737 tokens
+[lpb] Loading sglang Engine model=Qwen/Qwen3.5-35B-A3B tp=2 mem_fraction_static=0.9 SGLANG_LPB_LRU=1...
+Disabling overlap schedule since mamba no_buffer is not compatible with overlap schedule, try to use --disable-radix-cache if overlap schedule is necessary
+[transformers] The `use_fast` parameter is deprecated and will be removed in a future version. Use `backend="torchvision"` instead of `use_fast=True`, or `backend="pil"` instead of `use_fast=False`.
+[transformers] The `use_fast` parameter is deprecated and will be removed in a future version. Use `backend="torchvision"` instead of `use_fast=True`, or `backend="pil"` instead of `use_fast=False`.
+[transformers] The `use_fast` parameter is deprecated and will be removed in a future version. Use `backend="torchvision"` instead of `use_fast=True`, or `backend="pil"` instead of `use_fast=False`.
+[Gloo] Rank 1 is connected to 1 peer ranks. Expected number of connected peer ranks is : 1
+[Gloo] Rank 0 is connected to 1 peer ranks. Expected number of connected peer ranks is : 1
+[Gloo] Rank 0 is connected to 1 peer ranks. Expected number of connected peer ranks is : 1
+[Gloo] Rank 1 is connected to 1 peer ranks. Expected number of connected peer ranks is : 1
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[Gloo] Rank 0 is connected to 0 peer ranks. Expected number of connected peer ranks is : 0
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+[transformers] `torch_dtype` is deprecated! Use `dtype` instead!
+[2026-05-23 10:06:09 TP1] using attn output gate!
+[2026-05-23 10:06:09 TP0] using attn output gate!
+Multi-thread loading shards:   0% Completed | 0/14 [00:00<?, ?it/s]Multi-thread loading shards:   7% Completed | 1/14 [00:00<00:04,  3.12it/s]Multi-thread loading shards:  14% Completed | 2/14 [00:00<00:03,  3.08it/s]Multi-thread loading shards:  21% Completed | 3/14 [00:00<00:03,  3.07it/s]Multi-thread loading shards:  29% Completed | 4/14 [00:01<00:03,  3.06it/s]Multi-thread loading shards:  36% Completed | 5/14 [00:01<00:02,  3.01it/s]Multi-thread loading shards:  43% Completed | 6/14 [00:01<00:02,  3.03it/s]Multi-thread loading shards:  50% Completed | 7/14 [00:02<00:02,  3.05it/s]Multi-thread loading shards:  57% Completed | 8/14 [00:02<00:02,  2.93it/s]Multi-thread loading shards:  64% Completed | 9/14 [00:03<00:01,  2.87it/s]Multi-thread loading shards:  71% Completed | 10/14 [00:03<00:01,  2.64it/s]Multi-thread loading shards:  79% Completed | 11/14 [00:03<00:01,  2.47it/s]Multi-thread loading shards:  86% Completed | 12/14 [00:04<00:00,  2.31it/s]Multi-thread loading shards:  93% Completed | 13/14 [00:04<00:00,  2.39it/s]Multi-thread loading shards: 100% Completed | 14/14 [00:04<00:00,  2.84it/s]
+/scratch/yuzhou/projects/sglang/.venv/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4876: UserWarning: barrier(): using the device under current context. You can specify `device_id` in `init_process_group` to mute this warning.
+  warnings.warn(  # warn only once
+/scratch/yuzhou/projects/sglang/.venv/lib/python3.12/site-packages/torch/distributed/distributed_c10d.py:4876: UserWarning: barrier(): using the device under current context. You can specify `device_id` in `init_process_group` to mute this warning.
+  warnings.warn(  # warn only once
+  0%|          | 0/36 [00:00<?, ?it/s]Capturing batches (bs=256 avail_mem=9.15 GB):   0%|          | 0/36 [00:00<?, ?it/s]2026-05-23 10:06:15,558 - CUTE_DSL - WARNING - [handle_import_error] - Unexpected error during package walk: cutlass.cute.experimental
+[2026-05-23 10:06:15 TP1] Unexpected error during package walk: cutlass.cute.experimental
+2026-05-23 10:06:15,571 - CUTE_DSL - WARNING - [handle_import_error] - Unexpected error during package walk: cutlass.cute.experimental
+[2026-05-23 10:06:15 TP0] Unexpected error during package walk: cutlass.cute.experimental
+[2026-05-23 10:06:15 TP1] Using default MoE kernel config. Performance might be sub-optimal! Config file not found at /scratch/yuzhou/projects/sglang/python/sglang/srt/layers/moe/moe_runner/triton_utils/configs/triton_3_5_1/E=256,N=256,device_name=NVIDIA_H200.json, you can create them with https://github.com/sgl-project/sglang/tree/main/benchmark/kernels/fused_moe_triton
+[2026-05-23 10:06:15 TP1] Using MoE kernel config with down_moe=False. Performance might be sub-optimal! Config file not found at /scratch/yuzhou/projects/sglang/python/sglang/srt/layers/moe/moe_runner/triton_utils/configs/triton_3_5_1/E=256,N=256,device_name=NVIDIA_H200_down.json, you can create them with https://github.com/sgl-project/sglang/tree/main/benchmark/kernels/fused_moe_triton
+[2026-05-23 10:06:15 TP0] Using default MoE kernel config. Performance might be sub-optimal! Config file not found at /scratch/yuzhou/projects/sglang/python/sglang/srt/layers/moe/moe_runner/triton_utils/configs/triton_3_5_1/E=256,N=256,device_name=NVIDIA_H200.json, you can create them with https://github.com/sgl-project/sglang/tree/main/benchmark/kernels/fused_moe_triton
+[2026-05-23 10:06:15 TP0] Using MoE kernel config with down_moe=False. Performance might be sub-optimal! Config file not found at /scratch/yuzhou/projects/sglang/python/sglang/srt/layers/moe/moe_runner/triton_utils/configs/triton_3_5_1/E=256,N=256,device_name=NVIDIA_H200_down.json, you can create them with https://github.com/sgl-project/sglang/tree/main/benchmark/kernels/fused_moe_triton
+Capturing batches (bs=256 avail_mem=9.15 GB):   3%|▎         | 1/36 [00:01<00:48,  1.37s/it]Capturing batches (bs=248 avail_mem=8.73 GB):   3%|▎         | 1/36 [00:01<00:48,  1.37s/it]Capturing batches (bs=248 avail_mem=8.73 GB):   6%|▌         | 2/36 [00:01<00:22,  1.50it/s]Capturing batches (bs=240 avail_mem=8.62 GB):   6%|▌         | 2/36 [00:01<00:22,  1.50it/s]Capturing batches (bs=240 avail_mem=8.62 GB):   8%|▊         | 3/36 [00:01<00:17,  1.91it/s]Capturing batches (bs=232 avail_mem=8.61 GB):   8%|▊         | 3/36 [00:01<00:17,  1.91it/s]Capturing batches (bs=224 avail_mem=8.61 GB):   8%|▊         | 3/36 [00:01<00:17,  1.91it/s]Capturing batches (bs=224 avail_mem=8.61 GB):  14%|█▍        | 5/36 [00:02<00:08,  3.58it/s]Capturing batches (bs=216 avail_mem=8.60 GB):  14%|█▍        | 5/36 [00:02<00:08,  3.58it/s]Capturing batches (bs=208 avail_mem=8.60 GB):  14%|█▍        | 5/36 [00:02<00:08,  3.58it/s]Capturing batches (bs=208 avail_mem=8.60 GB):  19%|█▉        | 7/36 [00:02<00:05,  5.17it/s]Capturing batches (bs=200 avail_mem=8.60 GB):  19%|█▉        | 7/36 [00:02<00:05,  5.17it/s]Capturing batches (bs=192 avail_mem=8.60 GB):  19%|█▉        | 7/36 [00:02<00:05,  5.17it/s]Capturing batches (bs=192 avail_mem=8.60 GB):  25%|██▌       | 9/36 [00:02<00:04,  6.64it/s]Capturing batches (bs=184 avail_mem=8.59 GB):  25%|██▌       | 9/36 [00:02<00:04,  6.64it/s]Capturing batches (bs=176 avail_mem=8.59 GB):  25%|██▌       | 9/36 [00:02<00:04,  6.64it/s]Capturing batches (bs=176 avail_mem=8.59 GB):  31%|███       | 11/36 [00:02<00:03,  7.95it/s]Capturing batches (bs=168 avail_mem=8.59 GB):  31%|███       | 11/36 [00:02<00:03,  7.95it/s]Capturing batches (bs=160 avail_mem=8.58 GB):  31%|███       | 11/36 [00:02<00:03,  7.95it/s]Capturing batches (bs=160 avail_mem=8.58 GB):  36%|███▌      | 13/36 [00:02<00:02,  8.94it/s]Capturing batches (bs=152 avail_mem=8.58 GB):  36%|███▌      | 13/36 [00:02<00:02,  8.94it/s]Capturing batches (bs=144 avail_mem=8.58 GB):  36%|███▌      | 13/36 [00:02<00:02,  8.94it/s]Capturing batches (bs=144 avail_mem=8.58 GB):  42%|████▏     | 15/36 [00:02<00:02,  9.73it/s]Capturing batches (bs=136 avail_mem=8.57 GB):  42%|████▏     | 15/36 [00:02<00:02,  9.73it/s]Capturing batches (bs=128 avail_mem=8.57 GB):  42%|████▏     | 15/36 [00:03<00:02,  9.73it/s]Capturing batches (bs=128 avail_mem=8.57 GB):  47%|████▋     | 17/36 [00:03<00:01, 10.36it/s]Capturing batches (bs=120 avail_mem=8.57 GB):  47%|████▋     | 17/36 [00:03<00:01, 10.36it/s]Capturing batches (bs=112 avail_mem=8.56 GB):  47%|████▋     | 17/36 [00:03<00:01, 10.36it/s]Capturing batches (bs=112 avail_mem=8.56 GB):  53%|█████▎    | 19/36 [00:03<00:01, 10.87it/s]Capturing batches (bs=104 avail_mem=8.56 GB):  53%|█████▎    | 19/36 [00:03<00:01, 10.87it/s]Capturing batches (bs=96 avail_mem=8.56 GB):  53%|█████▎    | 19/36 [00:03<00:01, 10.87it/s] Capturing batches (bs=96 avail_mem=8.56 GB):  58%|█████▊    | 21/36 [00:03<00:01, 11.21it/s]Capturing batches (bs=88 avail_mem=8.55 GB):  58%|█████▊    | 21/36 [00:03<00:01, 11.21it/s]Capturing batches (bs=80 avail_mem=8.55 GB):  58%|█████▊    | 21/36 [00:03<00:01, 11.21it/s]Capturing batches (bs=80 avail_mem=8.55 GB):  64%|██████▍   | 23/36 [00:03<00:01, 11.48it/s]Capturing batches (bs=72 avail_mem=8.55 GB):  64%|██████▍   | 23/36 [00:03<00:01, 11.48it/s]Capturing batches (bs=64 avail_mem=8.55 GB):  64%|██████▍   | 23/36 [00:03<00:01, 11.48it/s]Capturing batches (bs=64 avail_mem=8.55 GB):  69%|██████▉   | 25/36 [00:03<00:00, 11.68it/s]Capturing batches (bs=56 avail_mem=8.54 GB):  69%|██████▉   | 25/36 [00:03<00:00, 11.68it/s]Capturing batches (bs=48 avail_mem=8.54 GB):  69%|██████▉   | 25/36 [00:03<00:00, 11.68it/s]Capturing batches (bs=48 avail_mem=8.54 GB):  75%|███████▌  | 27/36 [00:03<00:00, 11.89it/s]Capturing batches (bs=40 avail_mem=8.53 GB):  75%|███████▌  | 27/36 [00:03<00:00, 11.89it/s]Capturing batches (bs=32 avail_mem=8.53 GB):  75%|███████▌  | 27/36 [00:03<00:00, 11.89it/s]Capturing batches (bs=32 avail_mem=8.53 GB):  81%|████████  | 29/36 [00:04<00:00, 11.06it/s]Capturing batches (bs=24 avail_mem=8.53 GB):  81%|████████  | 29/36 [00:04<00:00, 11.06it/s]Capturing batches (bs=16 avail_mem=8.52 GB):  81%|████████  | 29/36 [00:04<00:00, 11.06it/s]Capturing batches (bs=16 avail_mem=8.52 GB):  86%|████████▌ | 31/36 [00:04<00:00, 10.07it/s]Capturing batches (bs=12 avail_mem=8.52 GB):  86%|████████▌ | 31/36 [00:04<00:00, 10.07it/s]Capturing batches (bs=8 avail_mem=8.52 GB):  86%|████████▌ | 31/36 [00:04<00:00, 10.07it/s] Capturing batches (bs=8 avail_mem=8.52 GB):  92%|█████████▏| 33/36 [00:04<00:00, 10.37it/s]Capturing batches (bs=4 avail_mem=8.52 GB):  92%|█████████▏| 33/36 [00:04<00:00, 10.37it/s]Capturing batches (bs=2 avail_mem=8.51 GB):  92%|█████████▏| 33/36 [00:04<00:00, 10.37it/s]Capturing batches (bs=2 avail_mem=8.51 GB):  97%|█████████▋| 35/36 [00:04<00:00, 10.64it/s]Capturing batches (bs=1 avail_mem=8.51 GB):  97%|█████████▋| 35/36 [00:04<00:00, 10.64it/s]Capturing batches (bs=1 avail_mem=8.51 GB): 100%|██████████| 36/36 [00:04<00:00,  7.39it/s]
+[LPB] bytes_per_mamba_slot = 32216824 (real, from mamba_pool with size=1446)
+[LPB] bytes_per_mamba_slot = 32216824 (real, from mamba_pool with size=1446)
+
+[lpb] Phase A: warming anchor 500x ...
+  warm[  0] cached=0/4737  wall=272ms
+  warm[  1] cached=0/4737  wall=69ms
+  warm[250] cached=0/4737  wall=67ms
+  warm[499] cached=0/4737  wall=67ms
+
+[lpb] BASELINE anchor probe: cached=0/4737 (0.0%)
+
+[lpb] Phase B: cc burst over 10 sessions; each turn issued max_tokens=1 then max_tokens=21.
+  [lpb] session  1: 52 turns done (elapsed 42s)
+  [lpb] session  2: 37 turns done (elapsed 48s)
+  [lpb] session  3: 20 turns done (elapsed 51s)
+  [lpb] session  4: 8 turns done (elapsed 53s)
+  [lpb] session  5: 18 turns done (elapsed 56s)
+  [lpb] session  6: 13 turns done (elapsed 59s)
+  [lpb] session  7: 15 turns done (elapsed 61s)
+  [lpb] session  8: 16 turns done (elapsed 63s)
+  [lpb] session  9: 16 turns done (elapsed 66s)
+  [lpb] session 10: 43 turns done (elapsed 73s)
+
+[lpb] Phase G: SKIPPED (--skip-phase-g). The anchor's tree-node access time will stay at Phase A's warmup, so after Phase F it's the oldest non-trivial node.
+
+[lpb] Phase E: cold flow (50 unique 2K random prompts; trial seed = 1001).
+  cold[ 0] cached=  0 wall=39ms
+  cold[25] cached=  0 wall=37ms
+  cold[49] cached=  0 wall=37ms
+
+[lpb] Phase F: decoy-warming (50 decoys × 30000-tok × 5 hits, then 500 cold prompts).
+  decoy[0]: 30000 tokens
+  decoy[25]: 30000 tokens
+  decoy[49]: 30000 tokens
+  decoy_warm[  0] last cached=0/30000 wall=441ms
+  decoy_warm[  1] last cached=24576/30000 wall=93ms
+  decoy_warm[  2] last cached=24576/30000 wall=93ms
+  decoy_warm[  4] last cached=24576/30000 wall=94ms
+  decoy[ 0] cached=  0 wall=38ms
+  decoy[250] cached=  0 wall=39ms
+  decoy[499] cached=  0 wall=40ms
+
+[lpb] Phase H: POST-pressure swarm (30 anchored requests, batched after Phase F's churn).
+  H swarm TTFT batch_wall=512ms  sum_cached=107254/142590 (75.2%)
+  H swarm full batch_wall=333ms  throughput=1891.3 tok/s
+
+[lpb] FINAL anchor probe (post-E/F/H): cached=4385/4737 (92.6%)
+
+[lpb] Done (trial 1). 199s total. Log: /scratch/yuzhou/projects/vllm-songyang/dev/aginfer/runs/sglang/compare_lpb_pathAskipG_t1.jsonl
+Exception ignored in: <function ResourceTracker.__del__ at 0x7344c07b2840>
+Traceback (most recent call last):
+  File "/scratch/yuzhou/.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/multiprocessing/resource_tracker.py", line 77, in __del__
+  File "/scratch/yuzhou/.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/multiprocessing/resource_tracker.py", line 86, in _stop
+  File "/scratch/yuzhou/.local/share/uv/python/cpython-3.12.12-linux-x86_64-gnu/lib/python3.12/multiprocessing/resource_tracker.py", line 111, in _stop_locked
+ChildProcessError: [Errno 10] No child processes
