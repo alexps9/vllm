@@ -36,8 +36,8 @@ multi-minute run).
 
 | tag | model | util | TP | KV budget | Phase F scale | files |
 |---|---|---|---|---|---|---|
-| `_pathA` | Qwen/Qwen3.5-35B-A3B   | 0.9 | 2 | 8.46 M tokens | 10 (50 decoys × 30 K + 500 cold) | `dev/compare_{lru,lpb}_pathA_t{1,2,3}.{jsonl,out}` |
-| `_pathB` | Qwen/Qwen3.5-122B-A10B | 0.9 | 4 | 5.08 M tokens | 10                                | `dev/compare_{lru,lpb}_pathB_t{1,2,3}.{jsonl,out}` |
+| `_pathA` | Qwen/Qwen3.5-35B-A3B   | 0.9 | 2 | 8.46 M tokens | 10 (50 decoys × 30 K + 500 cold) | `dev/aginfer/runs/vllm/compare_{lru,lpb}_pathA_t{1,2,3}.{jsonl,out}` |
+| `_pathB` | Qwen/Qwen3.5-122B-A10B | 0.9 | 4 | 5.08 M tokens | 10                                | `dev/aginfer/runs/vllm/compare_{lru,lpb}_pathB_t{1,2,3}.{jsonl,out}` |
 
 ## Headline — anchor protection (Phase C FINAL probe)
 
@@ -137,8 +137,8 @@ failure mode, and that hasn't been done.
 
 | Path | anchor survival | per-phase grid |
 |---|---|---|
-| A | `dev/figures/fig_lru_vs_lpb_anchor_pathA.png` | `dev/figures/fig_lru_vs_lpb_scenarios_pathA.png` |
-| B | `dev/figures/fig_lru_vs_lpb_anchor_pathB.png` | `dev/figures/fig_lru_vs_lpb_scenarios_pathB.png` |
+| A | `dev/aginfer/figures/fig_lru_vs_lpb_anchor_pathA.png` | `dev/aginfer/figures/fig_lru_vs_lpb_scenarios_pathA.png` |
+| B | `dev/aginfer/figures/fig_lru_vs_lpb_anchor_pathB.png` | `dev/aginfer/figures/fig_lru_vs_lpb_scenarios_pathB.png` |
 
 ## Repro
 
@@ -154,10 +154,10 @@ for trial in 1 2 3; do
     CUDA_VISIBLE_DEVICES=0,1 .venv/bin/python -u dev/compare_lru_lpb.py \
       --mode $mode --trial $trial \
       --tag _pathA --util 0.9 --tp 2 --phase-f-scale 10 \
-      > dev/compare_${mode}_pathA_t${trial}.out 2>&1
+      > dev/aginfer/runs/vllm/compare_${mode}_pathA_t${trial}.out 2>&1
   done
 done
-.venv/bin/python dev/plot_lru_vs_lpb.py --tag _pathA | tee dev/compare_summary_pathA.out
+.venv/bin/python dev/plot_lru_vs_lpb.py --tag _pathA | tee dev/aginfer/runs/vllm/compare_summary_pathA.out
 
 # Path B — Qwen3.5-122B-A10B, TP=4, util=0.9. ~7 min per trial.
 for trial in 1 2 3; do
@@ -166,8 +166,8 @@ for trial in 1 2 3; do
       --mode $mode --trial $trial \
       --tag _pathB --util 0.9 --tp 4 --phase-f-scale 10 \
       --model Qwen/Qwen3.5-122B-A10B \
-      > dev/compare_${mode}_pathB_t${trial}.out 2>&1
+      > dev/aginfer/runs/vllm/compare_${mode}_pathB_t${trial}.out 2>&1
   done
 done
-.venv/bin/python dev/plot_lru_vs_lpb.py --tag _pathB | tee dev/compare_summary_pathB.out
+.venv/bin/python dev/plot_lru_vs_lpb.py --tag _pathB | tee dev/aginfer/runs/vllm/compare_summary_pathB.out
 ```

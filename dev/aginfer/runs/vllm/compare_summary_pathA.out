@@ -1,10 +1,10 @@
 Sweep tag = '_pathA'. Found 3 LRU trial files, 3 LPB trial files.
-  dev/compare_lru_pathA_t1.jsonl
-  dev/compare_lru_pathA_t2.jsonl
-  dev/compare_lru_pathA_t3.jsonl
-  dev/compare_lpb_pathA_t1.jsonl
-  dev/compare_lpb_pathA_t2.jsonl
-  dev/compare_lpb_pathA_t3.jsonl
+  dev/aginfer/runs/vllm/compare_lru_pathA_t1.jsonl
+  dev/aginfer/runs/vllm/compare_lru_pathA_t2.jsonl
+  dev/aginfer/runs/vllm/compare_lru_pathA_t3.jsonl
+  dev/aginfer/runs/vllm/compare_lpb_pathA_t1.jsonl
+  dev/aginfer/runs/vllm/compare_lpb_pathA_t2.jsonl
+  dev/aginfer/runs/vllm/compare_lpb_pathA_t3.jsonl
 
 ==================================================================================
 LRU vs LPB on Qwen/Qwen3.5-35B-A3B — multi-trial aggregate (mean ± stddev)
@@ -70,6 +70,6 @@ LRU vs LPB on Qwen/Qwen3.5-35B-A3B — multi-trial aggregate (mean ± stddev)
     LRU sum cached:     122496 ±0
     LPB sum cached:     126720 ±0
 
-Wrote dev/figures/fig_lru_vs_lpb_anchor_pathA.png
-Wrote dev/figures/fig_lru_vs_lpb_scenarios_pathA.png
-Wrote dev/compare_summary_pathA.json
+Wrote dev/aginfer/figures/fig_lru_vs_lpb_anchor_pathA.png
+Wrote dev/aginfer/figures/fig_lru_vs_lpb_scenarios_pathA.png
+Wrote dev/aginfer/runs/vllm/compare_summary_pathA.json

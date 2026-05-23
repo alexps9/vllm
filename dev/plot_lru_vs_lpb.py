@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Aggregate dev/compare_{lru,lpb}_t*.jsonl across trials and produce
-mean ± stddev figures for LRU vs LPB across Phase B / D / E / F.
+"""Aggregate dev/aginfer/runs/vllm/compare_{lru,lpb}{tag}_t*.jsonl
+across trials and produce mean ± stddev figures for LRU vs LPB across
+Phase B / G / E / F / H.
 
-Loads all trial files for each mode (dev/compare_{mode}_t{N}.jsonl) and
-computes per-phase statistics across trials so we can tell stable signal
-from per-run noise.
+Loads all trial files for each mode and computes per-phase statistics
+across trials so we can tell stable signal from per-run noise.
 
 Headline anchor-survival signal: Phase C final probe (LRU 0, LPB 4224).
 The workload-metric headline: Phase H batch TTFT (LPB delivers
@@ -23,9 +23,9 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-FIGDIR = Path("dev/figures")
+FIGDIR = Path("dev/aginfer/figures")
 FIGDIR.mkdir(parents=True, exist_ok=True)
-ROOT = Path("dev")
+ROOT = Path("dev/aginfer/runs/vllm")
 
 
 # ---------------------------------------------------------------------------
@@ -461,7 +461,7 @@ def main() -> None:
         "lru": lru_agg,
         "lpb": lpb_agg,
     }
-    out_json = Path(f"dev/compare_summary{suffix}.json")
+    out_json = Path(f"dev/aginfer/runs/vllm/compare_summary{suffix}.json")
     out_json.write_text(json.dumps(payload, indent=2, default=str))
     print(f"Wrote {out_json}")
 
