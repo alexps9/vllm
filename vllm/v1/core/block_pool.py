@@ -188,10 +188,14 @@ class BlockPool:
         # Read by FullAttentionManager.find_longest_cache_hit to detect a
         # partial-extension hit beyond the full-block prefix.
         # Empty unless `VLLM_PARTIAL_CACHE_ENABLED=1` is set in env.
-        self.cached_partial_block_map: dict[
-            "BlockHashWithGroupId", "KVCacheBlock"
-        ] = {}
-        # Reverse index: block_id → its partial-cache key. Enables O(1)
+        # Nested layout (M.9): outer key = (parent_full_block_hash, group_id),
+        # inner key = (partial_len, hash(partial_tokens)). Enables the hit-side
+        # to ONLY probe R values that actually exist for THIS parent, rather
+        # than enumerating R from 1..block_size-1 every lookup.
+        # Without this, decode-time lookups were O(block_size × R) per request
+        # and tanked throughput by ~18% on the cc workload.
+        self.cached_partial_block_map: dict[tuple, dict[tuple, "KVCacheBlock"]] = {}
+        # Reverse index: block_id → (outer_key, inner_key). Enables O(1)
         # eviction when a block leaves the partial cache (e.g. the block
         # was popped from free queue for reuse, or evict_blocks was called).
         # Each block has at most one partial-cache entry at a time.
@@ -273,47 +277,88 @@ class BlockPool:
             return False
         if partial_block.is_null:
             return False
-        key = self._compute_partial_key(
+        outer_key, inner_key = self._compute_partial_keys(
             request, num_full_blocks, partial_len, block_size, kv_cache_group_id
         )
-        if key in self.cached_partial_block_map:
+        inner = self.cached_partial_block_map.get(outer_key)
+        if inner is not None and inner_key in inner:
             # Some other request already cached this exact partial; skip.
             return False
         # If this physical block was previously in the partial cache under
         # a DIFFERENT key (e.g. a prior turn cached a shorter partial in the
         # same block, then the same request grew the partial), evict the
         # stale entry so we don't have two map entries for one block_id.
-        prior_key = self.partial_cache_key_by_block_id.pop(partial_block.block_id, None)
-        if prior_key is not None:
-            self.cached_partial_block_map.pop(prior_key, None)
-        self.cached_partial_block_map[key] = partial_block
-        self.partial_cache_key_by_block_id[partial_block.block_id] = key
+        prior = self.partial_cache_key_by_block_id.pop(partial_block.block_id, None)
+        if prior is not None:
+            self._remove_partial_entry(prior)
+        if inner is None:
+            inner = {}
+            self.cached_partial_block_map[outer_key] = inner
+        inner[inner_key] = partial_block
+        self.partial_cache_key_by_block_id[partial_block.block_id] = (outer_key, inner_key)
         self._partial_cache_insertions += 1
         if self._partial_cache_insertions <= 16:
             logger.info(
                 "[interlayer/partial_cache] insert #%d: "
                 "req_id=%s num_full_blocks=%d partial_len=%d/%d block_id=%d "
-                "map_size=%d",
+                "outer_keys=%d inner_for_parent=%d",
                 self._partial_cache_insertions,
                 request.request_id, num_full_blocks, partial_len, block_size,
                 partial_block.block_id,
-                len(self.cached_partial_block_map),
+                len(self.cached_partial_block_map), len(inner),
             )
         return True
 
-    def _compute_partial_key(
+    def _remove_partial_entry(self, full_key: tuple) -> None:
+        """Remove a (outer_key, inner_key) entry; clean up empty outer."""
+        outer_key, inner_key = full_key
+        inner = self.cached_partial_block_map.get(outer_key)
+        if inner is None:
+            return
+        inner.pop(inner_key, None)
+        if not inner:
+            self.cached_partial_block_map.pop(outer_key, None)
+
+    def get_partial_extensions_for(
+        self, request: Request, num_full_blocks: int,
+        block_size: int, kv_cache_group_id: int,
+    ) -> list[tuple[int, "KVCacheBlock"]]:
+        """List (partial_len, block) candidates for this request's prefix.
+
+        Returns only the partial entries indexed under this request's parent
+        hash + group, in DESCENDING partial_len order so the longest match
+        gets tried first. Returns [] if nothing is cached for this parent.
+
+        Hot path: the caller iterates the list and checks each partial's
+        tokens. Average list length on real workloads = 1 (each parent's
+        partial-cache entries are usually a single turn's tail).
+        """
+        outer_key = (
+            (request.block_hashes[num_full_blocks - 1] if num_full_blocks > 0
+             else None),
+            kv_cache_group_id,
+        )
+        inner = self.cached_partial_block_map.get(outer_key)
+        if inner is None:
+            return []
+        # Sort by partial_len descending so longest is tried first.
+        return sorted(
+            ((R, block) for (R, _tk_hash), block in inner.items()),
+            key=lambda x: -x[0],
+        )
+
+    def _compute_partial_keys(
         self,
         request: Request,
         num_full_blocks: int,
         partial_len: int,
         block_size: int,
         kv_cache_group_id: int,
-    ) -> tuple:
-        """Build a content-addressable key for a partial-block cache entry.
-        Same first ``num_full_blocks`` block hashes + same ``partial_len`` +
-        same partial-content tokens → same key. Independent of vLLM's hash
-        function configuration (sha256/xxhash/etc) since this is a local
-        secondary cache and collision risk is low at session scope.
+    ) -> tuple[tuple, tuple]:
+        """Return (outer_key, inner_key) for the nested partial-cache map.
+
+        outer_key = (parent_full_block_hash, kv_cache_group_id)
+        inner_key = (partial_len, hash(partial_token_ids))
         """
         parent_hash = (
             request.block_hashes[num_full_blocks - 1] if num_full_blocks > 0
@@ -323,7 +368,9 @@ class BlockPool:
         partial_tokens = tuple(
             request.all_token_ids[partial_start: partial_start + partial_len]
         )
-        return (parent_hash, partial_len, partial_tokens, kv_cache_group_id)
+        outer_key = (parent_hash, kv_cache_group_id)
+        inner_key = (partial_len, hash(partial_tokens))
+        return outer_key, inner_key
 
     def get_cached_partial_block(
         self,
@@ -336,24 +383,21 @@ class BlockPool:
     ) -> KVCacheBlock | None:
         """Look up a partial-block cache entry — Finding M (interlayer).
 
-        Reverse of ``cache_partial_block``. Recomputes the partial hash
-        from the request's token ids at the matching position and returns
-        the cached block if present.
-
-        Hit-side bookkeeping; the caller is responsible for actually using
-        the returned block (bumping ref_cnt, threading into block_table,
-        adjusting per-group num_computed_tokens). Today the hit-side is
-        not yet wired — this helper exists to support an isolated test.
+        Reverse of ``cache_partial_block``. Hits if the parent prefix +
+        partial_len + first ``partial_len`` tokens match a cached entry.
         """
         import os  # noqa: PLC0415
         if os.environ.get("VLLM_PARTIAL_CACHE_ENABLED", "0") != "1":
             return None
         if partial_len <= 0 or partial_len >= block_size:
             return None
-        key = self._compute_partial_key(
+        outer_key, inner_key = self._compute_partial_keys(
             request, num_full_blocks, partial_len, block_size, kv_cache_group_id
         )
-        block = self.cached_partial_block_map.get(key)
+        inner = self.cached_partial_block_map.get(outer_key)
+        if inner is None:
+            return None
+        block = inner.get(inner_key)
         if block is not None:
             self._partial_cache_hits += 1
             # Destructive hit: remove from the partial cache so subsequent
@@ -361,7 +405,7 @@ class BlockPool:
             # the write offsets past R, corrupting each other's prefills).
             # The hitting request now owns the block; if it ends with a
             # different partial later, cache_partial_block will re-insert.
-            self.cached_partial_block_map.pop(key, None)
+            self._remove_partial_entry((outer_key, inner_key))
             self.partial_cache_key_by_block_id.pop(block.block_id, None)
         return block
 
@@ -552,7 +596,7 @@ class BlockPool:
             block.block_id, None
         )
         if prior_partial_key is not None:
-            self.cached_partial_block_map.pop(prior_partial_key, None)
+            self._remove_partial_entry(prior_partial_key)
             self._partial_cache_evictions += 1
 
         block.reset_hash()

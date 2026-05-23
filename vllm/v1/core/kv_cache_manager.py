@@ -261,8 +261,13 @@ class KVCacheManager:
         computed_blocks: tuple[list, ...],
         max_cache_hit_length: int,
     ) -> tuple[int, tuple[list, ...]]:
-        """Finding M.5: probe the partial-block cache for an R-token extension
-        past the K full blocks that the coordinator returned.
+        """Finding M.5/M.9: probe the partial-block cache for an R-token
+        extension past the K full blocks that the coordinator returned.
+
+        Uses block_pool.get_partial_extensions_for() to look up ONLY the
+        partial_len values that exist for this request's parent prefix.
+        Avoids the prior O(block_size) probe-every-R fallback that ate
+        ~18% of decode-time wall on the cc workload (M.9 first run).
 
         Returns the (possibly bumped) num_new_computed_tokens and the
         (possibly extended-by-1-block) computed_blocks.
@@ -276,8 +281,18 @@ class KVCacheManager:
         max_extension = max_cache_hit_length - num_new_computed_tokens
         if max_extension <= 0:
             return num_new_computed_tokens, computed_blocks
-        # Probe R from max possible down to 1; first hit wins.
-        for R in range(min(max_extension, block_size - 1), 0, -1):
+        # Look up indexed candidates: only the R values that exist for this
+        # parent. Sorted longest-first. Average list length on real workloads
+        # ≈ 1 (each parent has one cached turn-tail at any time).
+        candidates = self.block_pool.get_partial_extensions_for(
+            request=request,
+            num_full_blocks=num_full_blocks,
+            block_size=block_size,
+            kv_cache_group_id=group_id,
+        )
+        for R, _candidate_block in candidates:
+            if R > max_extension:
+                continue
             partial_block = self.block_pool.get_cached_partial_block(
                 request=request,
                 num_full_blocks=num_full_blocks,
