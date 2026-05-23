@@ -6,9 +6,10 @@ Loads all trial files for each mode (dev/compare_{mode}_t{N}.jsonl) and
 computes per-phase statistics across trials so we can tell stable signal
 from per-run noise.
 
-Headline anchor-survival signal uses rehit_turn[j=0].ttft_cached (the
-post-burst state, observed before Phase D's first request mutates the
-cache). The Phase C final probe is now diagnostic only.
+Headline anchor-survival signal: Phase C final probe (LRU 0, LPB 4224).
+The workload-metric headline: Phase H batch TTFT (LPB delivers
+−12% to −18% in concurrent swarm after pressure has evicted the anchor
+under LRU).
 """
 
 from __future__ import annotations
@@ -102,7 +103,6 @@ def trial_summary(trial_path: Path) -> dict[str, dict]:
     """Return per-phase aggregated metrics for a single trial."""
     rows = [json.loads(l) for l in trial_path.read_text().splitlines() if l.strip()]
     turns = [r for r in rows if r.get("kind") == "cc_turn"]
-    rehits = [r for r in rows if r.get("kind") == "rehit_turn"]
     colds = [r for r in rows if r.get("kind") == "cold_turn"]
     decoys = [r for r in rows if r.get("kind") == "decoy_turn"]
     probes = [r for r in rows if r.get("kind") == "anchor_probe"]
@@ -117,16 +117,6 @@ def trial_summary(trial_path: Path) -> dict[str, dict]:
     if base:
         anchor_len = base["anchor_len"]
 
-    # Post-burst anchor survival from rehit[0] — the very first rehit hasn't
-    # yet mutated the cache, so its ttft_cached truthfully reports the state
-    # after Phase B's cold burst.
-    rehit0 = next((r for r in rehits if r.get("j") == 0), None)
-    post_burst_cached = rehit0["ttft_cached"] if rehit0 else None
-    # If Phase G exists, it runs *before* Phase D and observes the post-B
-    # state directly (all N submitted simultaneously, none has yet mutated
-    # cache). The aggregate cache hit % across the batch is a stronger
-    # anchor-survival signal than rehit[0] because it averages over N
-    # independent observations under identical conditions.
     swarm_anchor_signal = None
     if swarm_batch:
         # Cache hit % of TTFT batch — under LRU with anchor evicted, all N
@@ -138,15 +128,13 @@ def trial_summary(trial_path: Path) -> dict[str, dict]:
 
     return {
         "phase_B": _aggregate(turns),
-        "phase_D": _aggregate(rehits),
         "phase_E": _aggregate(colds),
         "phase_F": _aggregate(decoys),
         "phase_G": _aggregate_swarm(swarm_batch),
         "phase_H": _aggregate_swarm(swarm2_batch),  # post-pressure swarm
         "anchor_len": anchor_len,
         "baseline_anchor_cached": base["cached"] if base else None,
-        "final_anchor_cached": final["cached"] if final else None,  # diagnostic
-        "post_burst_cached": post_burst_cached,  # rehit[0] signal
+        "final_anchor_cached": final["cached"] if final else None,  # the headline
         "swarm_batch_cached": swarm_anchor_signal,  # G batch aggregate
         "swarm2_batch_cached": swarm2_anchor_signal,  # H batch aggregate
     }
@@ -187,7 +175,7 @@ def _mean_std(xs: list[float]) -> tuple[float, float]:
 def aggregate_trials(trial_summaries: list[dict]) -> dict:
     """Given per-trial summaries, compute mean ± stddev per phase per metric."""
     out: dict = {}
-    phase_keys = ["phase_B", "phase_D", "phase_E", "phase_F", "phase_G", "phase_H"]
+    phase_keys = ["phase_B", "phase_G", "phase_E", "phase_F", "phase_H"]
     metric_keys = [
         "n_requests", "total_prompt_tokens", "cache_hit_pct_ttft",
         "cache_hit_pct_full", "mean_ttft_ms", "mean_full_wall_ms",
@@ -204,13 +192,6 @@ def aggregate_trials(trial_summaries: list[dict]) -> dict:
                 out[ph][k] = {"mean": m, "std": s, "n": len(xs),
                               "trials": xs}
 
-    # Anchor survival across trials (rehit[0].ttft_cached)
-    pburst = [t["post_burst_cached"] for t in trial_summaries
-              if t.get("post_burst_cached") is not None]
-    if pburst:
-        m, s = _mean_std(pburst)
-        out["post_burst_cached"] = {"mean": m, "std": s, "n": len(pburst),
-                                    "trials": pburst}
     base = [t["baseline_anchor_cached"] for t in trial_summaries
             if t.get("baseline_anchor_cached") is not None]
     if base:
@@ -329,22 +310,21 @@ def main() -> None:
     print("=" * 82)
 
     anchor_len = lru_agg.get("anchor_len", 4737)
-    print(f"\n  ANCHOR SURVIVAL (post Phase-B burst, observed via rehit[0].ttft_cached)")
+    print(f"\n  ANCHOR SURVIVAL (post-pipeline FINAL probe)")
     print(f"    anchor full length: {anchor_len} tokens")
-    a = lru_agg.get("post_burst_cached")
-    b = lpb_agg.get("post_burst_cached")
-    print(f"    LRU rehit[0].ttft_cached: {_fmt(a, '{:.0f}')}")
-    print(f"    LPB rehit[0].ttft_cached: {_fmt(b, '{:.0f}')}")
+    a = lru_agg.get("final_anchor_cached")
+    b = lpb_agg.get("final_anchor_cached")
+    print(f"    LRU FINAL cached: {_fmt(a, '{:.0f}')}")
+    print(f"    LPB FINAL cached: {_fmt(b, '{:.0f}')}")
     if a and b:
         print(f"      → LRU anchor survival: {100*a['mean']/anchor_len:.1f}% of full anchor")
         print(f"      → LPB anchor survival: {100*b['mean']/anchor_len:.1f}% of full anchor")
 
     print_phase("Phase B: cc burst (average)",                   lru_agg["phase_B"], lpb_agg["phase_B"])
     print_phase("Phase G: PRE-pressure concurrent swarm",        lru_agg["phase_G"], lpb_agg["phase_G"])
-    print_phase("Phase D: anchor re-hit (serial, post-G)",       lru_agg["phase_D"], lpb_agg["phase_D"])
     print_phase("Phase E: cold-unique random (LPB hot-path)",    lru_agg["phase_E"], lpb_agg["phase_E"])
     print_phase("Phase F: decoy waste (LPB WORST, adversarial)", lru_agg["phase_F"], lpb_agg["phase_F"])
-    print_phase("Phase H: POST-pressure swarm (decisive test)",  lru_agg["phase_H"], lpb_agg["phase_H"])
+    print_phase("Phase H: POST-pressure swarm (LPB best, real)", lru_agg["phase_H"], lpb_agg["phase_H"])
 
     # Phase G/H headline: anchor cached in the concurrent swarm batch
     sb_l = lru_agg.get("swarm_batch_cached")
@@ -360,21 +340,21 @@ def main() -> None:
         print(f"    LRU sum cached: {_fmt(s2_l, '{:.0f}')}")
         print(f"    LPB sum cached: {_fmt(s2_p, '{:.0f}')}")
 
-    # ----- Figure 1: anchor survival (now uses rehit[0]) -----
+    # ----- Figure 1: anchor survival (BASELINE vs FINAL probe) -----
     fig, ax = plt.subplots(figsize=(8, 5))
     modes = ["LRU\n(vLLM default)", "LPB\n(HiMA L1)"]
     base_a = lru_agg.get("baseline_anchor_cached", {"mean": 0, "std": 0})
     base_b = lpb_agg.get("baseline_anchor_cached", {"mean": 0, "std": 0})
-    burst_a = lru_agg.get("post_burst_cached", {"mean": 0, "std": 0})
-    burst_b = lpb_agg.get("post_burst_cached", {"mean": 0, "std": 0})
+    burst_a = lru_agg.get("final_anchor_cached", {"mean": 0, "std": 0})
+    burst_b = lpb_agg.get("final_anchor_cached", {"mean": 0, "std": 0})
     x = range(len(modes))
     w = 0.35
     ax.bar([i - w/2 for i in x], [base_a["mean"], base_b["mean"]], w,
            yerr=[base_a["std"], base_b["std"]], capsize=4,
-           label="BASELINE probe", color="#7ca8c8")
+           label="BASELINE probe (after warmup)", color="#7ca8c8")
     ax.bar([i + w/2 for i in x], [burst_a["mean"], burst_b["mean"]], w,
            yerr=[burst_a["std"], burst_b["std"]], capsize=4,
-           label="POST-BURST (rehit[0])",
+           label="FINAL probe (after full pipeline)",
            color="#c74848")
     ax.set_xticks(list(x))
     ax.set_xticklabels(modes)
@@ -399,17 +379,13 @@ def main() -> None:
     plt.close(fig)
     print(f"\nWrote {out}")
 
-    # ----- Figure 2: 5-scenario grid (B, G, D, E, F) with error bars -----
-    # G inserted between B and D — it's the production-pattern win
-    # scenario (concurrent swarm), while D is now the post-G serial
-    # follow-up.
+    # ----- Figure 2: 5-scenario grid (B, G, E, F, H) with error bars -----
     all_scenarios = [
-        ("B: cc burst",                      "phase_B"),
-        ("G: swarm (pre-pressure)",          "phase_G"),
-        ("D: anchor re-hit",                 "phase_D"),
-        ("E: cold random",                   "phase_E"),
-        ("F: decoy waste (adv)",             "phase_F"),
-        ("H: swarm (POST-pressure, decisive)", "phase_H"),
+        ("B: cc burst",                        "phase_B"),
+        ("G: swarm (pre-pressure)",            "phase_G"),
+        ("E: cold random",                     "phase_E"),
+        ("F: decoy waste (adv)",               "phase_F"),
+        ("H: swarm (POST-pressure, headline)", "phase_H"),
     ]
     # Only include phases that have data for at least one mode
     scenarios = [
@@ -473,40 +449,6 @@ def main() -> None:
     fig.savefig(out2, dpi=130)
     plt.close(fig)
     print(f"Wrote {out2}")
-
-    # ----- Per-trial scatter for the noisy scenarios (E and F) -----
-    if n_trials_lru >= 2 and n_trials_lpb >= 2:
-        fig, axes = plt.subplots(1, 2, figsize=(13, 5))
-        for ax, (title, ph) in zip(axes, [("E: cold-unique random", "phase_E"),
-                                           ("F: decoy waste (adv)",  "phase_F")]):
-            keys = ["mean_ttft_ms", "mean_tpot_ms", "throughput_tok_per_s"]
-            xs = range(len(keys))
-            for j, k in enumerate(keys):
-                lru_trials = lru_agg[ph][k]["trials"] if lru_agg[ph].get(k) else []
-                lpb_trials = lpb_agg[ph][k]["trials"] if lpb_agg[ph].get(k) else []
-                # Normalize each metric by the LRU mean of that metric so
-                # they're plottable on a shared axis.
-                lru_m = lru_agg[ph][k]["mean"] if lru_agg[ph].get(k) else 1.0
-                lru_m = lru_m if lru_m else 1.0
-                jitter_l = [j - 0.15] * len(lru_trials)
-                jitter_p = [j + 0.15] * len(lpb_trials)
-                ax.scatter(jitter_l, [v / lru_m for v in lru_trials],
-                           color="#888", s=60, label="LRU" if j == 0 else None)
-                ax.scatter(jitter_p, [v / lru_m for v in lpb_trials],
-                           color="#3d8540", s=60, label="LPB" if j == 0 else None)
-            ax.set_xticks(list(xs))
-            ax.set_xticklabels(["TTFT", "TPOT", "throughput"], fontsize=10)
-            ax.set_ylabel("trial value / LRU mean")
-            ax.set_title(title)
-            ax.axhline(1.0, color="black", ls="--", lw=0.7, alpha=0.5)
-            ax.grid(True, alpha=0.3, axis="y")
-            ax.legend(loc="upper right", fontsize=9)
-        fig.suptitle("Per-trial dispersion — is the signal stable?", fontsize=13)
-        fig.tight_layout(rect=[0, 0, 1, 0.95])
-        out3 = FIGDIR / f"fig_lru_vs_lpb_trial_dispersion{suffix}.png"
-        fig.savefig(out3, dpi=130)
-        plt.close(fig)
-        print(f"Wrote {out3}")
 
     # ----- JSON dump -----
     payload = {

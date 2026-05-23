@@ -10,10 +10,10 @@ Sweep tag = '_pathB'. Found 3 LRU trial files, 3 LPB trial files.
 LRU vs LPB on Qwen/Qwen3.5-122B-A10B — multi-trial aggregate (mean ± stddev)
 ==================================================================================
 
-  ANCHOR SURVIVAL (post Phase-B burst, observed via rehit[0].ttft_cached)
+  ANCHOR SURVIVAL (post-pipeline FINAL probe)
     anchor full length: 4737 tokens
-    LRU rehit[0].ttft_cached:       4224 ±0
-    LPB rehit[0].ttft_cached:       4224 ±0
+    LRU FINAL cached:       4224 ±0
+    LPB FINAL cached:       4224 ±0
       → LRU anchor survival: 89.2% of full anchor
       → LPB anchor survival: 89.2% of full anchor
 
@@ -35,15 +35,6 @@ LRU vs LPB on Qwen/Qwen3.5-122B-A10B — multi-trial aggregate (mean ± stddev)
     throughput tok/s   LRU:    1066.14 ±4.26   LPB:    1064.43 ±7.31   Δ:    -0.2%
     total wall (s)     LRU:       1.07 ±0.01   LPB:       1.08 ±0.01   Δ:    +0.1%
 
-  [Phase D: anchor re-hit (serial, post-G)]   (mean ± sample stddev across 3 LRU trials, 3 LPB trials)
-    requests           LRU:         30 ±0   LPB:         30 ±0   Δ:    +0.0%
-    hit % (TTFT)       LRU:      88.87 ±0.00   LPB:      88.87 ±0.00   Δ:    +0.0%
-    hit % (decode)     LRU:      88.87 ±0.00   LPB:      88.87 ±0.00   Δ:    +0.0%
-    mean TTFT (ms)     LRU:      38.15 ±0.45   LPB:      38.71 ±0.37   Δ:    +1.5%
-    mean TPOT (ms)     LRU:      7.107 ±0.022   LPB:      7.112 ±0.026   Δ:    +0.1%
-    throughput tok/s   LRU:     140.72 ±0.43   LPB:     140.61 ±0.52   Δ:    -0.1%
-    total wall (s)     LRU:       5.62 ±0.03   LPB:       5.64 ±0.02   Δ:    +0.4%
-
   [Phase E: cold-unique random (LPB hot-path)]   (mean ± sample stddev across 3 LRU trials, 3 LPB trials)
     requests           LRU:         50 ±0   LPB:         50 ±0   Δ:    +0.0%
     hit % (TTFT)       LRU:       0.00 ±0.00   LPB:       0.00 ±0.00   Δ:    —    
@@ -62,7 +53,7 @@ LRU vs LPB on Qwen/Qwen3.5-122B-A10B — multi-trial aggregate (mean ± stddev)
     throughput tok/s   LRU:     119.43 ±0.20   LPB:     118.91 ±0.67   Δ:    -0.4%
     total wall (s)     LRU:      99.31 ±0.40   LPB:      99.19 ±0.77   Δ:    -0.1%
 
-  [Phase H: POST-pressure swarm (decisive test)]   (mean ± sample stddev across 3 LRU trials, 3 LPB trials)
+  [Phase H: POST-pressure swarm (LPB best, real)]   (mean ± sample stddev across 3 LRU trials, 3 LPB trials)
     requests           LRU:         30 ±0   LPB:         30 ±0   Δ:    +0.0%
     hit % (TTFT)       LRU:      85.91 ±0.00   LPB:      88.87 ±0.00   Δ:    +3.4%
     hit % (decode)     LRU:      88.87 ±0.00   LPB:      88.87 ±0.00   Δ:    +0.0%
@@ -81,5 +72,4 @@ LRU vs LPB on Qwen/Qwen3.5-122B-A10B — multi-trial aggregate (mean ± stddev)
 
 Wrote dev/figures/fig_lru_vs_lpb_anchor_pathB.png
 Wrote dev/figures/fig_lru_vs_lpb_scenarios_pathB.png
-Wrote dev/figures/fig_lru_vs_lpb_trial_dispersion_pathB.png
 Wrote dev/compare_summary_pathB.json

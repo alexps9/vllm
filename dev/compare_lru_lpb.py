@@ -253,12 +253,10 @@ def main() -> None:
               f"(elapsed {time.monotonic() - t_start:.0f}s)")
     log(kind="phase", phase="B_done", elapsed_s=time.monotonic() - t_start)
 
-    # ----- Phase G: concurrent SWARM workload ----- #
+    # ----- Phase G: PRE-pressure concurrent SWARM ----- #
     # Production agent-fleet pattern: N parallel sub-agents each issue ONE
-    # anchored request *at the same time*. Submit all N as one batch so
-    # vLLM schedules them concurrently. This is the workload that should
-    # actually expose LPB's win — Phase D (serial) dilutes it because
-    # rehit[0] re-warms LRU's cache for rehits 1..29.
+    # anchored request at the same time. Submit all N as one batch so vLLM
+    # schedules them concurrently.
     #
     # Under LRU (anchor evicted by Phase B): all N requests independently
     # cache-miss on the anchor at submit time. The scheduler must prefill
@@ -267,11 +265,11 @@ def main() -> None:
     # Under LPB (anchor protected): all N immediately hit; only the
     # 16-token tail needs prefill.
     #
-    # NB: Phase G is placed BEFORE Phase D so it sees the post-B cache
-    # state directly. After Phase G runs, the anchor IS cached for both
-    # modes (G's swarm prefill restores it under LRU), which is why
-    # Phase D's serial measurement no longer differentiates the modes at
-    # high util — it's measuring steady-state, not cold-start.
+    # At util=0.9 the anchor often survives Phase B in both modes (KV
+    # budget >> cc-burst content), so Phase G itself shows no LRU/LPB
+    # delta there — the divergence appears in Phase H below, after
+    # Phases E + F have churned the cache enough to evict the anchor
+    # under LRU.
     N_SWARM = 30
     swarm_prompts: list[list[int]] = []
     for j in range(N_SWARM):
@@ -334,35 +332,9 @@ def main() -> None:
         elapsed_s=time.monotonic() - t_start,
     )
 
-    # ----- Phase D: anchor-rehit workload (LPB BEST CASE) ----- #
-    # MOVED here from after Phase C. Reason: the Phase C probe is itself a
-    # real anchor request whose prefill side-effect re-populates the anchor
-    # blocks at LRU's MRU end — by the time we hit Phase D, LRU's cache
-    # holds the anchor again and we cannot observe the predicted gap. By
-    # running D *before* C, rehit[0]'s ttft_cached truthfully reports the
-    # post-burst anchor-survival state (the very first rehit hasn't yet
-    # mutated the cache itself).
-    print(f"\n[{mode}] Phase D: anchor-rehit workload (30 anchored requests).")
-    N_REHIT = 30
-    for j in range(N_REHIT):
-        # Append a unique 16-token tail so the prompt is anchor + small new
-        # content (no inter-rehit caching of the tail).
-        tail_text = f"\n<|im_start|>user\n[rehit-{j:03d}] continue\n<|im_end|>\n"
-        tail_ids = tokenizer.encode(tail_text, add_special_tokens=False)
-        prompt = anchor_ids + tail_ids
-        r_t = issue(prompt, max_tokens=1)
-        r_d = issue(prompt, max_tokens=N_TPOT_TOKENS + 1)
-        log(
-            kind="rehit_turn", j=j,
-            prompt_len=len(prompt),
-            ttft_cached=r_t["cached"], ttft_wall_s=r_t["wall_s"],
-            full_cached=r_d["cached"], full_wall_s=r_d["wall_s"],
-            output_tokens=r_d["output_tokens"],
-            elapsed_s=time.monotonic() - t_start,
-        )
-        if j in (0, 1, N_REHIT // 2, N_REHIT - 1):
-            print(f"  rehit[{j:>2}] ttft_cached={r_t['cached']:>5} "
-                  f"ttft_wall={r_t['wall_s']*1000:.0f}ms")
+    # (Phase D — serial anchor re-hit — was removed: after Phase G's batched
+    # submission both modes have the anchor cached again, so D's measurement
+    # is tied by construction. Phase H below is the real LPB-best-case test.)
 
     # ----- Phase E: no-shared-prefix cold flow (LPB hot-path overhead) ----- #
     # 50 short unique 2K-token prompts with TRULY random tokens (per-trial
@@ -540,15 +512,13 @@ def main() -> None:
         elapsed_s=time.monotonic() - t_start,
     )
 
-    # ----- Phase C: final anchor probe (DIAGNOSTIC ONLY) -----
-    # Now meaningless as a "post-burst survival" signal because Phase D
-    # rehit[0] already covered that, and Phases D/E/F have churned the
-    # cache. Kept for diagnostic completeness — under LPB this should
-    # still show anchor cached (high LPB score from Phase A), under LRU
-    # it will likely show anchor evicted by the Phase E/F cold flows.
+    # ----- Phase C: final anchor probe (DIAGNOSTIC) -----
+    # Binary anchor-survival check after the full pipeline. Under LPB
+    # the anchor's score keeps it cached; under LRU the Phase E + F
+    # cold flow + decoy churn evict it.
     r = issue(anchor_ids, max_tokens=1)
     pct = 100 * r["cached"] / anchor_len
-    print(f"\n[{mode}] FINAL anchor probe (diagnostic, post-D/E/F): "
+    print(f"\n[{mode}] FINAL anchor probe (post-E/F/H): "
           f"cached={r['cached']}/{anchor_len} ({pct:.1f}%)")
     log(kind="anchor_probe", label="final",
         cached=r["cached"], anchor_len=anchor_len, wall_s=r["wall_s"],
