@@ -191,6 +191,11 @@ class BlockPool:
         self.cached_partial_block_map: dict[
             "BlockHashWithGroupId", "KVCacheBlock"
         ] = {}
+        # Reverse index: block_id → its partial-cache key. Enables O(1)
+        # eviction when a block leaves the partial cache (e.g. the block
+        # was popped from free queue for reuse, or evict_blocks was called).
+        # Each block has at most one partial-cache entry at a time.
+        self.partial_cache_key_by_block_id: dict[int, tuple] = {}
         # Lightweight counters so 02_partial_cache_micro.py can sanity-check
         # that we're populating the map even before the hit-side is wired.
         self._partial_cache_insertions: int = 0
@@ -274,7 +279,15 @@ class BlockPool:
         if key in self.cached_partial_block_map:
             # Some other request already cached this exact partial; skip.
             return False
+        # If this physical block was previously in the partial cache under
+        # a DIFFERENT key (e.g. a prior turn cached a shorter partial in the
+        # same block, then the same request grew the partial), evict the
+        # stale entry so we don't have two map entries for one block_id.
+        prior_key = self.partial_cache_key_by_block_id.pop(partial_block.block_id, None)
+        if prior_key is not None:
+            self.cached_partial_block_map.pop(prior_key, None)
         self.cached_partial_block_map[key] = partial_block
+        self.partial_cache_key_by_block_id[partial_block.block_id] = key
         self._partial_cache_insertions += 1
         if self._partial_cache_insertions <= 16:
             logger.info(
@@ -343,6 +356,13 @@ class BlockPool:
         block = self.cached_partial_block_map.get(key)
         if block is not None:
             self._partial_cache_hits += 1
+            # Destructive hit: remove from the partial cache so subsequent
+            # requests don't grab the same physical block (they'd race for
+            # the write offsets past R, corrupting each other's prefills).
+            # The hitting request now owns the block; if it ends with a
+            # different partial later, cache_partial_block will re-insert.
+            self.cached_partial_block_map.pop(key, None)
+            self.partial_cache_key_by_block_id.pop(block.block_id, None)
         return block
 
     def cache_full_blocks(
@@ -524,6 +544,17 @@ class BlockPool:
             # eviction is not needed
             return False
 
+        # Also drop any partial-cache entry for this block (Finding M.4/M.5).
+        # _maybe_evict_cached_block runs when a freed block is grabbed for
+        # reuse; the next request to claim the block would write past R,
+        # invalidating any cached-partial-content readers.
+        prior_partial_key = self.partial_cache_key_by_block_id.pop(
+            block.block_id, None
+        )
+        if prior_partial_key is not None:
+            self.cached_partial_block_map.pop(prior_partial_key, None)
+            self._partial_cache_evictions += 1
+
         block.reset_hash()
 
         if self.enable_kv_cache_events:
@@ -608,6 +639,9 @@ class BlockPool:
 
         # Remove all hashes so that no new blocks will hit.
         self.cached_block_hash_to_block = BlockHashToBlockMap()
+        # Reset partial-cache too (Finding M.4/M.5).
+        self.cached_partial_block_map.clear()
+        self.partial_cache_key_by_block_id.clear()
 
         # Remove all hashes from all blocks.
         for block in self.blocks:
