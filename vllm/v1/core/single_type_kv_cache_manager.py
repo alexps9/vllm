@@ -5,7 +5,10 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Sequence
 
+from vllm.logger import init_logger
 from vllm.utils.math_utils import cdiv
+
+logger = init_logger(__name__)
 from vllm.v1.core.block_pool import BlockPool
 from vllm.v1.core.kv_cache_utils import (
     BlockHashList,
@@ -479,6 +482,46 @@ class SingleTypeKVCacheManager(ABC):
 
 
 class FullAttentionManager(SingleTypeKVCacheManager):
+    def cache_blocks(
+        self,
+        request: Request,
+        num_tokens: int,
+        alignment_tokens: int | None = None,
+    ) -> None:
+        """Wraps the base ``cache_blocks`` to also cache the *partial* last
+        block — Finding M (interlayer/partial-block bubble). Only attention
+        groups go through this path (mamba state is per-block, can't be
+        sub-cached). No-op behaviour unless ``VLLM_PARTIAL_CACHE_ENABLED=1``
+        is set in env (the cache_partial_block helper short-circuits).
+        """
+        super().cache_blocks(request, num_tokens, alignment_tokens)
+        import os  # noqa: PLC0415
+        if os.environ.get("VLLM_PARTIAL_CACHE_DEBUG", "0") == "1":
+            logger.info(
+                "[interlayer/full_attn_cache] req=%s num_tokens=%d "
+                "block_size=%d num_full=%d partial=%d alignment=%s",
+                request.request_id, num_tokens, self.block_size,
+                num_tokens // self.block_size,
+                num_tokens - (num_tokens // self.block_size) * self.block_size,
+                alignment_tokens,
+            )
+        num_full_blocks = num_tokens // self.block_size
+        partial_len = num_tokens - num_full_blocks * self.block_size
+        if partial_len <= 0:
+            return
+        blocks = self.req_to_blocks.get(request.request_id)
+        if not blocks or num_full_blocks >= len(blocks):
+            return
+        partial_block = blocks[num_full_blocks]
+        self.block_pool.cache_partial_block(
+            request=request,
+            partial_block=partial_block,
+            num_full_blocks=num_full_blocks,
+            partial_len=partial_len,
+            block_size=self.block_size,
+            kv_cache_group_id=self.kv_cache_group_id,
+        )
+
     @classmethod
     def find_longest_cache_hit(
         cls,

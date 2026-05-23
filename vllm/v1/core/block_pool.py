@@ -180,6 +180,23 @@ class BlockPool:
         # Cache for block lookup
         self.cached_block_hash_to_block: BlockHashToBlockMap = BlockHashToBlockMap()
 
+        # ----- Interlayer / partial-block cache (Finding M in dev/interlayer/) -----
+        # Separate map from full-block cache: keyed by the *partial* hash
+        # (parent_full_block_hash + R + xxh3-of-first-R-tokens) and stores the
+        # KVCacheBlock that holds those R valid tokens in its first R slots.
+        # Populated by FullAttentionManager.cache_blocks on request finish.
+        # Read by FullAttentionManager.find_longest_cache_hit to detect a
+        # partial-extension hit beyond the full-block prefix.
+        # Empty unless `VLLM_PARTIAL_CACHE_ENABLED=1` is set in env.
+        self.cached_partial_block_map: dict[
+            "BlockHashWithGroupId", "KVCacheBlock"
+        ] = {}
+        # Lightweight counters so 02_partial_cache_micro.py can sanity-check
+        # that we're populating the map even before the hit-side is wired.
+        self._partial_cache_insertions: int = 0
+        self._partial_cache_hits: int = 0
+        self._partial_cache_evictions: int = 0
+
         # To represent a placeholder block with block_id=0.
         # The ref_cnt of null_block is not maintained, needs special care to
         # avoid freeing it.
@@ -217,6 +234,116 @@ class BlockPool:
                 return None
             cached_blocks.append(block)
         return cached_blocks
+
+    def cache_partial_block(
+        self,
+        request: Request,
+        partial_block: KVCacheBlock,
+        num_full_blocks: int,
+        partial_len: int,
+        block_size: int,
+        kv_cache_group_id: int,
+        hash_function: Any = None,
+    ) -> bool:
+        """Cache a partial block at end of request — Finding M (interlayer).
+
+        Computes a partial-content hash for the first ``partial_len`` tokens
+        of the partial last block of a request, and indexes the block in
+        ``cached_partial_block_map`` so that a future request with the same
+        prefix and the same ``partial_len`` can find it.
+
+        Called by ``FullAttentionManager.cache_blocks`` (and only that
+        manager; mamba groups don't cache partial blocks because mamba
+        state isn't stored at sub-block granularity).
+
+        No-op (returns False) unless ``VLLM_PARTIAL_CACHE_ENABLED=1`` is set
+        — keeps the hot-path silent until we wire the hit-side reader.
+
+        Returns True if the partial block was inserted.
+        """
+        import os  # noqa: PLC0415 — local import keeps cold path cheap
+        if os.environ.get("VLLM_PARTIAL_CACHE_ENABLED", "0") != "1":
+            return False
+        if partial_len <= 0 or partial_len >= block_size:
+            return False
+        if partial_block.is_null:
+            return False
+        key = self._compute_partial_key(
+            request, num_full_blocks, partial_len, block_size, kv_cache_group_id
+        )
+        if key in self.cached_partial_block_map:
+            # Some other request already cached this exact partial; skip.
+            return False
+        self.cached_partial_block_map[key] = partial_block
+        self._partial_cache_insertions += 1
+        if self._partial_cache_insertions <= 16:
+            logger.info(
+                "[interlayer/partial_cache] insert #%d: "
+                "req_id=%s num_full_blocks=%d partial_len=%d/%d block_id=%d "
+                "map_size=%d",
+                self._partial_cache_insertions,
+                request.request_id, num_full_blocks, partial_len, block_size,
+                partial_block.block_id,
+                len(self.cached_partial_block_map),
+            )
+        return True
+
+    def _compute_partial_key(
+        self,
+        request: Request,
+        num_full_blocks: int,
+        partial_len: int,
+        block_size: int,
+        kv_cache_group_id: int,
+    ) -> tuple:
+        """Build a content-addressable key for a partial-block cache entry.
+        Same first ``num_full_blocks`` block hashes + same ``partial_len`` +
+        same partial-content tokens → same key. Independent of vLLM's hash
+        function configuration (sha256/xxhash/etc) since this is a local
+        secondary cache and collision risk is low at session scope.
+        """
+        parent_hash = (
+            request.block_hashes[num_full_blocks - 1] if num_full_blocks > 0
+            else None
+        )
+        partial_start = num_full_blocks * block_size
+        partial_tokens = tuple(
+            request.all_token_ids[partial_start: partial_start + partial_len]
+        )
+        return (parent_hash, partial_len, partial_tokens, kv_cache_group_id)
+
+    def get_cached_partial_block(
+        self,
+        request: Request,
+        num_full_blocks: int,
+        partial_len: int,
+        block_size: int,
+        kv_cache_group_id: int,
+        hash_function: Any = None,
+    ) -> KVCacheBlock | None:
+        """Look up a partial-block cache entry — Finding M (interlayer).
+
+        Reverse of ``cache_partial_block``. Recomputes the partial hash
+        from the request's token ids at the matching position and returns
+        the cached block if present.
+
+        Hit-side bookkeeping; the caller is responsible for actually using
+        the returned block (bumping ref_cnt, threading into block_table,
+        adjusting per-group num_computed_tokens). Today the hit-side is
+        not yet wired — this helper exists to support an isolated test.
+        """
+        import os  # noqa: PLC0415
+        if os.environ.get("VLLM_PARTIAL_CACHE_ENABLED", "0") != "1":
+            return None
+        if partial_len <= 0 or partial_len >= block_size:
+            return None
+        key = self._compute_partial_key(
+            request, num_full_blocks, partial_len, block_size, kv_cache_group_id
+        )
+        block = self.cached_partial_block_map.get(key)
+        if block is not None:
+            self._partial_cache_hits += 1
+        return block
 
     def cache_full_blocks(
         self,
