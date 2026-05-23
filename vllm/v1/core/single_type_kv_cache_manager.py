@@ -491,6 +491,12 @@ class FullAttentionManager(SingleTypeKVCacheManager):
         # last cached partial_len so we skip work when nothing changed.
         # Cleared in free().
         self._last_cached_partial_len: dict[str, int] = {}
+        # M.10 root-cause: distribution of cache_blocks calls.
+        self._cache_blocks_total: int = 0
+        self._cache_blocks_decode: int = 0
+        self._cache_blocks_insert_off: int = 0
+        self._cache_blocks_dedup_hit: int = 0
+        self._cache_blocks_full_path: int = 0
 
     def cache_blocks(
         self,
@@ -505,6 +511,22 @@ class FullAttentionManager(SingleTypeKVCacheManager):
         is set in env (the cache_partial_block helper short-circuits).
         """
         super().cache_blocks(request, num_tokens, alignment_tokens)
+        self._cache_blocks_total += 1
+        if self._cache_blocks_total % 500 == 0:
+            logger.info(
+                "[interlayer/cache_blocks] tot=%d decode=%d insert_off=%d "
+                "dedup_hit=%d full_path=%d",
+                self._cache_blocks_total, self._cache_blocks_decode,
+                self._cache_blocks_insert_off, self._cache_blocks_dedup_hit,
+                self._cache_blocks_full_path,
+            )
+        # M.9 root-cause hunt: VLLM_PARTIAL_CACHE_INSERT_OFF=1 disables
+        # the insert path entirely so we can compare with a build that
+        # ONLY has the lookup path (which short-circuits on empty map).
+        import os  # noqa: PLC0415
+        if os.environ.get("VLLM_PARTIAL_CACHE_INSERT_OFF", "0") == "1":
+            self._cache_blocks_insert_off += 1
+            return
         # M.9 fix: skip partial-cache writes during decode steps.
         # During decode, partial_len grows by 1 per step but the
         # intermediate entries are useless — only the FINAL one (at
@@ -517,6 +539,7 @@ class FullAttentionManager(SingleTypeKVCacheManager):
         # multi-turn pattern (turn N's content = turn N+1's prefix) still
         # gets the prompt-boundary entry.
         if num_tokens > request.num_prompt_tokens:
+            self._cache_blocks_decode += 1
             return  # decode step; the partial-cache entry from the prefill
                     # boundary still applies for future turns whose prefix
                     # ends at this request's prompt boundary.
@@ -524,7 +547,9 @@ class FullAttentionManager(SingleTypeKVCacheManager):
         partial_len = num_tokens - num_full_blocks * self.block_size
         last = self._last_cached_partial_len.get(request.request_id, -1)
         if partial_len == last:
+            self._cache_blocks_dedup_hit += 1
             return
+        self._cache_blocks_full_path += 1
         if partial_len <= 0:
             self._last_cached_partial_len.pop(request.request_id, None)
             return

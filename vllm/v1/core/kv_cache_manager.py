@@ -237,12 +237,21 @@ class KVCacheManager:
             and len(self.coordinator.kv_cache_config.kv_cache_groups) == 1
             and num_new_computed_tokens > 0
         ):
-            num_new_computed_tokens, computed_blocks = self._try_partial_extension(
+            new_num, new_blocks = self._try_partial_extension(
                 request,
                 num_new_computed_tokens,
                 computed_blocks,
                 max_cache_hit_length,
             )
+            # Diagnostic mode (M.9 root-cause hunt): when
+            # VLLM_PARTIAL_CACHE_PROBE_ONLY=1, run the cache+lookup paths
+            # but DON'T APPLY the partial extension. Lets us isolate
+            # whether the throughput regression comes from cache-side
+            # per-step overhead vs hit-side application to the request.
+            if os.environ.get("VLLM_PARTIAL_CACHE_PROBE_ONLY", "0") == "1":
+                pass  # discard new_num, new_blocks
+            else:
+                num_new_computed_tokens, computed_blocks = new_num, new_blocks
 
         if self.log_stats:
             assert self.prefix_cache_stats is not None
@@ -261,16 +270,13 @@ class KVCacheManager:
         computed_blocks: tuple[list, ...],
         max_cache_hit_length: int,
     ) -> tuple[int, tuple[list, ...]]:
-        """Finding M.5/M.9: probe the partial-block cache for an R-token
+        """Finding M.5/M.9/M.10: probe the partial-block cache for an R-token
         extension past the K full blocks that the coordinator returned.
 
-        Uses block_pool.get_partial_extensions_for() to look up ONLY the
-        partial_len values that exist for this request's parent prefix.
-        Avoids the prior O(block_size) probe-every-R fallback that ate
-        ~18% of decode-time wall on the cc workload (M.9 first run).
-
-        Returns the (possibly bumped) num_new_computed_tokens and the
-        (possibly extended-by-1-block) computed_blocks.
+        Returns NEW tuple of lists (does not mutate caller's). This is
+        critical so probe-only diagnostic mode is actually side-effect-free,
+        AND so the caller can choose whether to apply the extension based
+        on the bumped num_computed_tokens.
         """
         # We know there's exactly 1 group (caller checked).
         groups = self.coordinator.kv_cache_config.kv_cache_groups
@@ -281,9 +287,6 @@ class KVCacheManager:
         max_extension = max_cache_hit_length - num_new_computed_tokens
         if max_extension <= 0:
             return num_new_computed_tokens, computed_blocks
-        # Look up indexed candidates: only the R values that exist for this
-        # parent. Sorted longest-first. Average list length on real workloads
-        # ≈ 1 (each parent has one cached turn-tail at any time).
         candidates = self.block_pool.get_partial_extensions_for(
             request=request,
             num_full_blocks=num_full_blocks,
@@ -301,10 +304,12 @@ class KVCacheManager:
                 kv_cache_group_id=group_id,
             )
             if partial_block is not None:
-                # Found it. Add the partial block to the request's computed
-                # blocks (one extra block past the K full blocks).
-                computed_blocks[0].append(partial_block)
-                return num_new_computed_tokens + R, computed_blocks
+                # NEW LIST per group; preserve original tuple structure.
+                new_blocks = tuple(
+                    list(g) for g in computed_blocks
+                )
+                new_blocks[0].append(partial_block)
+                return num_new_computed_tokens + R, new_blocks
         return num_new_computed_tokens, computed_blocks
 
     def allocate_slots(

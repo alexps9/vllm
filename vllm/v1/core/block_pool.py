@@ -205,6 +205,14 @@ class BlockPool:
         self._partial_cache_insertions: int = 0
         self._partial_cache_hits: int = 0
         self._partial_cache_evictions: int = 0
+        # M.10 root-cause: cumulative wall-time spent in partial-cache hot
+        # paths, reported at engine shutdown. Helps pinpoint whether the
+        # throughput regression comes from cache_partial_block, lookup,
+        # or somewhere else entirely.
+        self._partial_cache_insert_time: float = 0.0
+        self._partial_cache_lookup_time: float = 0.0
+        self._partial_cache_compute_key_time: float = 0.0
+        self._partial_cache_compute_key_calls: int = 0
 
         # To represent a placeholder block with block_id=0.
         # The ref_cnt of null_block is not maintained, needs special care to
@@ -244,6 +252,22 @@ class BlockPool:
             cached_blocks.append(block)
         return cached_blocks
 
+    @staticmethod
+    def report_partial_cache_timings(pool: "BlockPool") -> None:
+        """Print accumulated partial-cache timing for root-cause analysis."""
+        if pool._partial_cache_compute_key_calls == 0:
+            return
+        logger.info(
+            "[interlayer/partial_cache] timings: insert=%.3fs lookup=%.3fs "
+            "compute_keys=%.3fs (%d calls, %.3f us each) inserts=%d hits=%d evictions=%d",
+            pool._partial_cache_insert_time, pool._partial_cache_lookup_time,
+            pool._partial_cache_compute_key_time,
+            pool._partial_cache_compute_key_calls,
+            pool._partial_cache_compute_key_time / pool._partial_cache_compute_key_calls * 1e6,
+            pool._partial_cache_insertions, pool._partial_cache_hits,
+            pool._partial_cache_evictions,
+        )
+
     def cache_partial_block(
         self,
         request: Request,
@@ -277,12 +301,15 @@ class BlockPool:
             return False
         if partial_block.is_null:
             return False
+        import time as _t  # noqa: PLC0415
+        _t0 = _t.perf_counter()
         outer_key, inner_key = self._compute_partial_keys(
             request, num_full_blocks, partial_len, block_size, kv_cache_group_id
         )
         inner = self.cached_partial_block_map.get(outer_key)
         if inner is not None and inner_key in inner:
             # Some other request already cached this exact partial; skip.
+            self._partial_cache_insert_time += _t.perf_counter() - _t0
             return False
         # If this physical block was previously in the partial cache under
         # a DIFFERENT key (e.g. a prior turn cached a shorter partial in the
@@ -297,16 +324,20 @@ class BlockPool:
         inner[inner_key] = partial_block
         self.partial_cache_key_by_block_id[partial_block.block_id] = (outer_key, inner_key)
         self._partial_cache_insertions += 1
-        if self._partial_cache_insertions <= 16:
+        if self._partial_cache_insertions <= 4 or self._partial_cache_insertions % 100 == 0:
             logger.info(
                 "[interlayer/partial_cache] insert #%d: "
-                "req_id=%s num_full_blocks=%d partial_len=%d/%d block_id=%d "
-                "outer_keys=%d inner_for_parent=%d",
+                "req_id=%s partial_len=%d/%d block_id=%d outer_keys=%d "
+                "[timings] insert=%.1fms lookup=%.1fms compute_keys=%.1fms (%d calls)",
                 self._partial_cache_insertions,
-                request.request_id, num_full_blocks, partial_len, block_size,
-                partial_block.block_id,
-                len(self.cached_partial_block_map), len(inner),
+                request.request_id, partial_len, block_size,
+                partial_block.block_id, len(self.cached_partial_block_map),
+                self._partial_cache_insert_time * 1000,
+                self._partial_cache_lookup_time * 1000,
+                self._partial_cache_compute_key_time * 1000,
+                self._partial_cache_compute_key_calls,
             )
+        self._partial_cache_insert_time += _t.perf_counter() - _t0
         return True
 
     def _remove_partial_entry(self, full_key: tuple) -> None:
@@ -360,16 +391,48 @@ class BlockPool:
         outer_key = (parent_full_block_hash, kv_cache_group_id)
         inner_key = (partial_len, hash(partial_token_ids))
         """
+        import time as _t  # noqa: PLC0415
+        _t0 = _t.perf_counter()
         parent_hash = (
             request.block_hashes[num_full_blocks - 1] if num_full_blocks > 0
             else None
         )
         partial_start = num_full_blocks * block_size
-        partial_tokens = tuple(
-            request.all_token_ids[partial_start: partial_start + partial_len]
-        )
+        # M.10 root-cause: VLLM_PARTIAL_CACHE_TRIVIAL_KEY=1 skips the
+        # 1024-token tuple build (uses just request_id + partial_len).
+        # Diagnostic only — semantically wrong (no content-addressing).
+        import os as _os  # noqa: PLC0415
+        if _os.environ.get("VLLM_PARTIAL_CACHE_TRIVIAL_KEY", "0") == "1":
+            partial_tokens = (request.request_id, partial_len)
+        elif _os.environ.get("VLLM_PARTIAL_CACHE_LEN_KEY", "0") == "1":
+            # Insert keyed by partial_len only (no content hash). Hits whenever
+            # parent matches and partial_len matches. Collision risk = wrong
+            # content with right length under same parent. For real cc
+            # conversations this is essentially zero (length-aligned divergent
+            # content under same parent doesn't happen by accident).
+            partial_tokens = ()
+        elif _os.environ.get("VLLM_PARTIAL_CACHE_SPARSE_KEY", "0") == "1":
+            # Sparse content-addressing: hash only the first 8 and last 8
+            # tokens of the partial. Collision risk: same prefix + same
+            # boundary tokens but different middle = wrong cache hit. For
+            # cc workload this is highly unlikely (tokens diverge token-by-
+            # token between conversations).
+            tids = request.all_token_ids  # ConstantList
+            n = partial_len
+            if n <= 16:
+                partial_tokens = tuple(tids[partial_start: partial_start + n])
+            else:
+                head = tuple(tids[partial_start: partial_start + 8])
+                tail = tuple(tids[partial_start + n - 8: partial_start + n])
+                partial_tokens = head + tail
+        else:
+            partial_tokens = tuple(
+                request.all_token_ids[partial_start: partial_start + partial_len]
+            )
         outer_key = (parent_hash, kv_cache_group_id)
         inner_key = (partial_len, hash(partial_tokens))
+        self._partial_cache_compute_key_time += _t.perf_counter() - _t0
+        self._partial_cache_compute_key_calls += 1
         return outer_key, inner_key
 
     def get_cached_partial_block(
@@ -391,22 +454,57 @@ class BlockPool:
             return None
         if partial_len <= 0 or partial_len >= block_size:
             return None
-        outer_key, inner_key = self._compute_partial_keys(
-            request, num_full_blocks, partial_len, block_size, kv_cache_group_id
-        )
-        inner = self.cached_partial_block_map.get(outer_key)
-        if inner is None:
-            return None
-        block = inner.get(inner_key)
+        import time as _t  # noqa: PLC0415
+        _t0 = _t.perf_counter()
+        # M.10 fast path: VLLM_PARTIAL_CACHE_FAST_LOOKUP=1 skips the
+        # content-tokens tuple build at lookup time. Just uses
+        # (parent_hash, group_id, partial_len) — collision risk is
+        # low for single-conversation workloads where the destructive
+        # hit removes the entry after first use anyway.
+        if os.environ.get("VLLM_PARTIAL_CACHE_FAST_LOOKUP", "0") == "1":
+            parent_hash = (
+                request.block_hashes[num_full_blocks - 1] if num_full_blocks > 0
+                else None
+            )
+            outer_key = (parent_hash, kv_cache_group_id)
+            inner = self.cached_partial_block_map.get(outer_key)
+            if inner is None:
+                self._partial_cache_lookup_time += _t.perf_counter() - _t0
+                return None
+            # Find ANY entry with matching partial_len (ignore tokens hash).
+            block = None
+            for (R, _tk_hash), candidate in inner.items():
+                if R == partial_len:
+                    block = candidate
+                    inner_key = (R, _tk_hash)
+                    break
+        else:
+            outer_key, inner_key = self._compute_partial_keys(
+                request, num_full_blocks, partial_len, block_size, kv_cache_group_id
+            )
+            inner = self.cached_partial_block_map.get(outer_key)
+            if inner is None:
+                self._partial_cache_lookup_time += _t.perf_counter() - _t0
+                return None
+            block = inner.get(inner_key)
+        # M.10 diagnostic: force misses regardless of map content.
+        if os.environ.get("VLLM_PARTIAL_CACHE_FORCE_MISS", "0") == "1":
+            block = None
         if block is not None:
             self._partial_cache_hits += 1
-            # Destructive hit: remove from the partial cache so subsequent
-            # requests don't grab the same physical block (they'd race for
-            # the write offsets past R, corrupting each other's prefills).
-            # The hitting request now owns the block; if it ends with a
-            # different partial later, cache_partial_block will re-insert.
-            self._remove_partial_entry((outer_key, inner_key))
-            self.partial_cache_key_by_block_id.pop(block.block_id, None)
+            # M.10 diagnostic: VLLM_PARTIAL_CACHE_NON_DESTRUCTIVE=1 keeps
+            # the entry in the map after hit (would normally be racy across
+            # requests; for single-request workloads it's fine).
+            import os as _os2  # noqa: PLC0415
+            if _os2.environ.get("VLLM_PARTIAL_CACHE_NON_DESTRUCTIVE", "0") != "1":
+                # Destructive hit: remove from the partial cache so subsequent
+                # requests don't grab the same physical block (they'd race for
+                # the write offsets past R, corrupting each other's prefills).
+                # The hitting request now owns the block; if it ends with a
+                # different partial later, cache_partial_block will re-insert.
+                self._remove_partial_entry((outer_key, inner_key))
+                self.partial_cache_key_by_block_id.pop(block.block_id, None)
+        self._partial_cache_lookup_time += _t.perf_counter() - _t0
         return block
 
     def cache_full_blocks(
