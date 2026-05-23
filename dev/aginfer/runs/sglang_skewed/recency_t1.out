@@ -1,0 +1,24 @@
+[recency t1] Generating 12 system prompts (12000 tokens each)...
+[recency t1] sys lens: min=12749 max=12935 mean=12831
+[recency t1] Zipf weights (alpha=1.5): ['0.489', '0.173', '0.094', '0.061', '0.044', '0.033', '0.026', '0.022', '0.018', '0.015', '0.013', '0.012']
+[recency t1] empirical group counts: [97, 37, 19, 12, 6, 11, 3, 6, 7, 0, 2, 0]
+[recency t1] Sending 200 requests @ RPS=2.0...
+
+=== recency t1 results ===
+total wall: 99.7s, mean req: 330.6ms, median: 345.0ms
+cache hit %: 30.0% (720896/2400000 system-prompt tokens cached)
+
+Per-group breakdown:
+   g count  mean_ms  cached_pct
+   0    97    268.5       50.7%
+   1    37    344.3       22.1%
+   2    19    388.5        3.6%
+   3    12    415.2        5.7%
+   4     6    446.3        0.0%
+   5    11    363.0       12.4%
+   6     3    421.4        0.0%
+   7     6    452.7        0.0%
+   8     7    476.2        0.0%
+  10     2    498.0        0.0%
+
+Saved to /scratch/yuzhou/projects/vllm-songyang/dev/aginfer/runs/sglang_skewed/recency_t1.json

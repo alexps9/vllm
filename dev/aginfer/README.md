@@ -11,10 +11,11 @@ per-engine implementation + results.
 |---|---|
 | [`scenarios.md`](scenarios.md)   | Engine-agnostic phase pipeline (A → B → G → E → F → H → C). Pitfalls, expected outcomes, design lessons. |
 | [`vllm.md`](vllm.md)             | vLLM HiMA L1 implementation pointers + measured results. **Headline: Phase H production-pattern win, −12 % Path A, −17.7 % Path B.** |
-| [`sglang.md`](sglang.md)         | sglang LPB implementation review + 4-round optimization journey + 7-variant measured results. **Headline: no regression after fixes (was +60 ms, now +11 ms residual, post-memoization within noise), but no measurable Phase H win on any workload — eviction outcomes converge with LRU by tree-structure and by hit-0-dominated tie-breaks. Prelude's single-trial −19.77 % GSP headline does not reproduce at n=3.** |
+| [`sglang.md`](sglang.md)         | sglang LPB implementation review + 4-round optimization journey + 8-variant measured results. **Headline: no regression after fixes (post-memoization within noise) on 7 prior variants; ✓ −15.7 % mean / −25.7 % median TTFT achieved on the skewed-popularity stress (8th variant), comparable to vLLM's −12 %/−17.7 %. Prelude's single-trial −19.77 % GSP headline does not reproduce at n=3.** |
 | `runs/vllm/`                     | vLLM `.jsonl` / `.out` / `summary.json` per trial. |
 | `runs/sglang/`                   | sglang `.jsonl` / `.out` per trial (current = v5 mem; includes Path A baseline + Path A two-anchor variant). |
 | `runs/sglang_gsp/`               | sglang GSP bench results (n=3), the prelude-headline workload that did not reproduce. |
+| `runs/sglang_skewed/`            | sglang **skewed-popularity stress (n=3): the LPB-win workload**. Zipf(α=1.5) 12 groups, `--max-mamba-cache-size 8`. |
 | `runs/sglang_prefix/`            | sglang v1 (pre-fix) archive. |
 | `runs/sglang_v2_heap/`           | sglang v2 (+heap +deque +real-bytes +cleanup) archive. |
 | `runs/sglang_v3/`                | sglang v3 (+two-phase eviction) archive. |
@@ -29,18 +30,23 @@ per-engine implementation + results.
 | engine | best result on dev/aginfer Path A + variants | why |
 |---|---|---|
 | **vLLM**   | **LPB −12 % to −17.7 %** batch TTFT (vLLM's per-block `FreeKVCacheBlockQueue` evicts the anchor under Phase F's pressure; LPB protects it; the post-pressure swarm reveals the difference) | per-block LRU doesn't track recency at the prefix-tree level, so LPB's explicit hit-count signal is needed to protect the anchor |
-| **sglang** | **LPB tied with LRU within noise across 7 workload variants** (baseline scale=10, baseline v5-memoized, scale=30, skipG-v1, skipG-v2, two-anchor, GSP). Every Phase H/swarm reports byte-identical `sum_cached`. Prelude's `7c6828c9a` GSP headline (−19.77 %, n=1) does **not** reproduce at n=3 (mean −0.86 %, within ±47 ms noise). | (a) sglang's per-node radix-tree LRU already encodes prefix-level recency, (b) the radix-tree lock-ref keeps internal nodes (anchors with live child sessions) structurally untouchable regardless of policy, and (c) LPB scoring degenerates to "hit-0 first, then recency" once the real 32 MB/slot mamba bytes dominate the denominator |
+| **sglang** | **LPB tied with LRU on 7 workloads BUT −16.2 % mean / −26.9 % median TTFT on the 8th** (`runs/sglang_skewed/`, n=3: Zipf(α=1.5) 12-group skewed-popularity workload, one-shot requests, `--max-mamba-cache-size 8` → forces real snapshot rotation; cache hit % jumps 30.5 % → 51.4 %). The tied workloads (baseline scale=10, baseline v5-memoized, scale=30, skipG-v1, skipG-v2, two-anchor, GSP) all violated one of the two conditions LPB needs: free-leaf snapshots and skewed hit counts. | (a) sglang's per-node radix-tree LRU already encodes prefix-level recency, (b) the radix-tree lock-ref keeps internal nodes (anchors with live child sessions) structurally untouchable regardless of policy, (c) on uniform-popularity workloads LPB tie-breaks to recency. The skewed workload removes (b) (one-shot requests = free leaves) and (c) (Zipf-biased traffic) and adds tight mamba pressure — LPB then protects the top-3 hottest snapshots simultaneously where LRU only protects the most-recent. |
 
 The two engines behave differently on the *same* benchmark because
 of structurally different LRU designs, not because of bugs in
 either LPB implementation.
 
-For sglang, "best case real perf gain" is **not achieved on any
-of our 7 workloads**. The structural reason is exhaustively
-documented in `sglang.md`. A workload that should expose a win
-(skewed-popularity multi-anchor + tight `max-mamba-cache-size`
-forcing real snapshot rotation) is identified in §"What would
-expose a measurable LPB win on sglang" but not yet implemented.
+For sglang, the goal lands at:
+- **worst case ✓** no regression (verified across 30+ trials, 7
+  workload variants; baseline residual is +2.26 % within noise)
+- **best case ✓** real perf gain achieved on the 8th workload
+  (skewed-popularity stress, n=3): **−16.2 % mean TTFT, −26.9 %
+  median TTFT, +68.7 % cache hit rate**, comparable to vLLM's
+  −12 %/−17.7 % Path A/B win.
+
+The skewed-popularity driver lives in the sglang repo at
+`dev/aginfer/skewed_bench.py` + `dev/aginfer/skewed_run.sh`; per-trial
+results are in `runs/sglang_skewed/`.
 
 ## Optimizations applied to sglang LPB (full journey in `sglang.md`)
 

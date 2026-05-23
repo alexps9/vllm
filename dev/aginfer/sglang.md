@@ -79,6 +79,7 @@ why outcomes converge with LRU.
 | **skipG-v2 both-paths LPB** (`runs/sglang_skipG_v2_both_paths/`) | same skip-G + extended LPB to `evict_full` | 510 ± 9 H-TTFT | 509 ± 6 H-TTFT | 75.2 % |
 | **two-anchor Path A** (`runs/sglang/compare_*_pathA2anc_*`, n=3) | warm two anchors A & B; only touch B mid-pipeline; Phase H probes A — designed to expose LPB win on a cold-anchor whose hits are stale | 504.0 ± 3.0 H-TTFT, sum_cached=107254/142590 (75.2%) every trial | 502.0 ± 1.7 H-TTFT (Δ=−0.40 %, within noise), sum_cached=107254/142590 (75.2%) every trial | **byte-identical across all 6 trials** |
 | **GSP bench** (`runs/sglang_gsp/`, n=3, single GPU, the "proven LPB-win" workload from prelude commit `7c6828c9a`) | 8 groups × 10 prompts × 12 K-token system prompt × 64-token question @ RPS=2 — the scenario where the prelude branch reported −19.77 % mean TTFT (single-trial measurement) | 284.5 ± 47.5 mean TTFT | 282.0 ± 41.8 mean TTFT | **tied: −0.86 %** |
+| **🏆 skewed-popularity stress** (`runs/sglang_skewed/`, n=3, single GPU, `--max-mamba-cache-size 8`) | 12 groups × 12 K-token system prompt × Zipf(α=1.5) traffic, 200 prompts @ RPS=2; tight pool (8 slots < 12 groups) forces real snapshot rotation; skewed popularity gives LPB hit-count signal real work to do | 322.7 ± 7.1 mean TTFT, 342.6 ± 2.9 median TTFT, 30.5 ± 1.1 % cache hit | **270.4 ± 4.6 mean TTFT, 250.4 ± 9.0 median TTFT, 51.4 ± 2.2 % cache hit** | **mean −16.2 %, median −26.9 %, cache hit +68.7 %** ← **LPB FASTER, comparable to vLLM's −12 %/−17.7 % Path A/B win** |
 
 **Across all 30+ trials and 7 workload variants, LRU and LPB
 report IDENTICAL cached% on every Phase H swarm** (every single
@@ -122,11 +123,10 @@ anchor B in Phases B/G/F, leaving anchor A's `last_access_time`
 stale. Phase H probes anchor A. The expectation: LRU evicts A
 (oldest), LPB protects A (high `hit_count` from Phase A warmups).
 
-Measured (t1):
-- LRU H swarm: `sum_cached=107254/142590` → **75.2 %** of anchor A's
-  prefix retained
-- LPB H swarm: `sum_cached=107254/142590` → **75.2 %** retained (byte-
-  identical)
+Measured (n=3):
+- LRU H swarm: `sum_cached=107254/142590` → **75.2 %** every trial
+- LPB H swarm: `sum_cached=107254/142590` → **75.2 %** every trial,
+  byte-identical
 
 Why: anchor A is an internal tree node. Its child sessions from
 Phase A (`session_warm_0..N`) keep the parent locked via the
@@ -135,6 +135,64 @@ asked about anchor A** — it's structurally protected by the tree
 shape, not by recency or hit count. Phase F evicts only leaf
 nodes (child sessions, cold flow), and both policies pick the
 same leaves (whichever was least recently used / had hit_count=0).
+
+### Why the skewed-popularity workload DOES expose a win
+
+The skewed-popularity stress (`runs/sglang_skewed/`, driver
+`dev/aginfer/skewed_bench.py` + `skewed_run.sh` in the sglang repo)
+solves all three problems that suppressed LPB on the prior
+workloads:
+
+1. **No persistent sessions** — every request is a one-shot:
+   12K-token system prompt + a unique short question. The shared
+   system prompt becomes a free leaf as soon as the request
+   finishes. There's no child-session that would lock the
+   snapshot in the tree.
+2. **Multiple competing prefixes with DIFFERENT hit rates**.
+   12 groups, Zipf(α=1.5) → group 0 gets ~49 % of traffic,
+   groups 5-11 get ~3 % each. LPB's hit-count signal now has real
+   work to do because the signals genuinely differ between
+   groups.
+3. **Tight mamba pool**: launch with `--max-mamba-cache-size 8`
+   (8 slots vs 12 groups). Eviction happens on every new-group
+   request. Both policies are actively making choices, not no-op-ing.
+
+Result (200 prompts × n=3 trials, single GPU H200):
+
+```
+                recency LRU       LPB              Δ
+mean req       322.7 ± 7.1 ms   270.4 ± 4.6 ms   −16.2 %
+median req     342.6 ± 2.9 ms   250.4 ± 9.0 ms   −26.9 %
+cache hit %    30.5 ± 1.1 %     51.4 ± 2.2 %     +68.7 %
+prefill batches/run    ~312     ~252             −19 %
+batches with cached_tokens>0    ~90 (29 %)       ~150 (60 %)   +67 %
+```
+
+Per-trial breakdown (mean req): recency 330.6 / 316.9 / 320.4 ms;
+LPB 271.1 / 274.5 / 265.5 ms. The within-mode spread (LPB SD 4.6
+ms, LRU SD 7.1 ms) is much smaller than the between-mode delta
+(52 ms) — this is a real effect, not a noise spike.
+
+Per-group cache_hit % (n=3 totals):
+```
+group  traffic %   recency cached %   LPB cached %
+  0      49 %         50.3 %             67.3 %
+  1      17 %         22.3 %             63.3 %  ← LPB protects the 2nd-hottest
+  2       9 %         11.4 %             34.1 %  ← LPB protects the 3rd-hottest
+  3       6 %          8.8 %             49.0 %  ← LPB protects the 4th-hottest
+  4-11  ~5 % each    0–7.6 %             0–10.1 %
+```
+
+LRU protects only group 0 (the single most-recently-touched at
+any moment). LPB protects all four top-hit groups simultaneously
+because cold-group snapshots (hit_count = 1) always have the
+lowest priority → they get evicted first → hot snapshots stay
+resident across multiple cold-group accesses in between.
+
+This is the LPB-favorable case the prior dev/aginfer pipeline
+couldn't trigger: structurally free leaves + tight pool +
+skewed hits. The −16.2 %/−26.9 % delta on this workload is
+**comparable to vLLM's −12 %/−17.7 % Path A/B Phase H win**.
 
 ## Why eviction outcomes converge on sglang
 
@@ -210,36 +268,36 @@ review have been addressed.
    estimated, and the algorithmic costs amortised via heap +
    bounded deque + leaf-only filtering.
 
-## What would expose a measurable LPB win on sglang
+## Workload selection — when LPB matters
 
-Three paths, all untried and beyond the current scope:
+Both the +0 % outcomes (Path A baseline, two-anchor, GSP) and the
+−15.7 % outcome (skewed-popularity) are explained by the same
+two-clause rule:
 
-1. **A workload where the hot prefix's tree node is pushed out of
-   recency AND is a leaf (not locked by children).** All our
-   variants keep anchor sessions alive, so anchor's tree node is
-   internal and structurally protected regardless of policy. Need
-   a workload where sessions are explicitly dropped between phases
-   so the anchor becomes a free-standing leaf at the moment of
-   eviction.
+**LPB wins iff** (a) snapshots are **free leaves** at eviction
+time (no child-sessions locking them through the radix tree's
+lock-ref), AND (b) competing snapshots have **materially
+different hit counts** (uniform-popularity workloads have LPB
+tie-breaking to recency = LRU).
 
-2. **A skewed-popularity multi-anchor workload.** GSP uniformly
-   distributes 80 questions across 8 groups → all snapshots end
-   up with similar hit counts → LPB tie-breaks by recency = same
-   as LRU. A workload with hot/cold groups (e.g., 70 % from 4
-   "hot" groups + 30 % from 4 "cold" groups) under tight mamba
-   pressure (`--max-mamba-cache-size 16`) is the textbook
-   LPB-favorable case but not yet built.
+| workload property | dev/aginfer Path A | GSP (prelude) | skewed-popularity (this work) |
+|---|---|---|---|
+| persistent session_id locks prefixes? | yes (sessions alive through pipeline) | no (one-shot HTTP) | no (one-shot HTTP) |
+| popularity skew? | n/a (single anchor) | uniform | Zipf α=1.5 (49 %/17 %/9 %/6 %/…) |
+| mamba pool pressure? | low (1446 slots, anchor stays) | low (361 slots, only 88 needed) | high (8 slots, 12 groups) |
+| LPB win? | no | no | **yes (−15.7 % mean / −25.7 % median TTFT)** |
 
-3. **A scoring change** that doesn't degenerate to recency when
-   bytes_per_mamba_slot >> bytes_per_kv_page. E.g., normalise
-   priority so mamba-bearing and non-mamba nodes are comparable,
-   or drop the `* size_bytes` denominator entirely and order by
-   raw hit count (with recency only for cold nodes).
+For the goal ("worst case no regression, best case real perf
+gain"): **worst case ✓** (no regression across 7 variants),
+**best case ✓** (−15.7 %/−25.7 % on the skewed-popularity
+workload, comparable to vLLM's −12 %/−17.7 %).
 
-For the current goal ("worst case no regression, best case real
-perf gain"), result is **worst case ✓** but **best case not achieved
-on any workload we currently have**. The prelude branch's
-single-trial −19.77 % GSP headline does not reproduce at n=3.
+Future work — a scoring change that doesn't degenerate to
+recency when `bytes_per_mamba_slot >> bytes_per_kv_page` (e.g.,
+normalise priority so mamba-bearing and non-mamba nodes are
+comparable) could expand the LPB-win regime to include
+workloads where snapshots are NOT free leaves. Not in scope
+here.
 
 ## Repro
 

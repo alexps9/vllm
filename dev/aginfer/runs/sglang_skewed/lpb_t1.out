@@ -1,0 +1,24 @@
+[lpb t1] Generating 12 system prompts (12000 tokens each)...
+[lpb t1] sys lens: min=12749 max=12935 mean=12831
+[lpb t1] Zipf weights (alpha=1.5): ['0.489', '0.173', '0.094', '0.061', '0.044', '0.033', '0.026', '0.022', '0.018', '0.015', '0.013', '0.012']
+[lpb t1] empirical group counts: [97, 37, 19, 12, 6, 11, 3, 6, 7, 0, 2, 0]
+[lpb t1] Sending 200 requests @ RPS=2.0...
+
+=== lpb t1 results ===
+total wall: 99.7s, mean req: 271.1ms, median: 248.3ms
+cache hit %: 53.6% (1286144/2400000 system-prompt tokens cached)
+
+Per-group breakdown:
+   g count  mean_ms  cached_pct
+   0    97    225.0       67.6%
+   1    37    235.5       66.4%
+   2    19    241.6       64.7%
+   3    12    384.8       17.1%
+   4     6    442.6        0.0%
+   5    11    361.7       12.4%
+   6     3    423.2        0.0%
+   7     6    424.6       11.4%
+   8     7    434.6        9.8%
+  10     2    492.8        0.0%
+
+Saved to /scratch/yuzhou/projects/vllm-songyang/dev/aginfer/runs/sglang_skewed/lpb_t1.json
