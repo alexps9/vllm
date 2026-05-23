@@ -27,8 +27,10 @@ prompts ≈ 8K tokens). See Findings M.6 and M.7 below.
 | M.5 | Hit-side prototype (KVCacheManager._try_partial_extension) for single-group configs | code | commit `a2533c8fc` + `05_hit_side_impl.md` |
 | M.6 | End-to-end validation on Qwen3-8B at block_size=256 — bubble eliminated, TTFT -24 to -45% | **validated** | `06_validation_results.md` + `runs/05_nonhybrid_{baseline,partial_cache}.{jsonl,out}` |
 | M.7 | Scaled validation at block_size=1024 — **43% TTFT win at R=800** | **validated** | `07_large_results.md` + `runs/07_nonhybrid_large_{baseline,partial_cache}.{jsonl,out}` |
+| M.8 | Hybrid (mamba) needs sub-block SSM state cache — beyond per-group plumbing | doc | `08_hybrid_architectural_blocker.md` |
+| M.9 | Real cc workload (10 sessions, 106 turns): **TTFT -16%, bubble -88%, throughput -12%** | **measured** | `09_cc_workload_results.md` + `runs/09_cc_{baseline,partial_cache}_v5.jsonl` |
 
-## Headline result (M.7)
+## Headline result (M.7 micro / M.9 real workload)
 
 Qwen3-8B, block_size=1024, K=8 full blocks, single H200:
 
@@ -46,6 +48,21 @@ Bubble eliminated on every R > 0 (uncached drops from R+16 to 16,
 i.e. -94 to -98%). Partial-cache TTFT is approximately flat ~20 ms
 across R — decoupled from bubble size. Default behavior is unchanged
 when `VLLM_PARTIAL_CACHE_ENABLED` is unset.
+
+### M.9 real cc workload (Qwen3-8B, 10 sessions, 106 turns):
+
+```
+metric                  baseline   partial    delta
+mean TTFT/turn          53.8 ms    45.3 ms    -15.84%   ← interactive win
+hit % vs prior content  91.59%     98.99%     +8.09%    ← near-perfect
+bubble tokens           51442      6147       -88.05%   ← bubble killed
+mean full_wall/turn     134 ms     152 ms     +13.99%   ← decode tradeoff
+throughput              157 tok/s  137.7 tok/s -12.27%
+```
+
+**Verdict**: net win for TTFT-sensitive interactive workloads
+(agents, chat). Net loss for bulk-generation throughput. Opt-in via
+env var so operators choose per deployment.
 
 ## Activation
 
@@ -70,10 +87,12 @@ vllm/v1/core/block_pool.py
 
 vllm/v1/core/single_type_kv_cache_manager.py
   + FullAttentionManager.cache_blocks override — populates partial cache
+  + dedups on partial_len; skips during decode (M.9 throughput fix)
 
 vllm/v1/core/kv_cache_manager.py
   + KVCacheManager._try_partial_extension() — the hit-side lookup
   + Wiring in get_computed_blocks() with single-group gate
+  + Uses block_pool.get_partial_extensions_for() to avoid O(R) probe
 ```
 
 ## Repro
