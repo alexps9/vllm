@@ -3,88 +3,115 @@
 The vLLM analog of HiMA's L2 (inter-pool / cross-pool layer). vLLM has
 ONE inflated KV pool (`block_size = 1056` on Qwen3.5-35B-A3B hybrid),
 not two pools like sglang. Sglang's "move pages between pools via
-cuMemUnmap+cuMemMap" doesn't apply. But vLLM still has a real,
+cuMemUnmap+cuMemMap" doesn't translate. But vLLM still has a real
 measurable bubble — caused by `block_size` inflation forcing each
 request's last partial block to be abandoned — and this directory is
 where we design, prototype, and measure mechanisms that eliminate it.
 
-## Status (this commit)
+## Findings (chronological)
 
-- **01_design_space.md** — full design survey: 5 candidates (partial-block cache with COW reuse, sub-block hashing, inflate-side reduction, HiMA VMM remap, tail compaction). Pick: **Candidate A (partial-block cache + COW)**.
-- **02_partial_cache_micro.py** — baseline microbench, no code changes. Shows the bubble empirically across R ∈ {0, 32, 96, 256, 512, 800, 1000, 1055}. Run output in `runs/02_partial_cache_micro.{jsonl,out}`.
+- **M.1** — `02_partial_cache_micro.py`: bubble baseline confirmed.
+  `turn2_cached` is exactly `K * block_size` for every R > 0; the
+  partial-block content is never re-cacheable.
+- **M.2** — `03_per_group_hit_length.md`: the hit-side requires
+  per-group `num_computed_tokens` because attention can skip the R
+  cached tokens but mamba must re-prefill them (SSM state only
+  cached at full-block boundaries). Architectural lift estimated at
+  ~400 LOC across 10 files for hybrid models.
+- **M.3** — `04_savings_quantified.md`: extrapolates 15-50% TTFT
+  improvement on follow-up turns (matches Finding D's 42.6% compute
+  waste at half the wall scaling).
+- **M.4** — cache-side scaffolding committed: `BlockPool.cache_partial_block` +
+  `get_cached_partial_block` methods, `FullAttentionManager.cache_blocks`
+  override that calls them, env-var gated (`VLLM_PARTIAL_CACHE_ENABLED=1`).
+- **M.5** — `05_hit_side_impl.md` + code: hit-side reader in
+  `KVCacheManager.get_computed_blocks` for single-group configs
+  (no mamba). After the coordinator returns its K-full-block hit,
+  probes the partial cache for an R-token extension. Single-group
+  only — multi-group hybrid still blocked on M.2.
 
-## Finding M.1 — the bubble is real and exactly as predicted
+## What works today
 
-Microbench setup: 8 two-turn dialogues. Turn 1 prompts of length `K *
-block_size + R` (K=2 full blocks, R = partial tail). Turn 2 issues
-turn 1's prompt + 16 fresh tokens.
-
-```
-  R     turn1_len   turn2_cached  turn2_uncached   turn2_wall_ms
-  0     2112        2112          16               663 (1st warmup spike)
-  32    2144        2112          48               80
-  96    2208        2112          112              82
-  256   2368        2112          272              81
-  512   2624        2112          528              93
-  800   2912        2112          816              82
-  1000  3112        2112          1016             77
-  1055  3167        2112          1071             149
-```
-
-**Key observation:** `turn2_cached` is **exactly 2112 for every R**.
-The partial last block from turn 1 (containing R real tokens) is
-never reused. The (16 + R) "uncached" tokens are re-prefilled on
-every follow-up turn. This is the hardcoded floor at
-[`vllm/v1/core/single_type_kv_cache_manager.py:299`]:
-
-```python
-num_full_blocks = num_tokens // self.block_size
-```
-
-…paired with the docstring at
-[`vllm/v1/core/kv_cache_coordinator.py:474`]:
-
-> "Requiring this because we don't support partial block cache hit yet."
-
-The "yet" is the design opportunity. With `block_size = 1056`, a
-single partial block can carry up to 1055 wasted tokens. The 42.6%
-workload-weighted partial-block waste measured on real cc traces
-(see `dev/README.md` Finding D) is the per-workload accumulation of
-this same effect across 50+ turns per session.
+- Hybrid (Qwen3.5-35B-A3B): bubble measured and quantified, design
+  complete. Hit-side blocked on the per-group lift.
+- Single-group (Qwen3-8B with `block_size=256`): cache-side and
+  hit-side both shipped. Theoretically a measurable TTFT win on
+  follow-up turns with non-aligned partial. Not yet validated on a
+  healthy host.
 
 ## Repro
 
+Baseline microbench on hybrid (proves the bubble exists):
 ```bash
-# Baseline microbench (no code changes, ~5 min including model load):
 CUDA_VISIBLE_DEVICES=0,1 .venv/bin/python -u dev/interlayer/02_partial_cache_micro.py \
     | tee dev/interlayer/runs/02_partial_cache_micro.out
 ```
 
-Need: 2× ≥50 GB GPU (script asks for `gpu_memory_utilization=0.35` →
-~50 GB each on H200). KMP_AFFINITY=disabled already set inside.
+Single-group prototype test (Qwen3-8B, requires `VLLM_PARTIAL_CACHE_ENABLED=1`):
+```bash
+# Baseline (env unset → should match current vLLM behavior)
+CUDA_VISIBLE_DEVICES=0 .venv/bin/python -u dev/interlayer/05_nonhybrid_microbench.py \
+    | tee dev/interlayer/runs/05_nonhybrid_baseline.out
 
-## Next steps (in this branch's roadmap)
+# Partial-cache enabled
+CUDA_VISIBLE_DEVICES=0 VLLM_PARTIAL_CACHE_ENABLED=1 .venv/bin/python -u \
+    dev/interlayer/05_nonhybrid_microbench.py \
+    | tee dev/interlayer/runs/05_nonhybrid_partial_cache.out
+```
 
-1. **03_** Prototype Candidate A under a flag (`--enable-partial-cache`):
-   - Add `PartialBlockHash` and `cached_partial_block_map` to BlockPool
-   - Modify FullAttentionManager.cache_blocks to also cache the partial last block
-   - Modify FullAttentionManager.find_longest_cache_hit to return an optional partial-extension length
-   - Modify KVCacheManager.allocate_slots to handle non-block-aligned `num_new_computed_tokens` (this lifts the limitation called out in code at `kv_cache_manager.py:217-218`)
-   - Add the COW memcpy path: when a partial hit lands, allocate a fresh block from the free queue and copy R tokens from the cached partial block into offsets `[0:R]` of the fresh block
-   - Defer mamba's partial-state handling — let mamba re-prefill the R tokens via re-compute; only attention gets the cache benefit
-2. **04_** Re-run the microbench with the flag on; expect `turn2_cached = 2112 + R` and `turn2_uncached = 16` for all R values.
-3. **05_** Extend the LRU/LPB end-to-end cc workload comparison to also vary `enable_partial_cache`. Produce Finding M.2 with TTFT/TPOT/throughput numbers.
+Acceptance criterion: with the env var set, `turn2_cached` should equal
+`turn1_len` (full prior request cached including R partial tokens),
+not just `K * block_size`. TTFT for turn 2 should be approximately
+constant across R values.
+
+## What's in code (this branch)
+
+```
+vllm/v1/core/block_pool.py
+  + cached_partial_block_map (dict)
+  + cache_partial_block(), get_cached_partial_block()
+  + _compute_partial_key()
+  + 3 counters + info log on first 16 insertions
+vllm/v1/core/single_type_kv_cache_manager.py
+  + FullAttentionManager.cache_blocks override (calls super, then partial)
+vllm/v1/core/kv_cache_manager.py
+  + KVCacheManager._try_partial_extension() — the hit-side reader
+  + plumbing in get_computed_blocks (single-group gate)
+```
+
+All gated by `VLLM_PARTIAL_CACHE_ENABLED=1`. Default behavior unchanged.
+
+## What's NOT yet done
+
+1. **Hybrid (per-group num_computed_tokens)** — the work sketched in
+   `03_per_group_hit_length.md`. Estimated ~400 LOC across scheduler,
+   request, kv_cache_coordinator, kv_cache_manager, gpu_model_runner.
+   When complete, hybrid models get the same TTFT win.
+2. **Validation on a healthy host** — the prototype hit-side ships
+   syntax-clean but unsmoke-tested due to system contention on the
+   dev machine. See `05_hit_side_impl.md` for the validation plan
+   and debugging hints.
+3. **Eviction integration** — partial cache entries are never
+   evicted today; the map grows monotonically. Need to wire
+   `evict_blocks` to also remove partial-cache entries pointing
+   at the evicted block_id.
+4. **LPB integration** — partial blocks have a different lifetime
+   from full blocks. Whether LPB scoring should treat them
+   differently is open.
 
 ## File map
 
 ```
 dev/interlayer/
 ├── README.md                       # this file
-├── 01_design_space.md              # full survey of approaches
-├── 02_partial_cache_micro.py       # baseline measurement (no code changes)
-├── 03_partial_cache_impl.py        # (not yet) the COW prototype driver
-├── 04_partial_cache_compare.py     # (not yet) on/off comparison
+├── 01_design_space.md              # full design survey (5 candidates)
+├── 02_partial_cache_micro.py       # hybrid bubble baseline (Qwen3.5-35B-A3B)
+├── 03_per_group_hit_length.md      # the architectural blocker for hybrid
+├── 04_savings_quantified.md        # TTFT win extrapolation (15-50%)
+├── 05_nonhybrid_microbench.py      # single-group testbed (Qwen3-8B)
+├── 05_hit_side_impl.md             # design + risks for the hit-side
 └── runs/
     ├── 02_partial_cache_micro.jsonl
-    └── 02_partial_cache_micro.out
+    ├── 02_partial_cache_micro.out
+    └── 02_partial_cache_micro_with_cache_side.out
 ```
