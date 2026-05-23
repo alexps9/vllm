@@ -1,4 +1,4 @@
-Found 3 LRU trial files, 3 LPB trial files.
+Sweep tag = ''. Found 3 LRU trial files, 3 LPB trial files.
   dev/compare_lru_t1.jsonl
   dev/compare_lru_t2.jsonl
   dev/compare_lru_t3.jsonl
@@ -7,7 +7,7 @@ Found 3 LRU trial files, 3 LPB trial files.
   dev/compare_lpb_t3.jsonl
 
 ==================================================================================
-LRU vs LPB on Qwen3.5-35B-A3B — multi-trial aggregate (mean ± stddev)
+LRU vs LPB on Qwen/Qwen3.5-35B-A3B — multi-trial aggregate (mean ± stddev)
 ==================================================================================
 
   ANCHOR SURVIVAL (post Phase-B burst, observed via rehit[0].ttft_cached)

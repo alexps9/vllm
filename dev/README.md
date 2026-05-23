@@ -777,7 +777,7 @@ Figures:
     scatter for Phase E + F (normalised by LRU mean). Visualises
     signal-vs-noise per metric per scenario.
 
-Repro:
+Repro (Path-0 default = util=0.35, baseline scale):
 
 ```bash
 # 6 sequential invocations (~3 min each: ~1.5 min model load + ~90 s experiment)
@@ -791,6 +791,133 @@ done
 
 # Aggregate + figures
 .venv/bin/python dev/plot_lru_vs_lpb.py | tee dev/compare_summary.out
+```
+
+#### K.A — Same experiment at production op-point (util=0.9, scale=10)
+
+Path-0 sets `util=0.35` to deliberately constrain KV so the cc-burst
+saturates the cache. The realistic production setting is `util=0.9`.
+At util=0.9 on Qwen3.5-35B-A3B (TP=2) the KV budget grows to **8.46 M
+tokens** (~8× Path-0's 1.08 M), so cc-burst alone (6.6 M total prompt
+tokens) doesn't saturate. To put pressure back on, Phase F is scaled
+up: `--phase-f-scale 10` → 50 decoys × 30 K tokens × 5 hits each
+(1.5 M tokens of decoy footprint) + 500 cold prompts × 2 K (1 M
+tokens). Combined ≈ 2.5 M (30 % of budget). Files tagged `_pathA`.
+
+Results (mean ± sample stddev, n=3 each):
+
+| phase | metric         | LRU            | LPB            | Δ        |
+|-------|----------------|---------------:|---------------:|---------:|
+| B     | TTFT (ms)      | 92.20 ± 0.68  | 92.41 ± 0.27  | +0.2 %  |
+|       | TPOT (ms/tok)  | 12.57 ± 0.10  | 12.58 ± 0.05  | +0.1 %  |
+|       | throughput     | 124.30 ± 0.75 | 124.73 ± 0.45 | +0.3 %  |
+| D     | TTFT (ms)      | 34.61 ± 0.87  | 34.28 ± 0.65  | −1.0 %  |
+| E     | TTFT (ms)      | 62.14 ± 1.15  | 61.93 ± 0.14  | −0.3 %  |
+|       | TPOT (ms/tok)  |  6.39 ± 0.53  |  6.30 ± 0.63  | −1.5 %  |
+| F     | TTFT (ms)      | 62.30 ± 0.48  | 62.02 ± 0.70  | −0.4 %  |
+|       | TPOT (ms/tok)  |  6.54 ± 0.17  |  6.54 ± 0.22  | +0.1 %  |
+|       | throughput     | 172.68 ± 0.76 | 171.82 ± 1.07 | −0.5 %  |
+
+Anchor survival:
+
+|                              | LRU           | LPB             |
+|------------------------------|--------------:|----------------:|
+| `rehit[0].ttft_cached`       | 4224 / 4737   | 4224 / 4737     |
+| Phase C (FINAL, post-D/E/F)  | **0 / 4737**  | **4224 / 4737** |
+
+Two observations from Path A:
+
+1. **The Phase D best-case LPB win evaporates at util=0.9** because
+   Phase B no longer evicts the anchor under LRU — both modes start
+   Phase D with the anchor cached. The "anchor protection" property
+   still exists but is invisible to Phase D at this op-point.
+2. **The anchor-protection win re-materialises in the FINAL probe**
+   because Phase F's combined 2.5 M-token workload + Phase B residue
+   overflows KV and forces eviction. LRU evicts the anchor (3/3 trials),
+   LPB protects it (3/3 trials). Same binary signal, different
+   measurement point.
+
+LPB is **never measurably worse than LRU** at any phase — every delta
+is within noise (~±1.5 % bands). The `--phase-f-scale 10` adversarial
+workload isn't adversarial enough at util=0.9 to expose LPB's
+"protect-useless-hot-blocks" failure mode, because 1.5 M of decoys is
+only ~17 % of the 8.46 M KV budget.
+
+Figures: `dev/figures/fig_lru_vs_lpb_{anchor,scenarios,trial_dispersion}_pathA.png`
+
+#### K.B — Bigger model: Qwen3.5-122B-A10B at production op-point
+
+Path-A leaves the question: does a tighter KV / workload ratio expose
+LPB's worst case? Switch to a bigger MoE (122 B / 10 B active) on
+TP=4 H200, util=0.9. **KV budget shrinks to 5.08 M tokens** (vs Path-A's
+8.46 M); same Phase F scale=10 workload (2.5 M tokens) now occupies
+~49 % of the budget. Files tagged `_pathB`.
+
+Results (mean ± sample stddev, n=3 each):
+
+| phase | metric         | LRU             | LPB             | Δ        |
+|-------|----------------|----------------:|----------------:|---------:|
+| B     | TTFT (ms)      | 125.51 ± 0.60   | 124.61 ± 2.29   | −0.7 %  |
+|       | TPOT (ms/tok)  |   8.85 ± 0.13   |   8.75 ± 0.12   | −1.1 %  |
+|       | throughput     | 126.36 ± 0.30   | 126.42 ± 0.95   | +0.0 %  |
+| D     | TTFT (ms)      |  39.03 ± 1.12   |  38.38 ± 1.05   | −1.7 %  |
+| E     | TTFT (ms)      |  87.15 ± 0.17   |  86.60 ± 0.55   | −0.6 %  |
+|       | TPOT (ms/tok)  |  12.36 ± 0.85   |  12.52 ± 0.70   | **+1.2 %** |
+|       | throughput     | 115.69 ± 2.76   | 114.87 ± 2.19   | −0.7 %  |
+| F     | TTFT (ms)      |  86.37 ± 0.19   |  86.58 ± 0.28   | +0.2 %  |
+|       | TPOT (ms/tok)  |  11.83 ± 0.07   |  11.84 ± 0.09   | +0.1 %  |
+|       | throughput     | 119.15 ± 1.22   | 119.11 ± 1.07   | −0.0 %  |
+
+Anchor survival: **LRU 0/4737 (3/3 trials, stddev=0), LPB 4224/4737
+(3/3 trials, stddev=0)** — same binary win at 122 B production
+scale.
+
+Notable observation: **Phase E TPOT is the first metric where LPB is
+slightly slower** (+1.2 %), albeit comfortably within the ±0.7-0.85
+noise band — so still not a clean negative signal. The direction is
+consistent with LPB's heap/path-counter hot-path overhead being
+non-zero per request; at 122 B the per-request decode is slower, so
+the fixed overhead is a slightly larger fraction.
+
+**Final call across all sweeps (Path-0, A, B; total 18 engine loads)**:
+LPB ≥ LRU on every metric × scenario × sweep that's outside noise.
+The single sub-noise hint of LPB-slower (Phase E TPOT on 122 B,
++1.2 %) is the closest we got to a regression and is still well within
+±2 trial stddev. The "protect-useless-hot-blocks" failure mode of LPB
+has not been triggered by any workload we constructed — Phase F at
+~50 % KV occupancy (Path B) is the closest to saturation. To actually
+saturate, future work would need scale=20 (5 M tokens of decoys +
+cold) or higher; logged as open question.
+
+Figures: `dev/figures/fig_lru_vs_lpb_{anchor,scenarios,trial_dispersion}_pathB.png`
+
+Repro (Path A — util=0.9, scale=10):
+
+```bash
+for trial in 1 2 3; do
+  for mode in lru lpb; do
+    CUDA_VISIBLE_DEVICES=0,1 .venv/bin/python -u dev/compare_lru_lpb.py \
+      --mode $mode --trial $trial \
+      --tag _pathA --util 0.9 --tp 2 --phase-f-scale 10 \
+      > dev/compare_${mode}_pathA_t${trial}.out 2>&1
+  done
+done
+.venv/bin/python dev/plot_lru_vs_lpb.py --tag _pathA | tee dev/compare_summary_pathA.out
+```
+
+Repro (Path B — Qwen3.5-122B-A10B, TP=4, util=0.9, scale=10):
+
+```bash
+for trial in 1 2 3; do
+  for mode in lru lpb; do
+    CUDA_VISIBLE_DEVICES=0,1,2,3 .venv/bin/python -u dev/compare_lru_lpb.py \
+      --mode $mode --trial $trial \
+      --tag _pathB --util 0.9 --tp 4 --phase-f-scale 10 \
+      --model Qwen/Qwen3.5-122B-A10B \
+      > dev/compare_${mode}_pathB_t${trial}.out 2>&1
+  done
+done
+.venv/bin/python dev/plot_lru_vs_lpb.py --tag _pathB | tee dev/compare_summary_pathB.out
 ```
 
 ---

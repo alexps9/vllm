@@ -242,7 +242,19 @@ def main() -> None:
     lpb_agg = aggregate_trials(lpb_summaries)
 
     print("\n" + "=" * 82)
-    print("LRU vs LPB on Qwen3.5-35B-A3B — multi-trial aggregate (mean ± stddev)")
+    # Best-effort: read model id from the first trial's meta row
+    model_label = "?"
+    if lru_paths:
+        first = lru_paths[0].read_text().splitlines()
+        for line in first:
+            try:
+                r = json.loads(line)
+            except Exception:
+                continue
+            if r.get("kind") == "meta" and r.get("model"):
+                model_label = r["model"]
+                break
+    print(f"LRU vs LPB on {model_label} — multi-trial aggregate (mean ± stddev)")
     print("=" * 82)
 
     anchor_len = lru_agg.get("anchor_len", 4737)
