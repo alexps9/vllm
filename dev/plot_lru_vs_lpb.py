@@ -60,6 +60,44 @@ def _aggregate(rows: list[dict]) -> dict:
     }
 
 
+def _aggregate_swarm(row: dict | None, n_tpot_tokens: int = 20) -> dict:
+    """Phase G's single batch row → comparable per-phase metric dict.
+
+    TTFT proxy = batch wall (worst-case wait in batch; LRU pays anchor
+        prefill, LPB doesn't).
+    TPOT proxy = (full_batch_wall - ttft_batch_wall) / N_TPOT_TOKENS
+        (post-prefill decode time per token, normalised by output tokens
+        per request).
+    throughput = total output tokens / full batch wall.
+    """
+    if not row:
+        return {}
+    n = row["n_requests"]
+    sp = row["total_prompt_tokens"]
+    sc_t = row["ttft_batch_cached_total"]
+    sc_f = row["full_batch_cached_total"]
+    so = row["full_total_output_tokens"]
+    ttft_wall = row["ttft_batch_wall_s"]
+    full_wall = row["full_batch_wall_s"]
+    # Decode-per-token: (full pass wall − TTFT pass wall) / output tokens per req.
+    # The full pass also does prefill; the difference between full and TTFT
+    # is mostly the additional N_TPOT decode steps.
+    decode_wall = max(full_wall - ttft_wall, 1e-9)
+    tpot_ms = 1000 * decode_wall / max(n_tpot_tokens, 1)
+    return {
+        "n_requests": n,
+        "total_prompt_tokens": sp,
+        "cache_hit_pct_ttft": 100 * sc_t / sp if sp else 0,
+        "cache_hit_pct_full": 100 * sc_f / sp if sp else 0,
+        "mean_ttft_ms": 1000 * ttft_wall,            # batch wall = worst-case wait
+        "mean_full_wall_ms": 1000 * full_wall,
+        "mean_tpot_ms": tpot_ms,
+        "throughput_tok_per_s": so / full_wall if full_wall else 0,
+        "total_wall_s": ttft_wall + full_wall,
+        "total_output_tokens": so,
+    }
+
+
 def trial_summary(trial_path: Path) -> dict[str, dict]:
     """Return per-phase aggregated metrics for a single trial."""
     rows = [json.loads(l) for l in trial_path.read_text().splitlines() if l.strip()]
@@ -68,6 +106,8 @@ def trial_summary(trial_path: Path) -> dict[str, dict]:
     colds = [r for r in rows if r.get("kind") == "cold_turn"]
     decoys = [r for r in rows if r.get("kind") == "decoy_turn"]
     probes = [r for r in rows if r.get("kind") == "anchor_probe"]
+    swarm_batch = next((r for r in rows if r.get("kind") == "swarm_batch"), None)
+    swarm_turns = [r for r in rows if r.get("kind") == "swarm_turn"]
 
     anchor_len = 4737
     base = next((p for p in probes if p.get("label") == "baseline"), None)
@@ -80,16 +120,28 @@ def trial_summary(trial_path: Path) -> dict[str, dict]:
     # after Phase B's cold burst.
     rehit0 = next((r for r in rehits if r.get("j") == 0), None)
     post_burst_cached = rehit0["ttft_cached"] if rehit0 else None
+    # If Phase G exists, it runs *before* Phase D and observes the post-B
+    # state directly (all N submitted simultaneously, none has yet mutated
+    # cache). The aggregate cache hit % across the batch is a stronger
+    # anchor-survival signal than rehit[0] because it averages over N
+    # independent observations under identical conditions.
+    swarm_anchor_signal = None
+    if swarm_batch:
+        # Cache hit % of TTFT batch — under LRU with anchor evicted, all N
+        # miss (≈0%); under LPB with anchor protected, all N hit (≈89%).
+        swarm_anchor_signal = swarm_batch["ttft_batch_cached_total"]
 
     return {
         "phase_B": _aggregate(turns),
         "phase_D": _aggregate(rehits),
         "phase_E": _aggregate(colds),
         "phase_F": _aggregate(decoys),
+        "phase_G": _aggregate_swarm(swarm_batch),
         "anchor_len": anchor_len,
         "baseline_anchor_cached": base["cached"] if base else None,
         "final_anchor_cached": final["cached"] if final else None,  # diagnostic
-        "post_burst_cached": post_burst_cached,  # the headline signal now
+        "post_burst_cached": post_burst_cached,  # rehit[0] signal
+        "swarm_batch_cached": swarm_anchor_signal,  # swarm batch aggregate
     }
 
 
@@ -128,7 +180,7 @@ def _mean_std(xs: list[float]) -> tuple[float, float]:
 def aggregate_trials(trial_summaries: list[dict]) -> dict:
     """Given per-trial summaries, compute mean ± stddev per phase per metric."""
     out: dict = {}
-    phase_keys = ["phase_B", "phase_D", "phase_E", "phase_F"]
+    phase_keys = ["phase_B", "phase_D", "phase_E", "phase_F", "phase_G"]
     metric_keys = [
         "n_requests", "total_prompt_tokens", "cache_hit_pct_ttft",
         "cache_hit_pct_full", "mean_ttft_ms", "mean_full_wall_ms",
@@ -164,6 +216,12 @@ def aggregate_trials(trial_summaries: list[dict]) -> dict:
         m, s = _mean_std(final)
         out["final_anchor_cached"] = {"mean": m, "std": s, "n": len(final),
                                       "trials": final}
+    swarm = [t["swarm_batch_cached"] for t in trial_summaries
+             if t.get("swarm_batch_cached") is not None]
+    if swarm:
+        m, s = _mean_std(swarm)
+        out["swarm_batch_cached"] = {"mean": m, "std": s, "n": len(swarm),
+                                     "trials": swarm}
     out["anchor_len"] = trial_summaries[0]["anchor_len"] if trial_summaries else 4737
     return out
 
@@ -269,9 +327,18 @@ def main() -> None:
         print(f"      → LPB anchor survival: {100*b['mean']/anchor_len:.1f}% of full anchor")
 
     print_phase("Phase B: cc burst (average)",                   lru_agg["phase_B"], lpb_agg["phase_B"])
-    print_phase("Phase D: anchor re-hit (LPB BEST)",             lru_agg["phase_D"], lpb_agg["phase_D"])
+    print_phase("Phase G: concurrent SWARM (LPB BEST, real)",    lru_agg["phase_G"], lpb_agg["phase_G"])
+    print_phase("Phase D: anchor re-hit (serial, post-G)",       lru_agg["phase_D"], lpb_agg["phase_D"])
     print_phase("Phase E: cold-unique random (LPB hot-path)",    lru_agg["phase_E"], lpb_agg["phase_E"])
     print_phase("Phase F: decoy waste (LPB WORST, adversarial)", lru_agg["phase_F"], lpb_agg["phase_F"])
+
+    # Phase G headline: anchor cached in the concurrent swarm batch
+    sb_l = lru_agg.get("swarm_batch_cached")
+    sb_p = lpb_agg.get("swarm_batch_cached")
+    if sb_l or sb_p:
+        print(f"\n  PHASE G — swarm batch cache hit (anchor protection in production swarm pattern)")
+        print(f"    LRU swarm batch sum cached: {_fmt(sb_l, '{:.0f}')}")
+        print(f"    LPB swarm batch sum cached: {_fmt(sb_p, '{:.0f}')}")
 
     # ----- Figure 1: anchor survival (now uses rehit[0]) -----
     fig, ax = plt.subplots(figsize=(8, 5))
@@ -312,12 +379,21 @@ def main() -> None:
     plt.close(fig)
     print(f"\nWrote {out}")
 
-    # ----- Figure 2: 4-scenario grid (B, D, E, F) with error bars -----
-    scenarios = [
+    # ----- Figure 2: 5-scenario grid (B, G, D, E, F) with error bars -----
+    # G inserted between B and D — it's the production-pattern win
+    # scenario (concurrent swarm), while D is now the post-G serial
+    # follow-up.
+    all_scenarios = [
         ("B: cc burst",           "phase_B"),
+        ("G: swarm (concurrent)", "phase_G"),
         ("D: anchor re-hit",      "phase_D"),
         ("E: cold random",        "phase_E"),
         ("F: decoy waste (adv)",  "phase_F"),
+    ]
+    # Only include phases that have data for at least one mode
+    scenarios = [
+        (label, ph) for (label, ph) in all_scenarios
+        if lru_agg.get(ph) or lpb_agg.get(ph)
     ]
     fig, axes = plt.subplots(2, 2, figsize=(14, 9))
     metric_panels = [
@@ -327,17 +403,26 @@ def main() -> None:
         ("hit % (TTFT pass)",    "cache_hit_pct_ttft",     "%"),
     ]
     for ax, (title, key, unit) in zip(axes.flat, metric_panels):
-        labels = [s[0] for s in scenarios]
+        # TPOT (decode-per-token) is computed as (full_wall − ttft_wall)/N
+        # for serial phases, which is meaningful per-request. For Phase G
+        # (batched submission) the same formula compares "extra wall after
+        # all TTFTs done" to "20 decode tokens per request", which is not
+        # comparable to serial TPOT — drop Phase G from this panel.
+        scen_here = (
+            [s for s in scenarios if s[1] != "phase_G"]
+            if key == "mean_tpot_ms" else scenarios
+        )
+        labels = [s[0] for s in scen_here]
         vlru_m, vlru_s = [], []
         vlpb_m, vlpb_s = [], []
-        for _, ph in scenarios:
+        for _, ph in scen_here:
             v = lru_agg[ph].get(key)
             vlru_m.append(v["mean"] if v else 0.0)
             vlru_s.append(v["std"] if v else 0.0)
             v = lpb_agg[ph].get(key)
             vlpb_m.append(v["mean"] if v else 0.0)
             vlpb_s.append(v["std"] if v else 0.0)
-        x = range(len(scenarios))
+        x = range(len(scen_here))
         w = 0.35
         ax.bar([i - w/2 for i in x], vlru_m, w, yerr=vlru_s, capsize=4,
                label="LRU", color="#a8b0b8")
@@ -345,7 +430,8 @@ def main() -> None:
                label="LPB", color="#3d8540")
         ax.set_xticks(list(x))
         ax.set_xticklabels(labels, fontsize=9)
-        ax.set_title(title)
+        title_full = title if key != "mean_tpot_ms" else f"{title}   (Phase G excluded: batched-mode formula)"
+        ax.set_title(title_full)
         ax.set_ylabel(unit)
         ax.grid(True, alpha=0.3, axis="y")
         ax.legend(loc="upper left", fontsize=9)
@@ -357,7 +443,7 @@ def main() -> None:
     n_trials_lru = len(lru_paths)
     n_trials_lpb = len(lpb_paths)
     fig.suptitle(
-        f"LRU vs LPB across 4 scenarios — mean ± stddev "
+        f"LRU vs LPB across {len(scenarios)} scenarios — mean ± stddev "
         f"(LRU n={n_trials_lru}, LPB n={n_trials_lpb})",
         fontsize=13,
     )

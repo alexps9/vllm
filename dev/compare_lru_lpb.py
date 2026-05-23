@@ -253,6 +253,87 @@ def main() -> None:
               f"(elapsed {time.monotonic() - t_start:.0f}s)")
     log(kind="phase", phase="B_done", elapsed_s=time.monotonic() - t_start)
 
+    # ----- Phase G: concurrent SWARM workload ----- #
+    # Production agent-fleet pattern: N parallel sub-agents each issue ONE
+    # anchored request *at the same time*. Submit all N as one batch so
+    # vLLM schedules them concurrently. This is the workload that should
+    # actually expose LPB's win — Phase D (serial) dilutes it because
+    # rehit[0] re-warms LRU's cache for rehits 1..29.
+    #
+    # Under LRU (anchor evicted by Phase B): all N requests independently
+    # cache-miss on the anchor at submit time. The scheduler must prefill
+    # the anchor before subsequent requests can hit (vLLM merges identical-
+    # hash prefills, but the first occurrence still dominates batch wall).
+    # Under LPB (anchor protected): all N immediately hit; only the
+    # 16-token tail needs prefill.
+    #
+    # NB: Phase G is placed BEFORE Phase D so it sees the post-B cache
+    # state directly. After Phase G runs, the anchor IS cached for both
+    # modes (G's swarm prefill restores it under LRU), which is why
+    # Phase D's serial measurement no longer differentiates the modes at
+    # high util — it's measuring steady-state, not cold-start.
+    N_SWARM = 30
+    swarm_prompts: list[list[int]] = []
+    for j in range(N_SWARM):
+        tail_text = f"\n<|im_start|>user\n[swarm-{j:03d}] continue\n<|im_end|>\n"
+        tail_ids = tokenizer.encode(tail_text, add_special_tokens=False)
+        swarm_prompts.append(anchor_ids + tail_ids)
+    swarm_total_prompt = sum(len(p) for p in swarm_prompts)
+    print(f"\n[{mode}] Phase G: concurrent swarm "
+          f"({N_SWARM} anchored requests submitted as a single batch).")
+
+    # Pass 1: TTFT batch (max_tokens=1)
+    sp_g_ttft = SamplingParams(max_tokens=1, temperature=0.0)
+    t0 = time.monotonic()
+    outs_g_ttft = llm.generate(
+        prompts=swarm_prompts, sampling_params=sp_g_ttft, use_tqdm=False
+    )
+    g_ttft_wall = time.monotonic() - t0
+    g_ttft_cached_total = sum(o.num_cached_tokens or 0 for o in outs_g_ttft)
+    print(f"  swarm TTFT batch_wall={g_ttft_wall*1000:.0f}ms  "
+          f"sum_cached={g_ttft_cached_total}/{swarm_total_prompt} "
+          f"({100*g_ttft_cached_total/swarm_total_prompt:.1f}%)")
+
+    # Pass 2: full throughput (max_tokens=N_TPOT_TOKENS+1)
+    sp_g_full = SamplingParams(max_tokens=N_TPOT_TOKENS + 1, temperature=0.0)
+    t0 = time.monotonic()
+    outs_g_full = llm.generate(
+        prompts=swarm_prompts, sampling_params=sp_g_full, use_tqdm=False
+    )
+    g_full_wall = time.monotonic() - t0
+    g_full_output_tokens = sum(
+        len(o.outputs[0].token_ids) if o.outputs else 0 for o in outs_g_full
+    )
+    g_full_cached_total = sum(o.num_cached_tokens or 0 for o in outs_g_full)
+    print(f"  swarm full batch_wall={g_full_wall*1000:.0f}ms  "
+          f"throughput={g_full_output_tokens / g_full_wall:.1f} tok/s")
+
+    # Log per-request rows for inspection
+    for j in range(N_SWARM):
+        log(
+            kind="swarm_turn", j=j,
+            prompt_len=len(swarm_prompts[j]),
+            ttft_cached=outs_g_ttft[j].num_cached_tokens or 0,
+            full_cached=outs_g_full[j].num_cached_tokens or 0,
+            full_output_tokens=(
+                len(outs_g_full[j].outputs[0].token_ids)
+                if outs_g_full[j].outputs else 0
+            ),
+            elapsed_s=time.monotonic() - t_start,
+        )
+    # One summary row with batch aggregates — the headline numbers
+    log(
+        kind="swarm_batch",
+        n_requests=N_SWARM,
+        total_prompt_tokens=swarm_total_prompt,
+        ttft_batch_wall_s=g_ttft_wall,
+        ttft_batch_cached_total=g_ttft_cached_total,
+        full_batch_wall_s=g_full_wall,
+        full_batch_cached_total=g_full_cached_total,
+        full_total_output_tokens=g_full_output_tokens,
+        elapsed_s=time.monotonic() - t_start,
+    )
+
     # ----- Phase D: anchor-rehit workload (LPB BEST CASE) ----- #
     # MOVED here from after Phase C. Reason: the Phase C probe is itself a
     # real anchor request whose prefill side-effect re-populates the anchor
