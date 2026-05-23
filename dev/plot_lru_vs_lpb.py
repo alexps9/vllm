@@ -13,6 +13,7 @@ cache). The Phase C final probe is now diagnostic only.
 
 from __future__ import annotations
 
+import argparse
 import json
 import math
 from pathlib import Path
@@ -92,14 +93,21 @@ def trial_summary(trial_path: Path) -> dict[str, dict]:
     }
 
 
-def discover_trials(mode: str) -> list[Path]:
-    """Return all dev/compare_{mode}_t*.jsonl files, sorted by trial index."""
-    paths = sorted(ROOT.glob(f"compare_{mode}_t*.jsonl"))
+def discover_trials(mode: str, tag: str = "") -> list[Path]:
+    """Return all dev/compare_{mode}{tag}_t*.jsonl files, sorted by trial index.
+
+    `tag` selects the sweep (e.g. "" for Path-0, "_pathA" for the util=0.9
+    sweep). Files for one sweep don't match the glob of another sweep
+    because the chars between `_{mode}_` and `_t*` differ.
+    """
+    paths = sorted(ROOT.glob(f"compare_{mode}{tag}_t*.jsonl"))
     if paths:
         return paths
-    # Fallback: legacy single-trial file
-    legacy = ROOT / f"compare_{mode}.jsonl"
-    return [legacy] if legacy.exists() else []
+    # Fallback: legacy single-trial file (only meaningful with empty tag)
+    if not tag:
+        legacy = ROOT / f"compare_{mode}.jsonl"
+        return [legacy] if legacy.exists() else []
+    return []
 
 
 # ---------------------------------------------------------------------------
@@ -207,9 +215,23 @@ def print_phase(name: str, lru: dict, lpb: dict) -> None:
 
 
 def main() -> None:
-    lru_paths = discover_trials("lru")
-    lpb_paths = discover_trials("lpb")
-    print(f"Found {len(lru_paths)} LRU trial files, {len(lpb_paths)} LPB trial files.")
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--tag", default="",
+                    help="Sweep tag baked into the filename (e.g. '' for "
+                         "Path-0 util=0.35, '_pathA' for util=0.9 sweep, "
+                         "'_pathB' for the bigger-model sweep).")
+    ap.add_argument("--out-suffix", default="",
+                    help="Suffix for output figure/summary filenames so a "
+                         "Path-A plot doesn't overwrite Path-0's files. "
+                         "Defaults to --tag value.")
+    args = ap.parse_args()
+    tag = args.tag
+    suffix = args.out_suffix or tag
+
+    lru_paths = discover_trials("lru", tag)
+    lpb_paths = discover_trials("lpb", tag)
+    print(f"Sweep tag = '{tag}'. Found {len(lru_paths)} LRU trial files, "
+          f"{len(lpb_paths)} LPB trial files.")
     for p in lru_paths + lpb_paths:
         print(f"  {p}")
 
@@ -273,7 +295,7 @@ def main() -> None:
     ax.legend(loc="center right")
     ax.grid(True, alpha=0.3, axis="y")
     fig.tight_layout()
-    out = FIGDIR / "fig_lru_vs_lpb_anchor.png"
+    out = FIGDIR / f"fig_lru_vs_lpb_anchor{suffix}.png"
     fig.savefig(out, dpi=130)
     plt.close(fig)
     print(f"\nWrote {out}")
@@ -328,7 +350,7 @@ def main() -> None:
         fontsize=13,
     )
     fig.tight_layout(rect=[0, 0, 1, 0.96])
-    out2 = FIGDIR / "fig_lru_vs_lpb_scenarios.png"
+    out2 = FIGDIR / f"fig_lru_vs_lpb_scenarios{suffix}.png"
     fig.savefig(out2, dpi=130)
     plt.close(fig)
     print(f"Wrote {out2}")
@@ -362,7 +384,7 @@ def main() -> None:
             ax.legend(loc="upper right", fontsize=9)
         fig.suptitle("Per-trial dispersion — is the signal stable?", fontsize=13)
         fig.tight_layout(rect=[0, 0, 1, 0.95])
-        out3 = FIGDIR / "fig_lru_vs_lpb_trial_dispersion.png"
+        out3 = FIGDIR / f"fig_lru_vs_lpb_trial_dispersion{suffix}.png"
         fig.savefig(out3, dpi=130)
         plt.close(fig)
         print(f"Wrote {out3}")
@@ -378,7 +400,7 @@ def main() -> None:
         "lru": lru_agg,
         "lpb": lpb_agg,
     }
-    out_json = Path("dev/compare_summary.json")
+    out_json = Path(f"dev/compare_summary{suffix}.json")
     out_json.write_text(json.dumps(payload, indent=2, default=str))
     print(f"Wrote {out_json}")
 
