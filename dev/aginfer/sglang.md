@@ -70,18 +70,71 @@ why outcomes converge with LRU.
 
 ## Workload variants tested (n=3 each)
 
-| variant | how it differs | LRU Phase H (ms) | LPB Phase H (ms) | cached % (both modes) |
+| variant | how it differs | LRU (ms) | LPB (ms) | cached % (both modes) |
 |---|---|---:|---:|---:|
-| **baseline scale=10** (`runs/sglang/`) | the canonical Path A pipeline | 89.0 ± 5.8 | 100.2 ± 1.5 | 99.7 % |
-| **scale=30** (`runs/sglang_s30/`) | 3× Phase F decoy + cold footprint (150 decoys × 30 K + 1500 cold prompts) — forces real cache pressure | 579.9 ± 57.5 | 572.8 ± 6.9 | 75.2 % |
-| **skipG-v1 mamba-only LPB** (`runs/sglang_skipG_mambaonly/`) | omit Phase G's anchor-touching swarm so anchor's tree-node `last_access_time` stays from Phase A; LPB still only on `evict_mamba` | 509 ms | 519 ms | 75.2 % |
-| **skipG-v2 both-paths LPB** (`runs/sglang_skipG_v2_both_paths/`) | same skip-G + extended LPB to `evict_full` | 510 ± 9 | 509 ± 6 | 75.2 % |
+| **baseline scale=10** (`runs/sglang/`) | canonical Path A; v4 numbers | 89.0 ± 5.8 H-TTFT | 100.2 ± 1.5 H-TTFT | 99.7 % |
+| **baseline v5-mem** (`runs/sglang/`, post-memoization, n=3) | adds `_cached_priority` memoization, invalidated on `record_hit()` | 88.7 ± 3.8 H-TTFT | 90.7 ± 2.5 H-TTFT (Δ=+2.26 %, within noise) | 99.7 % |
+| **scale=30** (`runs/sglang_s30/`) | 3× Phase F decoy + cold footprint (150 decoys × 30 K + 1500 cold prompts) — forces real cache pressure | 579.9 ± 57.5 H-TTFT | 572.8 ± 6.9 H-TTFT | 75.2 % |
+| **skipG-v1 mamba-only LPB** (`runs/sglang_skipG_mambaonly/`) | omit Phase G's anchor-touching swarm so anchor's tree-node `last_access_time` stays from Phase A; LPB still only on `evict_mamba` | 509 ms H-TTFT | 519 ms H-TTFT | 75.2 % |
+| **skipG-v2 both-paths LPB** (`runs/sglang_skipG_v2_both_paths/`) | same skip-G + extended LPB to `evict_full` | 510 ± 9 H-TTFT | 509 ± 6 H-TTFT | 75.2 % |
+| **two-anchor Path A** (`runs/sglang/compare_*_pathA2anc_*`, n=3) | warm two anchors A & B; only touch B mid-pipeline; Phase H probes A — designed to expose LPB win on a cold-anchor whose hits are stale | 504.0 ± 3.0 H-TTFT, sum_cached=107254/142590 (75.2%) every trial | 502.0 ± 1.7 H-TTFT (Δ=−0.40 %, within noise), sum_cached=107254/142590 (75.2%) every trial | **byte-identical across all 6 trials** |
+| **GSP bench** (`runs/sglang_gsp/`, n=3, single GPU, the "proven LPB-win" workload from prelude commit `7c6828c9a`) | 8 groups × 10 prompts × 12 K-token system prompt × 64-token question @ RPS=2 — the scenario where the prelude branch reported −19.77 % mean TTFT (single-trial measurement) | 284.5 ± 47.5 mean TTFT | 282.0 ± 41.8 mean TTFT | **tied: −0.86 %** |
 
-**Across all 24 trials × 4 variants × 4 code versions, LRU and LPB
+**Across all 30+ trials and 7 workload variants, LRU and LPB
 report IDENTICAL cached% on every Phase H swarm** (every single
 `sum_cached` matches byte-for-byte). The TTFT variance between
 modes is within the LRU baseline's own noise band — sometimes LPB
 faster, sometimes slower, never consistently one direction.
+
+### Notes on the GSP "−19.77 %" headline from prelude commit `7c6828c9a`
+
+The prelude branch had a script (`dev/2e/32_hpb_gsp_bench.sh`)
+that reported a −19.77 % mean-TTFT win for HPB-vs-recency on the
+SGLang built-in `generated-shared-prefix` dataset. That measurement
+was **N_TRIAL=1** (a single `run_arm recency` + single `run_arm hpb`,
+no inner loop). Reproducing it on the current optimized code with
+n=3 yields:
+
+```
+trial  recency mean TTFT  LPB mean TTFT   Δ%
+t1          339.30 ms        330.31 ms   −2.65 %
+t2          259.12 ms        257.63 ms   −0.58 %
+t3          255.00 ms        258.16 ms   +1.24 %
+mean        284.5 ± 47.5     282.0 ± 41.8  −0.86 % (tied)
+```
+
+The per-trial spread (255 → 339 = 33 % swing) is dominated by
+server-cold-start variance; a single-trial measurement could land
+anywhere in ±20 %. The prelude headline was inside that noise
+band. With n=3 it averages to tied.
+
+A separate check of the prelude vs current scoring shows they are
+**functionally equivalent** for the GSP workload — prelude used
+`* 1024` placeholder for mamba bytes, current uses real
+`32 216 824 B/slot`, but both put mamba-bearing nodes in
+"protected unless hit-count goes to zero" territory regardless.
+The eviction picks are identical.
+
+### Why two-anchor doesn't expose a win either
+
+`--two-anchor` warms anchors A and B in Phase A, then only touches
+anchor B in Phases B/G/F, leaving anchor A's `last_access_time`
+stale. Phase H probes anchor A. The expectation: LRU evicts A
+(oldest), LPB protects A (high `hit_count` from Phase A warmups).
+
+Measured (t1):
+- LRU H swarm: `sum_cached=107254/142590` → **75.2 %** of anchor A's
+  prefix retained
+- LPB H swarm: `sum_cached=107254/142590` → **75.2 %** retained (byte-
+  identical)
+
+Why: anchor A is an internal tree node. Its child sessions from
+Phase A (`session_warm_0..N`) keep the parent locked via the
+radix-tree lock-ref mechanism. **The eviction policy never gets
+asked about anchor A** — it's structurally protected by the tree
+shape, not by recency or hit count. Phase F evicts only leaf
+nodes (child sessions, cold flow), and both policies pick the
+same leaves (whichever was least recently used / had hit_count=0).
 
 ## Why eviction outcomes converge on sglang
 
@@ -159,26 +212,34 @@ review have been addressed.
 
 ## What would expose a measurable LPB win on sglang
 
-Two paths, both untried and beyond the current scope:
+Three paths, all untried and beyond the current scope:
 
 1. **A workload where the hot prefix's tree node is pushed out of
-   recency.** Phase G's anchor-touch keeps the anchor's
-   `last_access_time` fresh; even without G (skipG variants), the
-   age difference between anchor (Phase A) and Phase F's cold-flow
-   (just-allocated) isn't enough to make LRU choose differently
-   from LPB given the hit-0 majority. We'd need a workload that
-   creates many hit-1-or-more nodes that are NEWER than the anchor
-   so LRU evicts the anchor while LPB protects it. Not in our
-   current pipeline.
+   recency AND is a leaf (not locked by children).** All our
+   variants keep anchor sessions alive, so anchor's tree node is
+   internal and structurally protected regardless of policy. Need
+   a workload where sessions are explicitly dropped between phases
+   so the anchor becomes a free-standing leaf at the moment of
+   eviction.
 
-2. **A scoring change** that doesn't degenerate to recency when
+2. **A skewed-popularity multi-anchor workload.** GSP uniformly
+   distributes 80 questions across 8 groups → all snapshots end
+   up with similar hit counts → LPB tie-breaks by recency = same
+   as LRU. A workload with hot/cold groups (e.g., 70 % from 4
+   "hot" groups + 30 % from 4 "cold" groups) under tight mamba
+   pressure (`--max-mamba-cache-size 16`) is the textbook
+   LPB-favorable case but not yet built.
+
+3. **A scoring change** that doesn't degenerate to recency when
    bytes_per_mamba_slot >> bytes_per_kv_page. E.g., normalise
    priority so mamba-bearing and non-mamba nodes are comparable,
    or drop the `* size_bytes` denominator entirely and order by
    raw hit count (with recency only for cold nodes).
 
 For the current goal ("worst case no regression, best case real
-perf gain"), result is **worst case ✓** but **best case not achieved**.
+perf gain"), result is **worst case ✓** but **best case not achieved
+on any workload we currently have**. The prelude branch's
+single-trial −19.77 % GSP headline does not reproduce at n=3.
 
 ## Repro
 
