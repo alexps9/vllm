@@ -7,35 +7,48 @@ per-engine implementation + results.
 
 ## Layout
 
-| file | what's in it |
+| file / dir | what's in it |
 |---|---|
-| [`scenarios.md`](scenarios.md)   | Engine-agnostic phase pipeline (A → B → G → E → F → H → C) we want to run on both. Pitfalls, expected outcomes, the design lessons we learned. |
-| [`vllm.md`](vllm.md)             | vLLM HiMA L1 implementation pointers + measured results (2 sweeps × 5 phases × n=3 trials = 30 engine loads). Has the headline Phase H production-pattern win. |
-| [`sglang.md`](sglang.md)         | sglang LPB implementation review + comparison to vLLM design. Existing committed-run cross-check (control-shape, ties). The Phase H–style benchmark driver isn't written yet — flagged as open. |
+| [`scenarios.md`](scenarios.md)   | Engine-agnostic phase pipeline (A → B → G → E → F → H → C). Pitfalls, expected outcomes, design lessons. |
+| [`vllm.md`](vllm.md)             | vLLM HiMA L1 implementation pointers + measured results. Headline Phase H production-pattern win (−12 % Path A, −17.7 % Path B). |
+| [`sglang.md`](sglang.md)         | sglang LPB implementation review + Path A measured results. Phase H **+67 % slower** on this workload because sglang's tree-LRU already protects the anchor; LPB has no work to do and only pays its overhead. |
+| `runs/vllm/`                     | vLLM `.jsonl` / `.out` / `summary.json` per trial. |
+| `runs/sglang/`                   | sglang `.jsonl` / `.out` per trial. |
+| `figures/`                       | vLLM `fig_lru_vs_lpb_*.png` (anchor + scenarios per sweep). |
 
 ## Bottom line so far
 
-- **Designs match in spirit, differ in mechanics** (binary vs
-  continuous scoring; heap vs O(n) selector; KV-wide vs
-  mamba-only scope). See `sglang.md` for the table.
-- **vLLM Phase H lands the production win**: −12 % to −18 %
-  batch TTFT on concurrent swarm at util=0.9, 5–6σ, perfectly
-  reproducible. Anchor protection binary across 6/6 trials per
-  side. See `vllm.md`.
-- **sglang side has the implementation but no Phase H driver
-  yet**. Existing committed runs (single-trial Phase B-only
-  shape) show tied — same shape vLLM saw before Phase H was
-  added. Implementation review (`sglang.md`) finds no
-  correctness blockers; two design quirks (`* 1024` size
-  heuristic, mamba-only scoping) worth fixing before final
-  numbers.
+- **Same scenarios, different engine outcomes**: identical Phase
+  A → B → G → E → F → H → C pipeline produces opposite-sign LPB
+  results on vLLM vs sglang at the same operating point
+  (util=0.9, Qwen3.5-35B-A3B, n=3 each).
+- **vLLM Phase H**: LPB **−12.0 %** batch TTFT (production-pattern
+  win). LRU evicts the anchor under Phase F's pressure; LPB
+  protects it; the swarm reveals the difference.
+- **sglang Phase H**: LPB **+66.8 %** batch TTFT (regression).
+  Sglang's radix-tree LRU **also** keeps the anchor cached
+  through Phase F (both modes 99.7 % cached on the Phase H
+  swarm), so LPB has no protection benefit to deliver — and
+  pays its O(n) selector overhead instead.
+- **Implication**: LPB's value is engine-specific. Where the
+  baseline LRU already protects hot prefixes structurally
+  (sglang's radix tree), LPB is overhead. Where the baseline LRU
+  is per-block and doesn't (vLLM's free-block queue), LPB is the
+  workload-metric win.
+- **For sglang specifically**: the O(n) selector is the practical
+  cost; switching to a heap (as vLLM does) would shrink the
+  overhead. The deeper question of whether LPB protection adds
+  anything *beyond* what sglang's tree-LRU already gives needs a
+  workload that displaces the hot prefix's tree-node from
+  recency — not in the current pipeline.
 
 ## Engine references
 
 - **vLLM HiMA**: `https://github.com/alexps9/vllm` branch `HiMA`,
   driver `dev/compare_lru_lpb.py`, scoring
   `vllm/v1/core/hima/lpb_free_queue.py`.
-- **sglang LPB**: `https://github.com/rucnyz/sglang` branch `hima`
+- **sglang LPB**: `https://github.com/rucnyz/sglang` branch `HiMA`
   (squashed from `prelude`, with `HPB`→`LPB` rename),
   scoring `python/sglang/srt/mem_cache/mamba_radix_cache.py`,
+  driver `dev/aginfer/compare_lru_lpb.py` in the sglang repo,
   env gate `SGLANG_LPB_LRU=1`.

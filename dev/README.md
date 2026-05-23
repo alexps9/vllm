@@ -651,7 +651,7 @@ together:
   measured results table (2 sweeps × n=3, headline Phase H
   numbers, anchor protection binary across 6/6 trials each).
 - **[`dev/aginfer/sglang.md`](aginfer/sglang.md)** — sibling
-  sglang implementation review (`rucnyz/sglang@hima`), design
+  sglang implementation review (`rucnyz/sglang@HiMA`), design
   comparison, correctness notes, Phase H driver still open.
 
 TL;DR for vLLM specifically: at production util=0.9 in the
