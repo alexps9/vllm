@@ -1,0 +1,40 @@
+[baseline] Loading Qwen/Qwen3-8B (TP=1, util=0.6, block_size=1024, max_num_seqs=16)
+Could not cache non-existence of file. Will ignore error and continue. Error: [Errno 13] Permission denied: '/scratch/yuzhou/.cache/huggingface/hub/models--Qwen--Qwen3-8B/.no_exist/b968826d9c46dd6066d109eabc6255188de91218/processor_config.json'
+Could not cache non-existence of file. Will ignore error and continue. Error: [Errno 13] Permission denied: '/scratch/yuzhou/.cache/huggingface/hub/models--Qwen--Qwen3-8B/.no_exist/b968826d9c46dd6066d109eabc6255188de91218/preprocessor_config.json'
+(EngineCore pid=87792) Loading safetensors checkpoint shards:   0% Completed | 0/5 [00:00<?, ?it/s]
+(EngineCore pid=87792) Loading safetensors checkpoint shards:  20% Completed | 1/5 [00:00<00:03,  1.28it/s]
+(EngineCore pid=87792) Loading safetensors checkpoint shards:  40% Completed | 2/5 [00:01<00:02,  1.26it/s]
+(EngineCore pid=87792) Loading safetensors checkpoint shards:  60% Completed | 3/5 [00:02<00:01,  1.26it/s]
+(EngineCore pid=87792) Loading safetensors checkpoint shards:  80% Completed | 4/5 [00:03<00:00,  1.36it/s]
+(EngineCore pid=87792) Loading safetensors checkpoint shards: 100% Completed | 5/5 [00:03<00:00,  1.78it/s]
+(EngineCore pid=87792) Loading safetensors checkpoint shards: 100% Completed | 5/5 [00:03<00:00,  1.52it/s]
+(EngineCore pid=87792) 
+(EngineCore pid=87792) 2026-05-24 07:06:34,624 - INFO - autotuner.py:457 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
+(EngineCore pid=87792) 2026-05-24 07:06:34,644 - INFO - autotuner.py:466 - flashinfer.jit: [Autotuner]: Autotuning process ends
+(EngineCore pid=87792) Capturing CUDA graphs (PIECEWISE):   0%|          | 0/7 [00:00<?, ?it/s]Capturing CUDA graphs (PIECEWISE):  43%|████▎     | 3/7 [00:00<00:00, 27.89it/s]Capturing CUDA graphs (PIECEWISE): 100%|██████████| 7/7 [00:00<00:00, 34.25it/s]Capturing CUDA graphs (PIECEWISE): 100%|██████████| 7/7 [00:00<00:00, 33.24it/s]
+(EngineCore pid=87792) Capturing CUDA graphs (FULL):   0%|          | 0/5 [00:00<?, ?it/s]Capturing CUDA graphs (FULL): 100%|██████████| 5/5 [00:00<00:00, 43.73it/s]Capturing CUDA graphs (FULL): 100%|██████████| 5/5 [00:00<00:00, 43.66it/s]
+
+[baseline] Multi-stream burst — up to 21 rounds × 8 concurrent sessions per round
+  round 0: 8 streams, ttft_batch_wall=419.1ms full_batch_wall=221.9ms
+  round 1: 8 streams, ttft_batch_wall=140.6ms full_batch_wall=232.5ms
+  round 2: 8 streams, ttft_batch_wall=258.9ms full_batch_wall=251.0ms
+  round 3: 8 streams, ttft_batch_wall=427.8ms full_batch_wall=291.5ms
+  round 4: 8 streams, ttft_batch_wall=380.3ms full_batch_wall=285.7ms
+  round 5: 7 streams, ttft_batch_wall=590.4ms full_batch_wall=256.6ms
+  round 6: 7 streams, ttft_batch_wall=432.6ms full_batch_wall=256.0ms
+  round 7: 7 streams, ttft_batch_wall=345.9ms full_batch_wall=328.0ms
+  round 8: 7 streams, ttft_batch_wall=678.7ms full_batch_wall=324.7ms
+  round 9: 6 streams, ttft_batch_wall=222.2ms full_batch_wall=307.5ms
+  round 10: 5 streams, ttft_batch_wall=253.8ms full_batch_wall=265.8ms
+  round 11: 4 streams, ttft_batch_wall=177.2ms full_batch_wall=208.2ms
+  round 12: 3 streams, ttft_batch_wall=92.1ms full_batch_wall=185.8ms
+  round 13: 3 streams, ttft_batch_wall=118.7ms full_batch_wall=207.1ms
+  round 14: 2 streams, ttft_batch_wall=74.9ms full_batch_wall=187.7ms
+  round 15: 1 streams, ttft_batch_wall=51.8ms full_batch_wall=139.6ms
+  round 16: 1 streams, ttft_batch_wall=35.8ms full_batch_wall=133.0ms
+  round 17: 1 streams, ttft_batch_wall=39.6ms full_batch_wall=142.0ms
+  round 18: 1 streams, ttft_batch_wall=45.1ms full_batch_wall=151.9ms
+  round 19: 1 streams, ttft_batch_wall=55.7ms full_batch_wall=139.0ms
+  round 20: 1 streams, ttft_batch_wall=143.3ms full_batch_wall=158.6ms
+
+[baseline] Done in 9.7s. Wrote dev/interlayer/runs/m14/baseline.jsonl
