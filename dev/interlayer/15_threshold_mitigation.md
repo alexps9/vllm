@@ -30,7 +30,8 @@ var to enable threshold-gating.
 | config | TTFT (s) | full (s) | tok/s | hit% | bubble | ΔTTFT | Δfull |
 |---|---|---|---|---|---|---|---|
 | baseline (env unset)       | 5.81 | 14.24 | 156.3 | 91.59 | 51442 | — | — |
-| partial r=0 (default)     | 4.84 | 16.13 | 138.0 | 98.99 |  6147 | **-16.78%** | **+13.28%** |
+| partial r=0 (default)     | 4.84 | 16.13 | 138.0 | 98.99 |  6147 | -16.78% | +13.28% |
+| partial r=128             | 4.78 | 16.12 | 138.1 | 98.94 |  6481 | **-17.74%** | +13.19% |
 | **partial r=256**         | **4.79** | **15.66** | **142.1** | 98.54 |  8919 | **-17.50%** | **+9.98%** |
 | partial r=512             | 4.91 | 15.33 | 145.2 | 97.28 | 16655 | -15.54% | +7.65% |
 | partial r=800             | 5.34 | 15.19 | 146.5 | 94.90 | 31208 |  -8.06% | +6.67% |
@@ -114,8 +115,25 @@ stream. Operators should calibrate for their setup.
 
 ## What's still untested
 
-- r=128 — system contention prevented clean run; expected to behave
-  between r=0 and r=256
 - Multi-stream + threshold combination — likely also improves
 - Other workloads (RAG with long prefill, bulk gen, etc.) — different
   optimum
+
+## r=128 vs r=256 — which is "best"?
+
+| metric | r=128 | r=256 |
+|---|---|---|
+| TTFT delta | **-17.74%** | -17.50% |
+| full delta | +13.19% | **+9.98%** |
+| throughput delta | -11.66% | **-9.18%** |
+| hit% | 98.94% | 98.54% |
+
+r=128 is marginally better on TTFT (~0.2 percentage points) but the
+throughput regression is essentially unchanged from r=0 (no
+mitigation). r=256 sacrifices that tiny TTFT difference but cuts
+throughput regression by a meaningful 3 percentage points (24%
+relative reduction in regression magnitude).
+
+**r=256 is the recommended starting point**. r=128 is only worth
+considering if you have absolutely zero tolerance for TTFT
+regression and don't care about throughput at all.
