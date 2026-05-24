@@ -293,8 +293,15 @@ class KVCacheManager:
             block_size=block_size,
             kv_cache_group_id=group_id,
         )
+        # M.14: skip partial-cache hits with R below a threshold. Small R
+        # gives a small prefill saving but the same per-launch GPU sync
+        # and Inductor dispatch overhead, so it's net-negative in the
+        # async-scheduling loop. Threshold tunable via env var (default
+        # 0 = apply all hits; recommended 256 for Qwen3-8B / cc workload).
+        import os as _os  # noqa: PLC0415
+        min_r = int(_os.environ.get("VLLM_PARTIAL_CACHE_MIN_R", "0"))
         for R, _candidate_block in candidates:
-            if R > max_extension:
+            if R > max_extension or R < min_r:
                 continue
             partial_block = self.block_pool.get_cached_partial_block(
                 request=request,
