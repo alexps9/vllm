@@ -75,6 +75,11 @@ class UniProcExecutor(Executor):
 
     @cached_property
     def max_concurrent_batches(self) -> int:
+        # M.12 mitigation test: VLLM_BATCH_QUEUE_SIZE env override.
+        import os  # noqa: PLC0415
+        override = os.environ.get("VLLM_BATCH_QUEUE_SIZE")
+        if override is not None:
+            return max(1, int(override))
         return 2 if self.scheduler_config.async_scheduling else 1
 
     def collective_rpc(  # type: ignore[override]
