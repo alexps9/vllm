@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Aggregate dev/aginfer/runs/vllm/compare_{lru,lpb}{tag}_t*.jsonl
+"""Aggregate dev/intralayer/runs/vllm/compare_{lru,lpb}{tag}_t*.jsonl
 across trials and produce mean ± stddev figures for LRU vs LPB across
 Phase B / G / E / F / H.
 
@@ -23,9 +23,9 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
-FIGDIR = Path("dev/aginfer/figures")
+FIGDIR = Path("dev/intralayer/figures")
 FIGDIR.mkdir(parents=True, exist_ok=True)
-ROOT = Path("dev/aginfer/runs/vllm")
+ROOT = Path("dev/intralayer/runs/vllm")
 
 
 # ---------------------------------------------------------------------------
@@ -461,7 +461,7 @@ def main() -> None:
         "lru": lru_agg,
         "lpb": lpb_agg,
     }
-    out_json = Path(f"dev/aginfer/runs/vllm/compare_summary{suffix}.json")
+    out_json = Path(f"dev/intralayer/runs/vllm/compare_summary{suffix}.json")
     out_json.write_text(json.dumps(payload, indent=2, default=str))
     print(f"Wrote {out_json}")
 

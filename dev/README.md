@@ -635,7 +635,7 @@ before it actually flipped behavior on the running engine:
 
 After those five fixes, `hima_enabled=True` actually flips behavior.
 
-### K. End-to-end LRU vs LPB on cc workload — see `dev/aginfer/`
+### K. End-to-end LRU vs LPB on cc workload — see `dev/intralayer/`
 
 The big LRU vs LPB study (workload design, multi-sweep runs on
 Qwen3.5-35B-A3B / Qwen3.5-122B-A10B, Phase H production-pattern
@@ -643,14 +643,14 @@ Qwen3.5-35B-A3B / Qwen3.5-122B-A10B, Phase H production-pattern
 moved out of this README to keep the engine-vs-engine notes
 together:
 
-- **[`dev/aginfer/scenarios.md`](aginfer/scenarios.md)** — shared
+- **[`dev/intralayer/scenarios.md`](aginfer/scenarios.md)** — shared
   benchmark design (A → B → G → E → F → H → C), pitfalls, expected
   outcomes. Engine-agnostic.
-- **[`dev/aginfer/vllm.md`](aginfer/vllm.md)** — vLLM HiMA L1
+- **[`dev/intralayer/vllm.md`](aginfer/vllm.md)** — vLLM HiMA L1
   implementation pointers, driver (`dev/compare_lru_lpb.py`),
   measured results table (2 sweeps × n=3, headline Phase H
   numbers, anchor protection binary across 6/6 trials each).
-- **[`dev/aginfer/sglang.md`](aginfer/sglang.md)** — sibling
+- **[`dev/intralayer/sglang.md`](aginfer/sglang.md)** — sibling
   sglang implementation review (`rucnyz/sglang@HiMA`), design
   comparison, correctness notes, Phase H driver still open.
 

@@ -21,7 +21,7 @@ the same scenarios produce a clean −12 % Phase H batch-TTFT win).
 | Window | env var `SGLANG_LPB_WINDOW_S=60.0` (driver uses 3600 to avoid expiration) |
 | `_hit_times` deque cap | env var `SGLANG_LPB_HIT_DEQUE_MAXLEN=4096` (default) |
 | Per-mamba-slot bytes | read at MambaRadixCache init from `mamba_pool.mamba_cache.mem_usage_bytes() / mamba_pool.size`; on Qwen3.5-35B-A3B util=0.9 this is **32 216 824 B/slot**, NOT the old 1024 placeholder |
-| Driver | `dev/aginfer/compare_lru_lpb.py` in the sglang repo |
+| Driver | `dev/intralayer/compare_lru_lpb.py` in the sglang repo |
 
 Scoring (current):
 ```python
@@ -139,7 +139,7 @@ same leaves (whichever was least recently used / had hit_count=0).
 ### Why the skewed-popularity workload DOES expose a win
 
 The skewed-popularity stress (`runs/sglang_skewed/`, driver
-`dev/aginfer/skewed_bench.py` + `skewed_run.sh` in the sglang repo)
+`dev/intralayer/skewed_bench.py` + `skewed_run.sh` in the sglang repo)
 solves all three problems that suppressed LPB on the prior
 workloads:
 
@@ -189,7 +189,7 @@ because cold-group snapshots (hit_count = 1) always have the
 lowest priority → they get evicted first → hot snapshots stay
 resident across multiple cold-group accesses in between.
 
-This is the LPB-favorable case the prior dev/aginfer pipeline
+This is the LPB-favorable case the prior dev/intralayer pipeline
 couldn't trigger: structurally free leaves + tight pool +
 skewed hits. The −16.2 %/−26.9 % delta on this workload is
 **comparable to vLLM's −12 %/−17.7 % Path A/B Phase H win**.
@@ -215,7 +215,7 @@ At the time of the first eviction:
 So at the first eviction, and (we conjecture) throughout the
 hit-0-dominated portion of every workload, **LRU and LPB pick
 exactly the same victims**. They only diverge once the hit-0
-population is exhausted. On the dev/aginfer Path A workload, the
+population is exhausted. On the dev/intralayer Path A workload, the
 hit-0 population is replenished faster than evictions drain it
 (Phase F keeps generating cold-flow), so LRU and LPB never get to
 the divergence regime.
@@ -280,7 +280,7 @@ lock-ref), AND (b) competing snapshots have **materially
 different hit counts** (uniform-popularity workloads have LPB
 tie-breaking to recency = LRU).
 
-| workload property | dev/aginfer Path A | GSP (prelude) | skewed-popularity (this work) |
+| workload property | dev/intralayer Path A | GSP (prelude) | skewed-popularity (this work) |
 |---|---|---|---|
 | persistent session_id locks prefixes? | yes (sessions alive through pipeline) | no (one-shot HTTP) | no (one-shot HTTP) |
 | popularity skew? | n/a (single anchor) | uniform | Zipf α=1.5 (49 %/17 %/9 %/6 %/…) |
@@ -301,17 +301,17 @@ here.
 
 ## Repro
 
-Trials write to `vllm-songyang/dev/aginfer/runs/sglang/`.
+Trials write to `vllm-songyang/dev/intralayer/runs/sglang/`.
 
 ```bash
 cd /scratch/yuzhou/projects/sglang
 for trial in 1 2 3; do
   for mode in lru lpb; do
     CUDA_VISIBLE_DEVICES=0,1 .venv/bin/python -u \
-      dev/aginfer/compare_lru_lpb.py \
+      dev/intralayer/compare_lru_lpb.py \
       --mode $mode --trial $trial \
       --tag _pathA --util 0.9 --tp 2 --phase-f-scale 10 \
-      > /scratch/yuzhou/projects/vllm-songyang/dev/aginfer/runs/sglang/compare_${mode}_pathA_t${trial}.out 2>&1
+      > /scratch/yuzhou/projects/vllm-songyang/dev/intralayer/runs/sglang/compare_${mode}_pathA_t${trial}.out 2>&1
   done
 done
 ```

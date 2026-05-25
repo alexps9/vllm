@@ -1,4 +1,4 @@
-# dev/aginfer — LPB vs LRU, cross-engine
+# dev/intralayer — LPB vs LRU, cross-engine
 
 Cross-engine notes on HiMA's Layer-1 LPB (hits-per-byte) eviction
 policy. Both vLLM and sglang have implementations on respective
@@ -27,7 +27,7 @@ per-engine implementation + results.
 
 ## Bottom line
 
-| engine | best result on dev/aginfer Path A + variants | why |
+| engine | best result on dev/intralayer Path A + variants | why |
 |---|---|---|
 | **vLLM**   | **LPB −12 % to −17.7 %** batch TTFT (vLLM's per-block `FreeKVCacheBlockQueue` evicts the anchor under Phase F's pressure; LPB protects it; the post-pressure swarm reveals the difference) | per-block LRU doesn't track recency at the prefix-tree level, so LPB's explicit hit-count signal is needed to protect the anchor |
 | **sglang** | **LPB tied with LRU on 7 workloads BUT −16.2 % mean / −26.9 % median TTFT on the 8th** (`runs/sglang_skewed/`, n=3: Zipf(α=1.5) 12-group skewed-popularity workload, one-shot requests, `--max-mamba-cache-size 8` → forces real snapshot rotation; cache hit % jumps 30.5 % → 51.4 %). The tied workloads (baseline scale=10, baseline v5-memoized, scale=30, skipG-v1, skipG-v2, two-anchor, GSP) all violated one of the two conditions LPB needs: free-leaf snapshots and skewed hit counts. | (a) sglang's per-node radix-tree LRU already encodes prefix-level recency, (b) the radix-tree lock-ref keeps internal nodes (anchors with live child sessions) structurally untouchable regardless of policy, (c) on uniform-popularity workloads LPB tie-breaks to recency. The skewed workload removes (b) (one-shot requests = free leaves) and (c) (Zipf-biased traffic) and adds tight mamba pressure — LPB then protects the top-3 hottest snapshots simultaneously where LRU only protects the most-recent. |
@@ -45,7 +45,7 @@ For sglang, the goal lands at:
   −12 %/−17.7 % Path A/B win.
 
 The skewed-popularity driver lives in the sglang repo at
-`dev/aginfer/skewed_bench.py` + `dev/aginfer/skewed_run.sh`; per-trial
+`dev/intralayer/skewed_bench.py` + `dev/intralayer/skewed_run.sh`; per-trial
 results are in `runs/sglang_skewed/`.
 
 ## Optimizations applied to sglang LPB (full journey in `sglang.md`)
@@ -72,7 +72,7 @@ cached state.
 - **sglang LPB**: `https://github.com/rucnyz/sglang` branch `HiMA`
   (squashed from `prelude`, with `HPB`→`LPB` rename),
   scoring `python/sglang/srt/mem_cache/mamba_radix_cache.py`,
-  driver `dev/aginfer/compare_lru_lpb.py` in the sglang repo,
+  driver `dev/intralayer/compare_lru_lpb.py` in the sglang repo,
   env gate `SGLANG_LPB_LRU=1`. Optimization commits on top of the
   initial squash: `9bc52737e` (A+B+G+I), `076507663` (E),
   `36a16bfdc` (evict_full extension + skip-G flag).

@@ -1,7 +1,19 @@
-# dev/interlayer — vLLM-side bubble elimination
+# dev/interlayer — cross-engine inter-pool work
 
-The vLLM analog of HiMA's L2 (inter-pool / cross-pool layer). vLLM
-has ONE inflated KV pool (`block_size = 1056` on Qwen3.5-35B-A3B
+This directory holds inter-pool / cross-pool experiments from both
+engines. Each engine has structurally different "inter-pool" work
+because their architectures differ:
+
+| sub-dir | engine | what it is |
+|---|---|---|
+| (this README + M.1-M.9 content below) | **vLLM** | bubble elimination via partial-block caching. vLLM has ONE inflated KV pool (`block_size = 1056` on hybrid models), not two pools. Sglang's "move pages between pools via cuMemUnmap+cuMemMap" doesn't translate; vLLM's bubble is in the per-request abandoned last-partial-block. |
+| [`planner_validate/`](planner_validate) | **sglang** | output runs from the sglang slack-harvest planner correctness test. Driver lives in sglang repo at `dev/interlayer/planner_validate/`; this directory just holds the result jsonls. |
+
+---
+
+## vLLM-side bubble elimination
+
+vLLM has ONE inflated KV pool (`block_size = 1056` on Qwen3.5-35B-A3B
 hybrid), not two pools like sglang. Sglang's "move pages between
 pools via cuMemUnmap+cuMemMap" doesn't translate. But vLLM still has
 a real measurable bubble — caused by `block_size` inflation forcing

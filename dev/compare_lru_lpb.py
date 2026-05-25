@@ -113,7 +113,7 @@ def main() -> None:
     ap.add_argument("--mode", choices=["lru", "lpb"], required=True)
     ap.add_argument("--trial", type=int, default=1,
                     help="Trial index; writes "
-                         "dev/aginfer/runs/vllm/compare_{mode}{tag}_t{trial}.jsonl. "
+                         "dev/intralayer/runs/vllm/compare_{mode}{tag}_t{trial}.jsonl. "
                          "Use 1,2,3,… to capture noise via independent engine loads.")
     ap.add_argument("--util", type=float, default=0.35,
                     help="gpu_memory_utilization for the engine. Path-0 ran "
@@ -147,7 +147,7 @@ def main() -> None:
     # comparable between LRU and LPB on the same trial index.
     rng = random.Random(1000 + trial)
 
-    out_dir = Path("dev/aginfer/runs/vllm")
+    out_dir = Path("dev/intralayer/runs/vllm")
     out_dir.mkdir(parents=True, exist_ok=True)
     out_jsonl = out_dir / f"compare_{mode}{tag}_t{trial}.jsonl"
     out_jsonl.unlink(missing_ok=True)
