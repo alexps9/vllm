@@ -7,7 +7,7 @@ because their architectures differ:
 | sub-dir | engine | what it is |
 |---|---|---|
 | (this README + M.1-M.9 content below) | **vLLM** | bubble elimination via partial-block caching. vLLM has ONE inflated KV pool (`block_size = 1056` on hybrid models), not two pools. Sglang's "move pages between pools via cuMemUnmap+cuMemMap" doesn't translate; vLLM's bubble is in the per-request abandoned last-partial-block. |
-| [`planner_validate/`](planner_validate) | **sglang** | output runs from the sglang slack-harvest planner correctness test. Driver lives in sglang repo at `dev/interlayer/planner_validate/`; this directory just holds the result jsonls. |
+| [`planner_validate/`](planner_validate) | **sglang** | output runs for the sglang interlayer integration tests: (1) v1 slack-harvest planner correctness on the legacy actuator, (2) v1 path-B logical actuator end-to-end smoke (`r1_v1logical/`). Drivers in sglang repo at `dev/interlayer/planner_validate/`. |
 
 ---
 

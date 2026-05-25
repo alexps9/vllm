@@ -129,7 +129,8 @@ it was retired. Documented for historical reference only.
 - **vLLM**: `dev/compare_lru_lpb.py` (driver) + `dev/plot_lru_vs_lpb.py`
   (aggregator). See [`vllm.md`](vllm.md).
 - **sglang**: the gate exists (`SGLANG_LPB_LRU=1`) and the
-  selector is in `python/sglang/srt/mem_cache/mamba_radix_cache.py`,
-  but a Phase-A-through-H driver script equivalent to
-  `compare_lru_lpb.py` has not yet been written. See
-  [`sglang.md`](sglang.md).
+  selector is in `python/sglang/srt/mem_cache/mamba_radix_cache.py`.
+  Driver: `sglang:dev/intralayer/compare_lru_lpb.py` (Phase A→H
+  pipeline equivalent to the vLLM one). Skewed-popularity stress
+  (the workload where LPB measurably wins on sglang) is in
+  `sglang:dev/intralayer/skewed_bench.py`. See [`sglang.md`](sglang.md).

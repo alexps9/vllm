@@ -643,14 +643,14 @@ Qwen3.5-35B-A3B / Qwen3.5-122B-A10B, Phase H production-pattern
 moved out of this README to keep the engine-vs-engine notes
 together:
 
-- **[`dev/intralayer/scenarios.md`](aginfer/scenarios.md)** — shared
+- **[`dev/intralayer/scenarios.md`](intralayer/scenarios.md)** — shared
   benchmark design (A → B → G → E → F → H → C), pitfalls, expected
   outcomes. Engine-agnostic.
-- **[`dev/intralayer/vllm.md`](aginfer/vllm.md)** — vLLM HiMA L1
+- **[`dev/intralayer/vllm.md`](intralayer/vllm.md)** — vLLM HiMA L1
   implementation pointers, driver (`dev/compare_lru_lpb.py`),
   measured results table (2 sweeps × n=3, headline Phase H
   numbers, anchor protection binary across 6/6 trials each).
-- **[`dev/intralayer/sglang.md`](aginfer/sglang.md)** — sibling
+- **[`dev/intralayer/sglang.md`](intralayer/sglang.md)** — sibling
   sglang implementation review (`rucnyz/sglang@HiMA`), design
   comparison, correctness notes, Phase H driver still open.
 
