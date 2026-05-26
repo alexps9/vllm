@@ -62,7 +62,6 @@ def main() -> None:
         gpu_memory_utilization=0.35,
         max_num_seqs=4,
         trust_remote_code=True,
-        hima_enabled=False,
     )
 
     # Build a long filler the tokenizer will encode densely so we can take

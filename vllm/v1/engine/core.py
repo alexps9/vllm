@@ -127,7 +127,7 @@ class EngineCore:
         # Setup KV Caches and update CacheConfig after profiling.
         kv_cache_config = self._initialize_kv_caches(vllm_config)
 
-        if getattr(vllm_config.cache_config, "hima_enabled", False):
+        if vllm_config.cache_config.hima_enabled:
             import dataclasses  # noqa: PLC0415
 
             from vllm.v1.core.hima.config import HiMAConfig  # noqa: PLC0415

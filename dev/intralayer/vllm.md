@@ -13,7 +13,7 @@ sglang side ([`sglang.md`](sglang.md)).
 | component | file |
 |---|---|
 | LPB-ordered free-block queue (heap, `_HIT_SCORE_OFFSET = 1e12`) | `vllm/v1/core/hima/lpb_free_queue.py` |
-| Engine knob (`hima_enabled: bool`) | `vllm/engine/arg_utils.py` (threads through `CacheConfig`) |
+| Engine knobs (`hima_l1_enabled` / `hima_l2_enabled`) | `vllm/engine/arg_utils.py` (threads through `CacheConfig`) |
 | HiMA runtime + windowed hit counter | `vllm/v1/core/hima/runtime.py` (`PathCountedHitCounter`) |
 | Cost curves per pool | `vllm/v1/core/hima/cost_curve.py` |
 | Hybrid KV-cache coordinator wrapper | `vllm/v1/core/hima/coordinator_hima.py` |

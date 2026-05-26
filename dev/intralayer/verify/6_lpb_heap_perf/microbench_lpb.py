@@ -18,7 +18,7 @@ import sys
 import time
 
 # Strip env so HiMA flags don't leak into the bench.
-for k in ("VLLM_HIMA_ENABLE", "VLLM_HIMA_L1_ENABLE", "VLLM_HIMA_L2_ENABLE"):
+for k in ("VLLM_HIMA_L1_ENABLE", "VLLM_HIMA_L2_ENABLE"):
     os.environ.pop(k, None)
 
 sys.path.insert(0, "/data/yuzhou/projects/vllm-songyang")

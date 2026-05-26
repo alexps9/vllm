@@ -11,7 +11,7 @@ import os
 import sys
 import time
 
-for k in ("VLLM_HIMA_ENABLE", "VLLM_HIMA_L1_ENABLE", "VLLM_HIMA_L2_ENABLE"):
+for k in ("VLLM_HIMA_L1_ENABLE", "VLLM_HIMA_L2_ENABLE"):
     os.environ.pop(k, None)
 
 sys.path.insert(0, "/data/yuzhou/projects/vllm-songyang")

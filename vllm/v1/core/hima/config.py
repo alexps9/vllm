@@ -81,8 +81,6 @@ class HiMAConfig:
 
     # ---- L1 (intra-pool) ---------------------------------------- #
     hima_lpb_window_s: float = 60.0  # alias: VLLM_HIMA_HPB_WINDOW_S
-    hima_cost_kv_alpha: float | None = None  # legacy single-shape alpha
-    hima_cost_rec_alpha: float | None = None
 
     # ---- L2 (inter-pool) ---------------------------------------- #
     hima_budget_interval_s: float = 30.0  # Budgeter / planner tick period
@@ -113,12 +111,6 @@ class HiMAConfig:
             raise ValueError(
                 f"hima_lpb_window_s must be > 0, got {self.hima_lpb_window_s}"
             )
-        for name, value in (
-            ("hima_cost_kv_alpha", self.hima_cost_kv_alpha),
-            ("hima_cost_rec_alpha", self.hima_cost_rec_alpha),
-        ):
-            if value is not None and value <= 0:
-                raise ValueError(f"{name} must be > 0 when set, got {value}")
         if not 0.0 < self.ewma_alpha <= 1.0:
             raise ValueError(f"ewma_alpha must be in (0, 1], got {self.ewma_alpha}")
 

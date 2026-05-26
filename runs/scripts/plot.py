@@ -7,7 +7,7 @@ Layout:
 
 Usage:
   python plot.py <root> <out_dir> [mode1,mode2,...]
-  (default modes: baseline,hima,hima_l1 — missing modes silently skipped)
+  (default modes: baseline,l1_only,l2_only,full — missing modes silently skipped)
 """
 from __future__ import annotations
 import argparse, glob, json, os
@@ -16,8 +16,9 @@ import matplotlib.pyplot as plt
 
 STYLE = {
     "baseline": ("-o", "#888"),
-    "hima":     ("-s", "#1f77b4"),
-    "hima_l1":  ("-^", "#d62728"),
+    "l1_only":  ("-^", "#d62728"),
+    "l2_only":  ("-v", "#2ca02c"),
+    "full":     ("-s", "#1f77b4"),
 }
 
 
@@ -133,8 +134,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("root")
     ap.add_argument("out_dir")
-    ap.add_argument("modes", nargs="?", default="baseline,hima,hima_l1",
-                    help="comma-separated mode names (default: baseline,hima,hima_l1)")
+    ap.add_argument("modes", nargs="?", default="baseline,l1_only,l2_only,full",
+                    help="comma-separated mode names (default: baseline,l1_only,l2_only,full)")
     args = ap.parse_args()
     modes = [m.strip() for m in args.modes.split(",") if m.strip()]
     os.makedirs(args.out_dir, exist_ok=True)

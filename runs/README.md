@@ -4,10 +4,11 @@ Branch: `hima` · Model: `Qwen/Qwen3.5-35B-A3B` · Hardware: 8× RTX PRO 6000 Bl
 
 ## Overview
 
-Two workloads × three server configs (baseline / hima_l1 / hima) × two pressure settings (original / aggressive).
+Two workloads × four server configs (baseline / l1_only / l2_only / full) × two pressure settings (original / aggressive).
 - **baseline**: stock vLLM
-- **hima_l1**: HiMA L1 LPB eviction only (intralayer; `VLLM_HIMA_ENABLE=1`)
-- **hima**: full HiMA = L1 LPB + L2 partial-cache (`VLLM_PARTIAL_CACHE_ENABLED=1` added)
+- **l1_only**: HiMA L1 (LPB intra-pool eviction + path counter) + partial-cache
+- **l2_only**: HiMA L2 (admitter + budgeter + planner) + partial-cache
+- **full**: both L1 and L2 + partial-cache
 
 | | original | aggressive |
 |---|---|---|
