@@ -117,8 +117,20 @@ class HiMARuntime:
         target_pool: PoolKind,
         n_pages: int,
     ) -> AdmissionDecision:
-        """Run 5-candidate admission logic; returns action + estimated cost (µs)."""
-        assert self.admitter is not None  # built in __post_init__
+        """Run 5-candidate admission logic; returns action + estimated cost (µs).
+
+        When L2 is disabled (``self.admitter is None``), returns an
+        ``OWN_FREE`` no-op decision: scheduler proceeds with normal
+        allocation, no remap, no defer. Decision counter is not incremented
+        so smoke tests can assert L2 never fired.
+        """
+        if self.admitter is None:
+            return AdmissionDecision(
+                action=AdmissionAction.OWN_FREE,
+                target_pool=target_pool,
+                source_pool=None,
+                estimated_cost=0.0,
+            )
         with self.lock:
             decision = self.admitter.decide(
                 target_pool=target_pool,
@@ -130,8 +142,12 @@ class HiMARuntime:
     # --------------- planner tick (used by background task) -------------- #
 
     def planner_tick(self, snapshot: dict[str, float] | None = None) -> PlanDecision:
-        """Run one Cross-Pool Planner step (thread-safe via lock)."""
-        assert self.planner is not None
+        """Run one Cross-Pool Planner step (thread-safe via lock).
+
+        Caller must ensure L2 is enabled (planner constructed). The
+        budgeter daemon honours that gate via :func:`start_if_enabled`.
+        """
+        assert self.planner is not None, "planner_tick called with L2 disabled"
         snap = snapshot if snapshot is not None else self.telemetry.snapshot()
         with self.lock:
             decision = self.planner.decide(
@@ -259,31 +275,44 @@ def enable_runtime(
 
         telemetry = HiMATelemetry(alpha=cfg.ewma_alpha)
         adapter = VLLMPressureAdapter()
-        policy = planner_policy if planner_policy is not None else policy_from_env()
-        planner = CrossPoolPlanner(config=policy, adapter=adapter)
 
         for pool in PoolKind:
             telemetry.observe_pool(pool, free_pages=actuator.free_pages(pool))
 
-        def _evict_cost(pool: PoolKind, n: int) -> float:
-            """Estimated µs cost of evicting the n cheapest LPB blocks in pool."""
-            q = _RUNTIME.intra_queues.get(pool) if _RUNTIME is not None else None
-            if q is None or q.is_empty():
-                return 0.0
-            cheapest_scores = q.peek_n_scores(min(n, len(q)))
-            chunk = getattr(actuator, "chunk_size_bytes", 2 * 1024 * 1024)
-            return float(sum(s * chunk for s in cheapest_scores))
+        # L2 components (admitter / budgeter / planner) only constructed
+        # when L2 is enabled. With L2 off, decide_admission() short-circuits
+        # to OWN_FREE and budgeter_task.start_if_enabled() returns None;
+        # the runtime then exposes only L1 (LPB queues + path counter).
+        admitter: Admitter | None = None
+        budgeter: BisectionBudgeter | None = None
+        planner: CrossPoolPlanner | None = None
+        if cfg.hima_l2_enabled:
+            policy = (
+                planner_policy if planner_policy is not None else policy_from_env()
+            )
+            planner = CrossPoolPlanner(config=policy, adapter=adapter)
 
-        admitter = Admitter(
-            cfg=cfg,
-            telemetry=telemetry,
-            peek_evict_cost=_evict_cost,
-            peek_remap_cost=lambda n: actuator.remap_cost(n),
-        )
+            def _evict_cost(pool: PoolKind, n: int) -> float:
+                """Estimated µs cost of evicting the n cheapest LPB blocks in pool."""
+                q = _RUNTIME.intra_queues.get(pool) if _RUNTIME is not None else None
+                if q is None or q.is_empty():
+                    return 0.0
+                cheapest_scores = q.peek_n_scores(min(n, len(q)))
+                chunk = getattr(actuator, "chunk_size_bytes", 2 * 1024 * 1024)
+                return float(sum(s * chunk for s in cheapest_scores))
 
-        budgeter = BisectionBudgeter(
-            cfg=cfg, marginal_utility=constant_utility(0.0), max_move_per_cycle=1024
-        )
+            admitter = Admitter(
+                cfg=cfg,
+                telemetry=telemetry,
+                peek_evict_cost=_evict_cost,
+                peek_remap_cost=lambda n: actuator.remap_cost(n),
+            )
+
+            budgeter = BisectionBudgeter(
+                cfg=cfg,
+                marginal_utility=constant_utility(0.0),
+                max_move_per_cycle=1024,
+            )
 
         runtime = HiMARuntime(
             config=cfg,
@@ -333,8 +362,13 @@ def maybe_record_hit(path_block_ids: list[int]) -> None:
 
 
 def maybe_get_free_queue_factory() -> Any | None:
-    """Returns the LPBFreeBlockQueue class when HiMA is on, else ``None``."""
-    if _RUNTIME is None:
+    """Returns the LPBFreeBlockQueue class when HiMA L1 is on, else ``None``.
+
+    Gated on ``hima_l1_enabled`` — L2-only callers must keep the default
+    LRU FreeKVCacheBlockQueue so LPB scoring overhead doesn't surface in
+    the L2-isolation experiment.
+    """
+    if _RUNTIME is None or not _RUNTIME.config.hima_l1_enabled:
         return None
     from vllm.v1.core.hima.lpb_free_queue import LPBFreeBlockQueue  # noqa: PLC0415
 

@@ -18,10 +18,10 @@ Two workloads × three server configs (baseline / hima_l1 / hima) × two pressur
 | W2 turns/agent | 4 | **16** |
 | W2 mock obs size | ~0.1 KB | **~1.5–3 KB** |
 
-**HiMA env flags** (hima mode only):
+**HiMA env flags** (per layer; set both sub-flags for the full stack):
 ```
 VLLM_PARTIAL_CACHE_ENABLED=1  VLLM_PARTIAL_CACHE_MIN_R=256
-VLLM_HIMA_ENABLE=1            VLLM_HIMA_HPB_WINDOW_S=3600
+VLLM_HIMA_L1_ENABLE=1         VLLM_HIMA_L2_ENABLE=1   VLLM_HIMA_HPB_WINDOW_S=3600
 ```
 
 ---

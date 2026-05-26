@@ -58,10 +58,25 @@ def _env_optional_int(name: str) -> int | None:
 
 @dataclass(frozen=True)
 class HiMAConfig:
-    """HiMA knobs; load from ``VLLM_HIMA_*`` env vars via :meth:`from_env`."""
+    """HiMA knobs; load from ``VLLM_HIMA_*`` env vars via :meth:`from_env`.
 
-    # ---- master switch & physical-page params -------------------- #
+    Two independent sub-switches:
+
+    * ``hima_l1_enabled`` — LPB intra-pool eviction (queues + path counter)
+    * ``hima_l2_enabled`` — admitter + budgeter + cross-pool planner
+
+    ``hima_enabled`` is a *derived* property — the OR of the two
+    sub-flags — exposed as a dataclass field so the engine bootstrap gate
+    in ``vllm/v1/engine/core.py`` can read it directly. **Do not set it
+    on the constructor.** The dataclass will overwrite any user-supplied
+    value with the derived one in ``__post_init__``.
+    """
+
+    # ---- enabled flags & physical-page params --------------------- #
+    # hima_enabled is derived in __post_init__; do not set it directly.
     hima_enabled: bool = False
+    hima_l1_enabled: bool = False  # LPB queues + path counter
+    hima_l2_enabled: bool = False  # Admitter + budgeter + cross-pool planner
     hima_page_size_bytes: int | None = None  # None => probe via cuMemGet...
 
     # ---- L1 (intra-pool) ---------------------------------------- #
@@ -107,14 +122,23 @@ class HiMAConfig:
         if not 0.0 < self.ewma_alpha <= 1.0:
             raise ValueError(f"ewma_alpha must be in (0, 1], got {self.ewma_alpha}")
 
+        # hima_enabled is derived from the sub-flags only — overwrite any
+        # constructor-supplied value to maintain the invariant.
+        derived = self.hima_l1_enabled or self.hima_l2_enabled
+        if self.hima_enabled != derived:
+            object.__setattr__(self, "hima_enabled", derived)
+
     # ---- env loader --------------------------------------------- #
 
     @classmethod
     def from_env(cls) -> HiMAConfig:
-        """Load from ``VLLM_HIMA_*`` env vars."""
+        """Load from ``VLLM_HIMA_L1_ENABLE`` / ``VLLM_HIMA_L2_ENABLE`` env vars."""
 
+        l1 = _env_bool("VLLM_HIMA_L1_ENABLE", False)
+        l2 = _env_bool("VLLM_HIMA_L2_ENABLE", False)
         return cls(
-            hima_enabled=_env_bool("VLLM_HIMA_ENABLE", False),
+            hima_l1_enabled=l1,
+            hima_l2_enabled=l2,
             hima_page_size_bytes=_env_optional_int("VLLM_HIMA_PAGE_SIZE_BYTES"),
             hima_lpb_window_s=_env_float("VLLM_HIMA_HPB_WINDOW_S", 60.0),
             hima_budget_interval_s=_env_float("VLLM_HIMA_BUDGETER_TICK_S", 30.0),

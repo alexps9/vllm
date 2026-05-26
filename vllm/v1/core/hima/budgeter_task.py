@@ -80,8 +80,17 @@ class BudgeterBackgroundTask:
 
 
 def start_if_enabled(runtime: HiMARuntime | None) -> BudgeterBackgroundTask | None:
-    """Start the background task if HiMA is active; returns ``None`` otherwise."""
+    """Start the background task if HiMA L2 is active; returns ``None`` otherwise.
+
+    The budgeter daemon drives the cross-pool planner — an L2 component.
+    When L2 is disabled (``runtime.config.hima_l2_enabled`` is False),
+    spawning the daemon would just call ``planner_tick`` on a None
+    planner; skip it entirely.
+    """
     if runtime is None:
+        return None
+    if not runtime.config.hima_l2_enabled:
+        logger.info("HiMA L2 disabled; budgeter daemon not started.")
         return None
     task = BudgeterBackgroundTask(runtime)
     task.start()

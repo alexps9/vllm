@@ -136,9 +136,15 @@ class EngineCore:
             )
             from vllm.v1.kv_cache_interface import MambaSpec  # noqa: PLC0415
 
+            # cache_config's post-validator reconciles env vars and CLI
+            # flags into hima_l{1,2}_enabled. Read them directly — no
+            # getattr default — so a stale or mocked config without the
+            # fields raises instead of silently flipping a layer on. The
+            # master ``hima_enabled`` is derived in HiMAConfig.__post_init__.
             _hima_cfg = dataclasses.replace(
                 HiMAConfig.from_env(),
-                hima_enabled=True,
+                hima_l1_enabled=vllm_config.cache_config.hima_l1_enabled,
+                hima_l2_enabled=vllm_config.cache_config.hima_l2_enabled,
                 hima_page_size_bytes=vllm_config.cache_config.hima_page_size_bytes,
             )
 
