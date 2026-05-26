@@ -75,7 +75,7 @@ the hybrid model is the highest-fidelity next step.
 ### 2. partial-cache regression — root-caused and FIXED ✅
 
 **Root cause** (full write-up in
-[`dev/interlayer/M16_pcache_root_cause_fix.md`](../../interlayer/M16_pcache_root_cause_fix.md)):
+[`dev/interlayer/16_pcache_root_cause_fix.md`](../../../interlayer/16_pcache_root_cause_fix.md)):
 
 `vllm/v1/core/single_type_kv_cache_manager.py:235` set
 `num_cached_block = len(req_blocks)`. With M.4/M.5's

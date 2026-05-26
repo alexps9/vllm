@@ -6,7 +6,7 @@ because their architectures differ:
 
 | sub-dir | engine | what it is |
 |---|---|---|
-| (this README + M.1-M.9 content below) | **vLLM** | bubble elimination via partial-block caching. vLLM has ONE inflated KV pool (`block_size = 1056` on hybrid models), not two pools. Sglang's "move pages between pools via cuMemUnmap+cuMemMap" doesn't translate; vLLM's bubble is in the per-request abandoned last-partial-block. |
+| (this README + M.1–M.16 content below) | **vLLM** | bubble elimination via partial-block caching. vLLM has ONE inflated KV pool (`block_size = 1056` on hybrid models), not two pools. Sglang's "move pages between pools via cuMemUnmap+cuMemMap" doesn't translate; vLLM's bubble is in the per-request abandoned last-partial-block. |
 | [`planner_validate/`](planner_validate) | **sglang** | output runs for the sglang interlayer integration tests: (1) v1 slack-harvest planner correctness on the legacy actuator, (2) v1 path-B logical actuator end-to-end smoke (`r1_v1logical/`). Drivers in sglang repo at `dev/interlayer/planner_validate/`. |
 
 ---
@@ -21,14 +21,30 @@ each request's last partial block to be abandoned — and this
 directory documents the design, prototype, and end-to-end
 validation of the mechanism that eliminates it.
 
-## Status: PROTOTYPE VALIDATED end-to-end (non-hybrid)
+## Status: SHIPPED — pcache regression root-caused + fixed
 
 The partial-block-caching mechanism works. Single-group models
 (no mamba) get **bubble elimination + 43% TTFT win on follow-up
 turns** at the size regime that matters (block_size = 1024,
-prompts ≈ 8K tokens). See Findings M.6 and M.7 below.
+prompts ≈ 8K tokens). See Findings M.6 and M.7 for the win, and
+M.10–M.16 for the regression hunt that closed in a one-line
+``num_cached_block`` fix.
 
 ## Findings (chronological)
+
+The findings split into two arcs:
+
+**Arc 1 (M.1–M.9): design + validation.** Quantified the bubble,
+shipped cache-side + hit-side plumbing, validated end-to-end on
+single-group models, measured the real-workload TTFT/throughput
+trade-off.
+
+**Arc 2 (M.10–M.16): post-shipping root-cause chain.** M.9 surfaced
+a -12 % throughput regression on the real cc workload. M.10–M.15
+walked through hypotheses (in-place mutation, dispatch
+fragmentation, multi-stream, threshold mitigation). M.16 finally
+root-caused the regression to ``num_cached_block`` over-counting
+adopted partial blocks, and fixed it.
 
 | # | What | Status | File |
 |---|---|---|---|
@@ -41,6 +57,13 @@ prompts ≈ 8K tokens). See Findings M.6 and M.7 below.
 | M.7 | Scaled validation at block_size=1024 — **43% TTFT win at R=800** | **validated** | `07_large_results.md` + `runs/07_nonhybrid_large_{baseline,partial_cache}.{jsonl,out}` |
 | M.8 | Hybrid (mamba) needs sub-block SSM state cache — beyond per-group plumbing | doc | `08_hybrid_architectural_blocker.md` |
 | M.9 | Real cc workload (10 sessions, 106 turns): **TTFT -16%, bubble -88%, throughput -12%** | **measured** | `09_cc_workload_results.md` + `runs/09_cc_{baseline,partial_cache}_v5.jsonl` |
+| M.10 | M.9 throughput regression first root-cause hypothesis (in-place mutation) — partial fix only | doc | `10_root_cause.md` |
+| M.11 | nsys profiling of the post-M.10 residual regression — GPU-side time matches; CPU-side overhead | doc | `11_nsys_findings.md` + `runs/nsys/` |
+| M.12 | py-spy localizes regression to GPU sync waits → batch fragmentation increases sync points | doc | `12_pyspy_root_cause.md` |
+| M.13 | `batch_queue_size` mitigation doesn't help; dispatch fragmentation is the root cause | doc | `13_mitigation_attempts.md` + `runs/m13/` |
+| M.14 | Multi-stream (concurrent) makes the regression WORSE, not better | doc | `14_multistream_results.md` + `14_concurrent_workload.py` + `runs/m14/` |
+| M.15 | `VLLM_PARTIAL_CACHE_MIN_R=256` threshold heuristic recovers 24% of regression while keeping TTFT win | **shipped** | `15_threshold_mitigation.md` + `runs/m15/` |
+| M.16 | Adopted partial block was never re-cached as full (num_cached_block over-count) — root cause + one-line fix | **fixed** | `16_pcache_root_cause_fix.md` + `pcache_fix_num_cached_block.patch` + verify/2 runs |
 
 ## Headline result (M.7 micro / M.9 real workload)
 
@@ -75,6 +98,28 @@ throughput              157 tok/s  137.7 tok/s -12.27%
 **Verdict**: net win for TTFT-sensitive interactive workloads
 (agents, chat). Net loss for bulk-generation throughput. Opt-in via
 env var so operators choose per deployment.
+
+### Post-M.9 root-cause chain (M.10–M.16)
+
+M.9 left two open questions: (a) why the -12 % throughput
+regression at block_size=1056, and (b) whether the partial-cache
+hit was actually being re-cached as a full block on subsequent
+turns. The M.10–M.16 chain answered both.
+
+| arc step | conclusion |
+|---|---|
+| M.10 (mutation hypothesis) | In-place mutation of the cached `block_hash` was *one* bug; fixing it recovered some throughput but the regression persisted. |
+| M.11 (nsys) | GPU-side time matches between baseline and pcache → regression is CPU-side overhead, not extra GPU work. |
+| M.12 (py-spy) | Localized regression to GPU sync waits in the engine main loop. Hypothesis: batch fragmentation → more sync points per token. |
+| M.13 (bq mitigation) | `batch_queue_size` increase didn't close the gap; dispatch fragmentation is the real cause. |
+| M.14 (multi-stream) | Multi-stream concurrency made the regression *worse* — confirmed dispatch contention. |
+| M.15 (threshold) | `VLLM_PARTIAL_CACHE_MIN_R=256` heuristic cuts the throughput regression by 24 % while preserving the TTFT win. **Shipped.** |
+| M.16 (verify/2 collision) | verify/2's growing-context workload exposed a different regression: adopted partial block was never re-cached as full because `num_cached_block` over-counted (`len(req_blocks)` proxy). One-line fix in `single_type_kv_cache_manager.py` recovers hit % from 93.6 → 96.8 and turns TTFT into a -5 % win vs LRU. **Fixed.** |
+
+Net post-fix posture: TTFT win preserved on both M.7/M.9 and on the
+multi-turn growing-context workload (verify/2). Throughput
+regression mitigated (M.15 threshold). Hybrid path still gated on
+M.2.
 
 ## Activation
 
@@ -143,11 +188,6 @@ cp dev/interlayer/runs/07_nonhybrid_large.jsonl dev/interlayer/runs/07_nonhybrid
    (`vllm/envs.py`) — the "Unknown vLLM environment variable" warning
    at runtime is cosmetic noise.
 
-5. **End-to-end cc workload measurement** — the partial-cache fix
-   should be slotted into `dev/compare_lru_lpb.py`'s LRU/LPB
-   comparison pattern to produce a Finding M.8 with TTFT / TPOT /
-   throughput numbers on real cc traffic.
-
 ## File map
 
 ```
@@ -162,6 +202,19 @@ dev/interlayer/
 ├── 06_validation_results.md           # M.6 first end-to-end validation
 ├── 07_nonhybrid_microbench_large.py   # M.7 scaled testbed (block_size=1024)
 ├── 07_large_results.md                # M.7 scaled validation results
+├── 08_hybrid_architectural_blocker.md # M.8 hybrid needs sub-block SSM cache
+├── 09_cc_workload_compare.py          # M.9 real cc workload bench
+├── 09_cc_workload_results.md          # M.9 real-workload numbers
+├── 10_root_cause.md                   # M.10 in-place mutation hypothesis (partial fix)
+├── 11_nsys_findings.md                # M.11 nsys → regression is CPU-side
+├── 12_pyspy_root_cause.md             # M.12 py-spy → batch fragmentation
+├── 13_mitigation_attempts.md          # M.13 batch_queue_size ruled out
+├── 14_concurrent_workload.py          # M.14 multi-stream driver
+├── 14_multistream_results.md          # M.14 multi-stream regression numbers
+├── 15_threshold_mitigation.md         # M.15 VLLM_PARTIAL_CACHE_MIN_R=256 ships
+├── 16_pcache_root_cause_fix.md        # M.16 num_cached_block fix (final)
+├── pcache_fix_num_cached_block.patch  # M.16 patch snapshot
+├── cc_long_traces.jsonl               # M.9 dataset (10 sessions × 106 turns)
 ├── SESSION_HANDOFF.md                 # earlier session handoff (now superseded)
 └── runs/
     ├── 02_partial_cache_micro.{jsonl,out}                — M.1 hybrid baseline
@@ -171,5 +224,11 @@ dev/interlayer/
     ├── 05_nonhybrid_micro.jsonl                          — last 05_ run scratch
     ├── 07_nonhybrid_large_baseline.{jsonl,out}           — M.7 large baseline
     ├── 07_nonhybrid_large_partial_cache.{jsonl,out}      — M.7 large + fix
-    └── 07_nonhybrid_large.jsonl                          — last 07_ run scratch
+    ├── 07_nonhybrid_large.jsonl                          — last 07_ run scratch
+    ├── 09_cc_*.{jsonl,out}                               — M.9 + M.10 diagnostic variants
+    ├── m11_*.out                                         — M.11 nsys captures
+    ├── nsys/                                             — M.11 nsys profile traces
+    ├── m13/                                              — M.13 batch_queue sweep
+    ├── m14/                                              — M.14 multi-stream sweep
+    └── m15/                                              — M.15 threshold sweep
 ```
