@@ -33,6 +33,7 @@ Run:
 
 from __future__ import annotations
 
+import argparse
 import gc
 import json
 import os
@@ -55,7 +56,14 @@ BLOCK_SIZE = 1056
 N_SESSIONS = 30  # incl. session 0 (used as anchor), so 29 cold-burst sessions
 MAX_PROMPT_TOKENS = 60_000
 N_ANCHOR_WARM = 5
-OUT_JSONL = Path("dev/e2e_l1_burst.jsonl")
+
+# Maps --mode → kwargs forwarded to LLM(). Sub-flags are independent.
+_MODE_KWARGS: dict[str, dict[str, bool]] = {
+    "lru":     {},
+    "l1_only": {"hima_l1_enabled": True},
+    "l2_only": {"hima_l2_enabled": True},
+    "full":    {"hima_l1_enabled": True, "hima_l2_enabled": True},
+}
 
 
 def flatten_content(content) -> str:
@@ -105,6 +113,29 @@ def msg_to_chunk(m: dict) -> str:
 
 
 def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument(
+        "--mode",
+        choices=list(_MODE_KWARGS),
+        default="lru",
+        help="HiMA layer config. lru=baseline; l1_only / l2_only "
+        "isolate one layer; full=both layers on.",
+    )
+    ap.add_argument(
+        "--out",
+        type=Path,
+        default=None,
+        help="JSONL output path; defaults to dev/intralayer/e2e_l1_burst_<mode>.jsonl",
+    )
+    args = ap.parse_args()
+    mode = args.mode
+    mode_kwargs = _MODE_KWARGS[mode]
+    out_jsonl = (
+        args.out
+        if args.out is not None
+        else Path(f"dev/intralayer/e2e_l1_burst_{mode}.jsonl")
+    )
+
     tokenizer = AutoTokenizer.from_pretrained(MODEL, trust_remote_code=True)
     sessions: list[list[dict]] = [
         json.loads(l)["messages"] for l in DATA.read_text().splitlines() if l.strip()
@@ -118,7 +149,8 @@ def main() -> None:
     anchor_len = len(anchor_ids)
     print(f"Anchor: {anchor_len} tokens (~{anchor_len / BLOCK_SIZE:.1f} blocks)")
 
-    print(f"Loading {MODEL} (TP=2, util=0.35, mamba_cache_mode=align)...")
+    print(f"Loading {MODEL} (TP=2, util=0.35, mamba_cache_mode=align, "
+          f"mode={mode}, mode_kwargs={mode_kwargs})...")
     llm = LLM(
         model=MODEL,
         tensor_parallel_size=2,
@@ -129,6 +161,7 @@ def main() -> None:
         gpu_memory_utilization=0.35,
         max_num_seqs=64,
         trust_remote_code=True,
+        **mode_kwargs,
     )
     sp = SamplingParams(max_tokens=1, temperature=0.0)
 
@@ -137,8 +170,8 @@ def main() -> None:
         outs = llm.generate(prompts=[token_ids], sampling_params=sp, use_tqdm=False)
         return (outs[0].num_cached_tokens or 0, time.monotonic() - t0)
 
-    OUT_JSONL.unlink(missing_ok=True)
-    fout = OUT_JSONL.open("w")
+    out_jsonl.unlink(missing_ok=True)
+    fout = out_jsonl.open("w")
     t_start = time.monotonic()
 
     # Phase A: warm anchor 5 times → its blocks settle at the tail of the
@@ -234,7 +267,7 @@ def main() -> None:
         "elapsed_s": time.monotonic() - t_start,
     }) + "\n")
     fout.close()
-    print(f"\nLog written to {OUT_JSONL}")
+    print(f"\nLog written to {out_jsonl}")
 
 
 if __name__ == "__main__":

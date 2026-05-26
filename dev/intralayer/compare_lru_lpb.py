@@ -1,10 +1,15 @@
 # SPDX-License-Identifier: Apache-2.0
 """LRU vs LPB end-to-end comparison on real cc workload.
 
-Runs the SAME workload twice — once with the default LRU free-block queue
-(`hima_enabled=False`) and once with HiMA L1's LPB-scored queue
-(`hima_enabled=True`) — and records per-request metrics so we can compare:
+Runs the SAME workload across one of four HiMA configurations and records
+per-request metrics. The mode chooses which layers of HiMA are active:
 
+  * ``lru``      — no HiMA at all (default LRU FreeKVCacheBlockQueue)
+  * ``l1_only``  — L1 LPB queue + path counter, no L2 admitter/budgeter
+  * ``l2_only``  — L2 admitter/budgeter, default LRU queue (control)
+  * ``full``     — both L1 and L2 enabled
+
+Measured signals:
   * L1 outcome: anchor cache survival after cold-burst pressure.
   * L2 outcome on cc traffic:
       - aggregate cache hit rate (Σnum_cached / Σprompt_len)
@@ -14,10 +19,12 @@ Runs the SAME workload twice — once with the default LRU free-block queue
       - aggregate throughput = Σoutput_tokens / Σwall
 
 Invocation:
-  .venv/bin/python -u dev/compare_lru_lpb.py --mode lru | tee dev/compare_lru.out
-  .venv/bin/python -u dev/compare_lru_lpb.py --mode lpb | tee dev/compare_lpb.out
+  .venv/bin/python -u dev/intralayer/compare_lru_lpb.py --mode lru      | tee dev/compare_lru.out
+  .venv/bin/python -u dev/intralayer/compare_lru_lpb.py --mode l1_only  | tee dev/compare_l1only.out
+  .venv/bin/python -u dev/intralayer/compare_lru_lpb.py --mode l2_only  | tee dev/compare_l2only.out
+  .venv/bin/python -u dev/intralayer/compare_lru_lpb.py --mode full     | tee dev/compare_full.out
 
-The two runs must use separate Python processes because HiMA enables a
+The four runs must use separate Python processes because HiMA enables a
 process-global runtime singleton.
 """
 
@@ -108,9 +115,21 @@ def msg_to_chunk(m: dict) -> str:
     return f"<|im_start|>{role}\n{flatten_content(m.get('content'))}<|im_end|>\n"
 
 
+_MODE_KWARGS: dict[str, dict[str, bool]] = {
+    "lru":     {},  # all HiMA flags False by default
+    "l1_only": {"hima_l1_enabled": True},
+    "l2_only": {"hima_l2_enabled": True},
+    "full":    {"hima_l1_enabled": True, "hima_l2_enabled": True},
+}
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--mode", choices=["lru", "lpb"], required=True)
+    ap.add_argument(
+        "--mode",
+        choices=list(_MODE_KWARGS),
+        required=True,
+    )
     ap.add_argument("--trial", type=int, default=1,
                     help="Trial index; writes "
                          "dev/intralayer/runs/vllm/compare_{mode}{tag}_t{trial}.jsonl. "
@@ -136,7 +155,7 @@ def main() -> None:
                          "actually expose LPB's worst case.")
     args = ap.parse_args()
     mode = args.mode
-    hima_on = mode == "lpb"
+    mode_kwargs = _MODE_KWARGS[mode]
     trial = args.trial
     model_id = args.model
     tag = args.tag
@@ -153,8 +172,8 @@ def main() -> None:
     out_jsonl.unlink(missing_ok=True)
     fout = out_jsonl.open("w")
     log = lambda **kw: (fout.write(json.dumps(kw) + "\n"), fout.flush())  # noqa: E731
-    log(kind="meta", mode=mode, trial=trial, model=model_id, tag=tag,
-        util=util, tp=tp, phase_f_scale=pf_scale)
+    log(kind="meta", mode=mode, mode_kwargs=mode_kwargs, trial=trial,
+        model=model_id, tag=tag, util=util, tp=tp, phase_f_scale=pf_scale)
 
     tokenizer = AutoTokenizer.from_pretrained(model_id, trust_remote_code=True)
 
@@ -173,7 +192,7 @@ def main() -> None:
           f"(~{anchor_len / BLOCK_SIZE:.1f} blocks)")
 
     print(f"[{mode}] Loading {model_id} (TP={tp}, util={util}, "
-          f"hima_enabled={hima_on}, phase_f_scale={pf_scale})...")
+          f"mode_kwargs={mode_kwargs}, phase_f_scale={pf_scale})...")
     llm = LLM(
         model=model_id,
         tensor_parallel_size=tp,
@@ -184,7 +203,7 @@ def main() -> None:
         gpu_memory_utilization=util,
         max_num_seqs=64,
         trust_remote_code=True,
-        hima_enabled=hima_on,
+        **mode_kwargs,
     )
 
     def issue(token_ids, max_tokens: int) -> dict:
