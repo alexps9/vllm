@@ -1,6 +1,12 @@
 #!/usr/bin/env bash
 # End-to-end sweep: start server → W1 → W2 → shutdown.
-# Usage: run_sweep.sh <baseline|hima> <out_root> [w1_clients=16] [w1_turns="4 8 16 32 64"]
+# Usage: run_sweep.sh <baseline|l1_only|l2_only|full> <out_root> [w1_clients=16] [w1_turns="4 8 16 32 64"]
+#
+# Modes (after HiMA sub-flag split):
+#   baseline  — no HiMA
+#   l1_only   — HiMA L1 (LPB intra-pool eviction) + partial-cache
+#   l2_only   — HiMA L2 (admitter + budgeter + planner) + partial-cache
+#   full      — both L1 and L2 + partial-cache (was "hima" before split)
 #
 # Required env:
 #   MODEL       model weights path
@@ -10,7 +16,7 @@
 #   VLLM_UTIL=0.85  VLLM_MAX_SEQS=64  VLLM_MAX_LEN=65536  VLLM_TP=2
 set -euo pipefail
 
-MODE="${1:?mode = baseline | hima | hima_l1}"
+MODE="${1:?mode = baseline | l1_only | l2_only | full}"
 OUT_ROOT="${2:?out root}"
 W1_CLIENTS="${3:-16}"
 W1_TURNS="${4:-4 8 16 32 64}"

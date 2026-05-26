@@ -48,21 +48,22 @@ cd "$REPO"
 git checkout hima
 
 # aggressive sweep (util=0.55, 16 clients, 16-turn agents)
-for MODE in baseline hima_l1 hima; do
-  MODEL=$MODEL REPO=$REPO VLLM_UTIL=0.55 VLLM_MAX_SEQS=256 VLLM_MAX_LEN=65536 VLLM_TP=2 \
-    bash runs/scripts/run_sweep.sh $MODE /tmp/out
-done
+MODEL=$MODEL REPO=$REPO VLLM_UTIL=0.55 VLLM_MAX_SEQS=256 VLLM_MAX_LEN=65536 VLLM_TP=2 \
+  bash runs/scripts/run_sweep.sh baseline /tmp/out
+
+MODEL=$MODEL REPO=$REPO VLLM_UTIL=0.55 VLLM_MAX_SEQS=256 VLLM_MAX_LEN=65536 VLLM_TP=2 \
+  bash runs/scripts/run_sweep.sh full /tmp/out
 
 # original sweep (util=0.85, 4 clients)
-for MODE in baseline hima; do
-  MODEL=$MODEL REPO=$REPO \
-    bash runs/scripts/run_sweep.sh $MODE /tmp/out_orig 4 "4 8 16 32 64 128"
-done
+MODEL=$MODEL REPO=$REPO \
+  bash runs/scripts/run_sweep.sh baseline /tmp/out_orig 4 "4 8 16 32 64 128"
+MODEL=$MODEL REPO=$REPO \
+  bash runs/scripts/run_sweep.sh full    /tmp/out_orig 4 "4 8 16 32 64 128"
 
 # plot
 source "$REPO/.venv/bin/activate"
-python runs/scripts/plot.py /tmp/out      /tmp/out/figures      baseline,hima_l1,hima
-python runs/scripts/plot.py /tmp/out_orig /tmp/out_orig/figures baseline,hima
+python runs/scripts/plot.py /tmp/out      /tmp/out/figures      baseline,full
+python runs/scripts/plot.py /tmp/out_orig /tmp/out_orig/figures baseline,full
 ```
 
 ---
@@ -71,7 +72,7 @@ python runs/scripts/plot.py /tmp/out_orig /tmp/out_orig/figures baseline,hima
 
 | file | role |
 |---|---|
-| `scripts/start_server.sh` | start vLLM serve (baseline or hima), controlled by env vars |
+| `scripts/start_server.sh` | start vLLM serve in mode `baseline` / `l1_only` / `l2_only` / `full`, controlled by env vars |
 | `scripts/workload1.sh` | W1 multi-turn sweep; prefix sizes auto-selected from `VLLM_UTIL` |
 | `scripts/workload2.py` | W2 concurrent SWE-Bench-Lite driver |
 | `scripts/run_sweep.sh` | end-to-end driver: server → W1 → W2 → shutdown |
