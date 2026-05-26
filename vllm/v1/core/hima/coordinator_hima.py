@@ -122,17 +122,21 @@ def _hima_cache_blocks(self: Any, request: Any, num_computed_tokens: int) -> Non
     if runtime is None:
         return
     # block_pool.free_block_queue may be an LPBFreeBlockQueue; refresh scores
-    # for any blocks just promoted to the free queue.
+    # for any blocks just promoted to the free queue. Owned blocks (ref_cnt
+    # > 0 here) are not in the queue so refresh_lpb_score is a no-op for
+    # them; we still pay the call frame cost per block, so strip the per-
+    # block ``hasattr`` + ``contextlib.suppress`` (KVCacheBlock always has
+    # ``block_id`` and ``refresh_lpb_score`` already handles a missing
+    # block via ``dict.get`` returning None).
     free_q = getattr(self.block_pool, "free_block_queue", None)
     refresh = getattr(free_q, "refresh_lpb_score", None)
     if refresh is None:
         return
-    import contextlib  # noqa: PLC0415
-
-    for blk in getattr(request, "kv_cache_blocks", []):
-        if hasattr(blk, "block_id"):
-            with contextlib.suppress(Exception):
-                refresh(blk)
+    blocks = getattr(request, "kv_cache_blocks", None)
+    if not blocks:
+        return
+    for blk in blocks:
+        refresh(blk)
 
 
 __all__ = ["HiMACoordinator"]

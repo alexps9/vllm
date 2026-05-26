@@ -443,6 +443,10 @@ class Scheduler(SchedulerInterface):
                 _hima_admit_done = False
                 while True:
                     # HiMA: consult admitter once per allocation attempt.
+                    # Two-tier short-circuit so the cost is one attribute
+                    # access (``runtime.admitter``) when L2 is off — no
+                    # function call, no AdmissionDecision allocation,
+                    # no contextlib.suppress frame setup.
                     if not _hima_admit_done:
                         _hima_admit_done = True
                         from vllm.v1.core.hima.integration import (  # noqa: PLC0415
@@ -450,7 +454,7 @@ class Scheduler(SchedulerInterface):
                         )
 
                         _hima_pre = get_runtime()
-                        if _hima_pre is not None:
+                        if _hima_pre is not None and _hima_pre.admitter is not None:
                             import contextlib  # noqa: PLC0415
 
                             from vllm.v1.core.hima.config import (  # noqa: PLC0415
