@@ -9,11 +9,16 @@ so shared internal nodes are protected from eviction (HiMA paper §3.2).
 from __future__ import annotations
 
 import collections
+import math
 import time
 from collections.abc import Callable, Hashable, Iterable
 from dataclasses import dataclass, field
 
 BlockId = Hashable
+
+# Hoisted to module scope: ``_INF`` allocates a new float each call
+# and the ``count()`` hot path runs once per ``_score_for``.
+_INF = math.inf
 
 
 @dataclass
@@ -32,6 +37,12 @@ class PathCountedHitCounter:
     clock: Callable[[], float] = field(default=time.monotonic)
     _events: collections.deque = field(default_factory=collections.deque)
     _counts: dict = field(default_factory=dict)
+    # Stage 11d opt #1: deadline (clock() timestamp) at which the oldest
+    # still-live event will become expired. ``count()`` compares
+    # ``clock()`` against this once, skipping the deque walk when nothing
+    # is yet ripe. +inf when the deque is empty. Maintained by
+    # ``record_hit`` and ``_evict_expired``.
+    _expiry_deadline: float = _INF
 
     def __post_init__(self) -> None:
         if self.window_seconds <= 0:
@@ -44,14 +55,26 @@ class PathCountedHitCounter:
 
         now = self.clock()
         self._evict_expired(now)
+        events = self._events
+        counts = self._counts
+        was_empty = not events
         for block_id in path:
-            self._counts[block_id] = self._counts.get(block_id, 0) + 1
-            self._events.append(_Hit(block_id=block_id, timestamp=now))
+            counts[block_id] = counts.get(block_id, 0) + 1
+            events.append(_Hit(block_id=block_id, timestamp=now))
+        if was_empty and events:
+            self._expiry_deadline = now + self.window_seconds
 
     def count(self, block_id: BlockId) -> int:
         """Sliding-window hit count for ``block_id``."""
 
-        self._evict_expired(self.clock())
+        # Hot path: avoid ``clock()`` entirely when the deque is empty
+        # (deadline=+inf). When non-empty, a single ``clock() < deadline``
+        # test elides the deque walk + dict pops while nothing has ripened.
+        deadline = self._expiry_deadline
+        if deadline != _INF:
+            now = self.clock()
+            if now >= deadline:
+                self._evict_expired(now)
         return self._counts.get(block_id, 0)
 
     def discard(self, block_id: BlockId) -> None:
@@ -76,6 +99,10 @@ class PathCountedHitCounter:
                 counts[ev.block_id] = remaining
             else:
                 counts.pop(ev.block_id, None)
+        # Refresh the deadline gate for the next ``count()`` call.
+        self._expiry_deadline = (
+            events[0].timestamp + self.window_seconds if events else _INF
+        )
 
 
 __all__ = ["BlockId", "PathCountedHitCounter"]
