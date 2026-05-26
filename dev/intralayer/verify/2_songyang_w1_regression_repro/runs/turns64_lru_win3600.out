@@ -1,0 +1,30 @@
+[config=lru] loading Qwen/Qwen3-8B TP=2 util=0.55
+INFO 05-26 13:40:04 [utils.py:278] non-default args: {'trust_remote_code': True, 'dtype': 'bfloat16', 'max_model_len': 77824, 'tensor_parallel_size': 2, 'enable_prefix_caching': True, 'gpu_memory_utilization': 0.55, 'max_num_seqs': 64, 'disable_log_stats': True, 'model': 'Qwen/Qwen3-8B'}
+WARNING 05-26 13:40:04 [envs.py:2052] Unknown vLLM environment variable detected: VLLM_HIMA_HPB_WINDOW_S
+Could not cache non-existence of file. Will ignore error and continue. Error: [Errno 13] Permission denied: '/scratch/yuzhou/.cache/huggingface/hub/models--Qwen--Qwen3-8B/.no_exist/b968826d9c46dd6066d109eabc6255188de91218/processor_config.json'
+Could not cache non-existence of file. Will ignore error and continue. Error: [Errno 13] Permission denied: '/scratch/yuzhou/.cache/huggingface/hub/models--Qwen--Qwen3-8B/.no_exist/b968826d9c46dd6066d109eabc6255188de91218/preprocessor_config.json'
+INFO 05-26 13:40:05 [model.py:617] Resolved architecture: Qwen3ForCausalLM
+Traceback (most recent call last):
+  File "/data/yuzhou/projects/vllm-songyang/dev/intralayer/verify/2_songyang_w1_regression_repro/driver.py", line 255, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "/data/yuzhou/projects/vllm-songyang/dev/intralayer/verify/2_songyang_w1_regression_repro/driver.py", line 146, in main
+    llm = LLM(
+          ^^^^
+  File "/data/yuzhou/projects/vllm-songyang/vllm/entrypoints/llm.py", line 367, in __init__
+    self.llm_engine = LLMEngine.from_engine_args(
+                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/yuzhou/projects/vllm-songyang/vllm/v1/engine/llm_engine.py", line 162, in from_engine_args
+    vllm_config = engine_args.create_engine_config(usage_context)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/yuzhou/projects/vllm-songyang/vllm/engine/arg_utils.py", line 1736, in create_engine_config
+    model_config = self.create_model_config()
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/data/yuzhou/projects/vllm-songyang/vllm/engine/arg_utils.py", line 1566, in create_model_config
+    return ModelConfig(
+           ^^^^^^^^^^^^
+  File "/data/yuzhou/projects/vllm-songyang/.venv/lib/python3.12/site-packages/pydantic/_internal/_dataclasses.py", line 121, in __init__
+    s.__pydantic_validator__.validate_python(ArgsKwargs(args, kwargs), self_instance=s)
+pydantic_core._pydantic_core.ValidationError: 1 validation error for ModelConfig
+  Value error, User-specified max_model_len (77824) is greater than the derived max_model_len (max_position_embeddings=40960.0 or model_max_length=None in model's config.json). To allow overriding this maximum, set the env var VLLM_ALLOW_LONG_MAX_MODEL_LEN=1. VLLM_ALLOW_LONG_MAX_MODEL_LEN must be used with extreme caution. If the model uses relative position encoding (RoPE), positions exceeding derived_max_model_len lead to nan. If the model uses absolute position encoding, positions exceeding derived_max_model_len will cause a CUDA array out-of-bounds error. [type=value_error, input_value=ArgsKwargs((), {'model': ...nderer_num_workers': 1}), input_type=ArgsKwargs]
+    For further information visit https://errors.pydantic.dev/2.13/v/value_error

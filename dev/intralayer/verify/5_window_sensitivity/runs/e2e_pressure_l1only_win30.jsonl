@@ -1,0 +1,7 @@
+{"K": 0, "anchor_cached": 4224, "anchor_len": 4737, "anchor_pct": 89.17036098796707, "cum_new_tokens": 0, "cum_new_blocks_lb": 0, "n_burst_requests": 0, "elapsed_s": 4.28101671100012}
+{"K": 5, "anchor_cached": 4224, "anchor_len": 4737, "anchor_pct": 89.17036098796707, "cum_new_tokens": 279895, "cum_new_blocks_lb": 222, "n_burst_requests": 135, "elapsed_s": 29.989185765007278}
+{"K": 10, "anchor_cached": 4224, "anchor_len": 4737, "anchor_pct": 89.17036098796707, "cum_new_tokens": 540235, "cum_new_blocks_lb": 429, "n_burst_requests": 224, "elapsed_s": 69.00651101098629}
+{"K": 15, "anchor_cached": 4224, "anchor_len": 4737, "anchor_pct": 89.17036098796707, "cum_new_tokens": 810834, "cum_new_blocks_lb": 613, "n_burst_requests": 399, "elapsed_s": 146.29975536398706}
+{"K": 20, "anchor_cached": 0, "anchor_len": 4737, "anchor_pct": 0.0, "cum_new_tokens": 1117292, "cum_new_blocks_lb": 831, "n_burst_requests": 761, "elapsed_s": 264.5687140809896}
+{"K": 25, "anchor_cached": 0, "anchor_len": 4737, "anchor_pct": 0.0, "cum_new_tokens": 1304043, "cum_new_blocks_lb": 989, "n_burst_requests": 664, "elapsed_s": 374.0214537139982}
+{"K": 30, "anchor_cached": 0, "anchor_len": 4737, "anchor_pct": 0.0, "cum_new_tokens": 1573910, "cum_new_blocks_lb": 1223, "n_burst_requests": 768, "elapsed_s": 500.9113451759913}

@@ -1,0 +1,44 @@
+SMOKE_CONFIG_TAG lru
+INFO 05-26 02:40:22 [utils.py:278] non-default args: {'dtype': 'bfloat16', 'max_model_len': 512, 'gpu_memory_utilization': 0.3, 'disable_log_stats': True, 'enforce_eager': True}
+INFO 05-26 02:40:22 [model.py:617] Resolved architecture: Qwen3ForCausalLM
+INFO 05-26 02:40:22 [model.py:1752] Using max model len 512
+INFO 05-26 02:40:22 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=16384.
+INFO 05-26 02:40:22 [vllm.py:977] Asynchronous scheduling is enabled.
+WARNING 05-26 02:40:22 [vllm.py:1033] Enforce eager set, disabling torch.compile and CUDAGraphs. This is equivalent to setting -cc.mode=none -cc.cudagraph_mode=none
+WARNING 05-26 02:40:22 [vllm.py:1058] Inductor compilation was disabled by user settings, optimizations settings that are only active during inductor compilation will be ignored.
+INFO 05-26 02:40:22 [kernel.py:270] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['vllm_c', 'native'], fused_add_rms_norm=['vllm_c', 'native'])
+INFO 05-26 02:40:23 [vllm.py:1234] Cudagraph is disabled under eager mode
+INFO 05-26 02:40:23 [compilation.py:312] Enabled custom fusions: norm_quant, act_quant
+(EngineCore pid=2781531) INFO 05-26 02:40:30 [core.py:109] Initializing a V1 LLM engine (v0.1.dev16524+g861c81270) with config: model='Qwen/Qwen3-0.6B', speculative_config=None, tokenizer='Qwen/Qwen3-0.6B', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=False, dtype=torch.bfloat16, max_seq_len=512, download_dir=None, load_format=auto, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1, decode_context_parallel_size=1, dcp_comm_backend=ag_rs, disable_custom_all_reduce=False, quantization=None, quantization_config=None, enforce_eager=True, enable_return_routed_experts=False, kv_cache_dtype=auto, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser='', reasoning_parser_plugin='', enable_in_reasoning=False), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None, kv_cache_metrics=False, kv_cache_metrics_sample=0.01, cudagraph_metrics=False, enable_layerwise_nvtx_tracing=False, enable_mfu_metrics=False, enable_mm_processor_stats=False, enable_logging_iteration_details=False), seed=0, served_model_name=Qwen/Qwen3-0.6B, enable_prefix_caching=True, enable_chunked_prefill=True, pooler_config=None, compilation_config={'mode': <CompilationMode.NONE: 0>, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': ['all'], 'ir_enable_torch_wrap': False, 'splitting_ops': [], 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_vision_items_per_batch': 0, 'encoder_cudagraph_max_frames_per_batch': None, 'compile_sizes': [], 'compile_ranges_endpoints': [16384], 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'size_asserts': False, 'alignment_asserts': False, 'scalar_asserts': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': <CUDAGraphMode.NONE: 0>, 'cudagraph_num_of_warmups': 0, 'cudagraph_capture_sizes': [], 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': False, 'pass_config': {'fuse_norm_quant': True, 'fuse_act_quant': True, 'fuse_attn_quant': False, 'enable_sp': False, 'fuse_gemm_comms': False, 'fuse_allreduce_rms': False, 'fuse_rope_kvcache_cat_mla': False, 'fuse_act_padding': False}, 'max_cudagraph_capture_size': 0, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': False, 'static_all_moe_layers': []}, kernel_config=KernelConfig(ir_op_priority=IrOpPriorityConfig(rms_norm=['vllm_c', 'native'], fused_add_rms_norm=['vllm_c', 'native']), enable_flashinfer_autotune=True, moe_backend='auto', linear_backend='auto')
+(EngineCore pid=2781531) INFO 05-26 02:40:32 [parallel_state.py:1422] world_size=1 rank=0 local_rank=0 distributed_init_method=tcp://154.54.101.14:57409 backend=nccl
+(EngineCore pid=2781531) INFO 05-26 02:40:33 [parallel_state.py:1735] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank N/A, EPLB rank N/A
+(EngineCore pid=2781531) INFO 05-26 02:40:33 [gpu_worker.py:289] Using V2 Model Runner
+(EngineCore pid=2781531) INFO 05-26 02:40:34 [model_runner.py:274] Loading model from scratch...
+(EngineCore pid=2781531) INFO 05-26 02:40:35 [cuda.py:378] Using FLASH_ATTN attention backend out of potential backends: ['FLASH_ATTN', 'FLASHINFER', 'TRITON_ATTN', 'FLEX_ATTENTION'].
+(EngineCore pid=2781531) INFO 05-26 02:40:35 [flash_attn.py:636] Using FlashAttention version 3
+(EngineCore pid=2781531) INFO 05-26 02:40:35 [weight_utils.py:647] No model.safetensors.index.json found in remote.
+(EngineCore pid=2781531) INFO 05-26 02:40:35 [weight_utils.py:922] Filesystem type for checkpoints: EXT4. Checkpoint size: 1.40 GiB. Available RAM: 2209.40 GiB.
+(EngineCore pid=2781531) INFO 05-26 02:40:35 [weight_utils.py:945] Auto-prefetch is disabled because the filesystem (EXT4) is not a recognized network FS (NFS/Lustre). If you want to force prefetching, start vLLM with --safetensors-load-strategy=prefetch.
+(EngineCore pid=2781531) Loading safetensors checkpoint shards:   0% Completed | 0/1 [00:00<?, ?it/s]
+(EngineCore pid=2781531) Loading safetensors checkpoint shards: 100% Completed | 1/1 [00:00<00:00,  2.35it/s]
+(EngineCore pid=2781531) Loading safetensors checkpoint shards: 100% Completed | 1/1 [00:00<00:00,  2.35it/s]
+(EngineCore pid=2781531) 
+(EngineCore pid=2781531) INFO 05-26 02:40:36 [default_loader.py:397] Loading weights took 0.44 seconds
+(EngineCore pid=2781531) INFO 05-26 02:40:37 [model_runner.py:295] Model loading took 1.12 GiB and 3.392597 seconds
+(EngineCore pid=2781531) INFO 05-26 02:40:40 [gpu_worker.py:466] Available KV cache memory: 39.66 GiB
+(EngineCore pid=2781531) INFO 05-26 02:40:40 [kv_cache_utils.py:1733] GPU KV cache size: 371,312 tokens
+(EngineCore pid=2781531) INFO 05-26 02:40:40 [kv_cache_utils.py:1734] Maximum concurrency for 512 tokens per request: 725.22x
+(EngineCore pid=2781531) 2026-05-26 02:40:40,468 - INFO - autotuner.py:457 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
+(EngineCore pid=2781531) 2026-05-26 02:40:40,499 - INFO - autotuner.py:466 - flashinfer.jit: [Autotuner]: Autotuning process ends
+(EngineCore pid=2781531) INFO 05-26 02:40:40 [jit_monitor.py:54] Kernel JIT monitor activated — Triton JIT compilations during inference will be logged as warnings.
+(EngineCore pid=2781531) INFO 05-26 02:40:40 [core.py:364] init engine (profile, create kv cache, warmup model) took 3.03 s
+(EngineCore pid=2781531) WARNING 05-26 02:40:41 [vllm.py:1033] Enforce eager set, disabling torch.compile and CUDAGraphs. This is equivalent to setting -cc.mode=none -cc.cudagraph_mode=none
+(EngineCore pid=2781531) WARNING 05-26 02:40:41 [vllm.py:1058] Inductor compilation was disabled by user settings, optimizations settings that are only active during inductor compilation will be ignored.
+(EngineCore pid=2781531) INFO 05-26 02:40:41 [kernel.py:270] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['vllm_c', 'native'], fused_add_rms_norm=['vllm_c', 'native'])
+(EngineCore pid=2781531) INFO 05-26 02:40:41 [vllm.py:1234] Cudagraph is disabled under eager mode
+SMOKE_BOOT_DONE config=lru boot_s=19.49
+Rendering prompts:   0%|          | 0/1 [00:00<?, ?it/s]Rendering prompts: 100%|██████████| 1/1 [00:00<00:00, 30.88it/s]
+Processed prompts:   0%|          | 0/1 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  2.97it/s, est. speed input: 11.89 toks/s, output: 11.89 toks/s]Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  2.97it/s, est. speed input: 11.89 toks/s, output: 11.89 toks/s]Processed prompts: 100%|██████████| 1/1 [00:00<00:00,  2.97it/s, est. speed input: 11.89 toks/s, output: 11.89 toks/s]
+SMOKE_GEN_DONE config=lru gen_ok=True
+(EngineCore pid=2781531) INFO 05-26 02:40:41 [core.py:1326] Shutdown initiated (timeout=0)
+(EngineCore pid=2781531) INFO 05-26 02:40:41 [core.py:1349] Shutdown complete
