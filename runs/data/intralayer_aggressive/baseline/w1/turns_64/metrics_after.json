@@ -1,0 +1,1 @@
+{"vllm:prefix_cache_queries_total": 14906266.0, "vllm:prefix_cache_hits_total": 12757536.0, "vllm:num_preemptions_total": 0.0, "vllm:prompt_tokens_total": 14845838.0, "vllm:prompt_tokens_cached_total": 12740640.0, "vllm:kv_cache_usage_perc": 0.0}

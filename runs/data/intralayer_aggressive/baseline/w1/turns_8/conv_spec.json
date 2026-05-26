@@ -1,0 +1,13 @@
+{
+  "filetype": "generate_conversations",
+  "num_conversations": 32,
+  "text_files": ["/home/songyang/projects/vllm/benchmarks/multi_turn/pg1184.txt"],
+  "print_stats": false,
+  "prompt_input": {
+    "num_turns": { "distribution": "constant", "value": 8 },
+    "common_prefix_num_tokens": { "distribution": "constant", "value": 2048 },
+    "prefix_num_tokens": { "distribution": "lognormal", "average": 1200, "max": 4000 },
+    "num_tokens": { "distribution": "uniform", "min": 400, "max": 700 }
+  },
+  "prompt_output": { "num_tokens": { "distribution": "uniform", "min": 200, "max": 320 } }
+}

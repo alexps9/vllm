@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
-# Usage: start_server.sh <baseline|hima> [port=8000] [log=/tmp/vllm.log]
+# Usage: start_server.sh <baseline|hima|hima_l1> [port=8000] [log=/tmp/vllm.log]
+#   baseline: no HiMA
+#   hima:     L1 LPB + L2 partial cache (full HiMA)
+#   hima_l1:  L1 LPB only (intralayer; no L2 partial cache)
 #
 # Required env:
 #   MODEL   path to the model weights directory
 #   REPO    path to the vllm repo root (defaults to script's grandparent dir)
 set -euo pipefail
 
-MODE="${1:?mode = baseline | hima}"
+MODE="${1:?mode = baseline | hima | hima_l1}"
 PORT="${2:-8000}"
 LOG="${3:-/tmp/vllm_server.log}"
 
@@ -29,6 +32,12 @@ case "$MODE" in
     EXTRA_ENV=(
       "VLLM_PARTIAL_CACHE_ENABLED=1"
       "VLLM_PARTIAL_CACHE_MIN_R=256"
+      "VLLM_HIMA_ENABLE=1"
+      "VLLM_HIMA_HPB_WINDOW_S=3600"
+    )
+    ;;
+  hima_l1)
+    EXTRA_ENV=(
       "VLLM_HIMA_ENABLE=1"
       "VLLM_HIMA_HPB_WINDOW_S=3600"
     )

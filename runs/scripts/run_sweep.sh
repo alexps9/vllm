@@ -10,7 +10,7 @@
 #   VLLM_UTIL=0.85  VLLM_MAX_SEQS=64  VLLM_MAX_LEN=65536  VLLM_TP=2
 set -euo pipefail
 
-MODE="${1:?mode = baseline | hima}"
+MODE="${1:?mode = baseline | hima | hima_l1}"
 OUT_ROOT="${2:?out root}"
 W1_CLIENTS="${3:-16}"
 W1_TURNS="${4:-4 8 16 32 64}"

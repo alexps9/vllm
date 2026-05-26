@@ -1,0 +1,17 @@
+{
+  "turns": 32,
+  "num_clients": 16,
+  "num_requests_completed": 493,
+  "server_prefix_cache_hit_rate": 0.4681,
+  "server_prompt_cached_ratio": 0.4704,
+  "server_total_preemptions": 0,
+  "kv_usage_perc_end": 0.0,
+  "client_ttft_ms_avg": 406.34,
+  "client_ttft_ms_p50": 321.269898,
+  "client_ttft_ms_p95": 949.312733,
+  "client_ttft_ms_p99": 1297.626584,
+  "client_tpot_ms_avg": 23.59,
+  "client_latency_ms_avg": 6473.7,
+  "client_input_tokens_avg": 9103.8,
+  "client_output_tokens_avg": 258.4
+}

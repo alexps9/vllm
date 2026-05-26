@@ -4,7 +4,10 @@ Branch: `hima` · Model: `Qwen/Qwen3.5-35B-A3B` · Hardware: 8× RTX PRO 6000 Bl
 
 ## Overview
 
-Two workloads × two server configs (baseline vs HiMA) × two pressure settings (original / aggressive).
+Two workloads × three server configs (baseline / hima_l1 / hima) × two pressure settings (original / aggressive).
+- **baseline**: stock vLLM
+- **hima_l1**: HiMA L1 LPB eviction only (intralayer; `VLLM_HIMA_ENABLE=1`)
+- **hima**: full HiMA = L1 LPB + L2 partial-cache (`VLLM_PARTIAL_CACHE_ENABLED=1` added)
 
 | | original | aggressive |
 |---|---|---|
@@ -45,22 +48,21 @@ cd "$REPO"
 git checkout hima
 
 # aggressive sweep (util=0.55, 16 clients, 16-turn agents)
-MODEL=$MODEL REPO=$REPO VLLM_UTIL=0.55 VLLM_MAX_SEQS=256 VLLM_MAX_LEN=65536 VLLM_TP=2 \
-  bash runs/scripts/run_sweep.sh baseline /tmp/out
-
-MODEL=$MODEL REPO=$REPO VLLM_UTIL=0.55 VLLM_MAX_SEQS=256 VLLM_MAX_LEN=65536 VLLM_TP=2 \
-  bash runs/scripts/run_sweep.sh hima /tmp/out
+for MODE in baseline hima_l1 hima; do
+  MODEL=$MODEL REPO=$REPO VLLM_UTIL=0.55 VLLM_MAX_SEQS=256 VLLM_MAX_LEN=65536 VLLM_TP=2 \
+    bash runs/scripts/run_sweep.sh $MODE /tmp/out
+done
 
 # original sweep (util=0.85, 4 clients)
-MODEL=$MODEL REPO=$REPO \
-  bash runs/scripts/run_sweep.sh baseline /tmp/out_orig 4 "4 8 16 32 64 128"
-MODEL=$MODEL REPO=$REPO \
-  bash runs/scripts/run_sweep.sh hima    /tmp/out_orig 4 "4 8 16 32 64 128"
+for MODE in baseline hima; do
+  MODEL=$MODEL REPO=$REPO \
+    bash runs/scripts/run_sweep.sh $MODE /tmp/out_orig 4 "4 8 16 32 64 128"
+done
 
 # plot
 source "$REPO/.venv/bin/activate"
-python runs/scripts/plot.py /tmp/out      /tmp/out/figures
-python runs/scripts/plot.py /tmp/out_orig /tmp/out_orig/figures
+python runs/scripts/plot.py /tmp/out      /tmp/out/figures      baseline,hima_l1,hima
+python runs/scripts/plot.py /tmp/out_orig /tmp/out_orig/figures baseline,hima
 ```
 
 ---
@@ -87,7 +89,37 @@ Figures: `data/figures/original/w1.png`, `data/figures/original/w2.png`
 **W2:** Hit rate 14–34% across conc 1–64. HiMA ≈ baseline; partial-cache did not trigger
 (low turn count → small partial-block tails).
 
-### Aggressive sweep (util=0.55, 16 clients, 16-turn agents, conc 1–128)
+### Intralayer-only sweep (util=0.55, baseline vs hima_l1, n=1)
+
+Isolates L1 LPB from L2 partial-cache. Same aggressive workload as below.  
+Data: `data/intralayer_aggressive/{baseline,hima_l1}/{w1,w2}/`  ·  Figures: `data/figures/intralayer_aggressive/`
+
+**W1** (multi-turn):
+
+| turns | baseline hit% | hima_l1 hit% | baseline p95 TTFT | hima_l1 p95 TTFT |
+|---:|---:|---:|---:|---:|
+| 4 | 47.8% | 46.4% | 2482 | 1754 |
+| 8 | 64.8% | 65.0% | 1074 | 966 |
+| 16 | 75.5% | 75.6% | 742 | 700 |
+| 32 | 84.1% | **46.8% 🔴** | 354 | **949 🔴** |
+| 64 | 91.0% | **58.5% 🔴** | 401 | **1266 🔴** |
+
+**W2** (concurrent agents, 16 turns each):
+
+| conc | baseline hit% | hima_l1 hit% | baseline tok/s | hima_l1 tok/s |
+|---:|---:|---:|---:|---:|
+| 1 | 81.1% | 81.1% | 187 | 189 |
+| 2 | 80.7% | 76.9% | 219 | 214 |
+| 4 | 80.5% | 79.7% | 296 | 303 |
+| 8 | 81.4% | 80.1% | 375 | 376 |
+| 16 | 80.8% | **25.1% 🔴** | 422 | **287 🔴** |
+| 32 | 81.0% | **39.8% 🔴** | 564 | **337 🔴** |
+| 64 | 80.4% | **21.3% 🔴** | 686 | **346 🔴** |
+| 128 | 19.9% | 15.6% | 358 | 319 |
+
+**Verdict**: L1 LPB alone reproduces the same degradation pattern as full HiMA — the regression is in **L1**, not in L2 partial-cache. LPB ties baseline at low load (W1 turns ≤ 16, W2 conc ≤ 8) but collapses cache hit rate at moderate-to-high load (W1 turns ≥ 32, W2 conc ≥ 16). HiMA's intended win pattern requires a single high-value anchor warmed before cold-burst pressure (see `dev/intralayer/vllm.md`), which neither W1 nor W2 produces.
+
+### Aggressive sweep, full HiMA (util=0.55, 16 clients, 16-turn agents, conc 1–128)
 
 Figures: `data/figures/aggressive/w1.png`, `data/figures/aggressive/w2.png`
 
@@ -125,10 +157,10 @@ Figures: `data/figures/aggressive/w1.png`, `data/figures/aggressive/w2.png`
 
 ### Key findings
 
-1. **LPB (L1) hurts at util=0.55 + high concurrency.** With reduced KV pool, LPB evicts shared prefixes before LRU because their "hit count" decays faster than per-conversation unique blocks in the windowed counter.
+1. **L1 LPB is the source of the regression.** The intralayer-only sweep (`hima_l1` mode, no L2) reproduces the same hit-rate collapse and TTFT spike as full HiMA on W1 turns ≥ 32 and W2 conc ≥ 16. With a reduced KV pool, LPB's windowed hit counter decays faster on shared prefixes than on per-conversation unique blocks, so LPB evicts the wrong blocks under diverse concurrent traffic.
 
-2. **Partial cache (L2) never triggered** (`dedup_hit=0` throughout). Two likely reasons:
-   - Qwen3.5-35B-A3B may map to two KV-cache groups (full-attn + mamba), but `_try_partial_extension` requires exactly one group.
+2. **L2 partial cache never triggered** (`dedup_hit=0` throughout). Two likely reasons:
+   - Qwen3.5-35B-A3B maps to two KV-cache groups (full-attn + mamba), but `_try_partial_extension` requires exactly one group.
    - `VLLM_PARTIAL_CACHE_MIN_R=256` threshold was not met for our workload's block-alignment pattern.
 
-3. **HiMA's design scenario** requires: one high-value anchor prefix warmed 500× **before** cold-burst traffic evicts it under LRU. That pattern does not arise in diverse concurrent workloads — it's reproducible via `dev/compare_lru_lpb.py` Phase A→H pipeline (see `dev/intralayer/vllm.md`).
+3. **HiMA's design scenario** requires: one high-value anchor prefix warmed 500× **before** cold-burst traffic evicts it under LRU. That pattern does not arise in diverse concurrent workloads — it's reproducible via `dev/intralayer/compare_lru_lpb.py` Phase A→H pipeline (see `dev/intralayer/vllm.md`).
