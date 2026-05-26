@@ -1,0 +1,22 @@
+{
+  "turns": 4,
+  "num_clients": 16,
+  "num_requests_completed": 64,
+  "server_prefix_cache_queries": 247090,
+  "server_prefix_cache_hits": 118272,
+  "server_prefix_cache_hit_rate": 0.4787,
+  "server_prompt_tokens_total": 235763,
+  "server_prompt_tokens_cached": 114048,
+  "server_prompt_cached_ratio": 0.4837,
+  "server_total_preemptions": 0,
+  "kv_usage_perc_end": 0.0,
+  "client_ttft_ms_avg": 885.95,
+  "client_ttft_ms_p50": 190.497786,
+  "client_ttft_ms_p95": 3200.216572,
+  "client_ttft_ms_p99": 3305.939263,
+  "client_tpot_ms_avg": 15.75,
+  "client_latency_ms_avg": 4964.51,
+  "client_input_tokens_avg": 3669.9,
+  "client_output_tokens_avg": 259.8,
+  "client_approx_cached_pct_avg": 43.14
+}

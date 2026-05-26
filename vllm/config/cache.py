@@ -1,6 +1,7 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
 
+import os
 from dataclasses import field
 from typing import ClassVar, Literal
 
@@ -253,6 +254,12 @@ class CacheConfig:
             object.__setattr__(self, "user_specified_block_size", True)
         if self.mamba_block_size is not None:
             object.__setattr__(self, "user_specified_mamba_block_size", True)
+        # Honour VLLM_HIMA_ENABLE env override when --hima-enabled CLI flag
+        # is not exposed (workaround until EngineArgs registers the field).
+        if not self.hima_enabled and os.environ.get(
+            "VLLM_HIMA_ENABLE", "0"
+        ) not in ("0", "", "false", "False"):
+            object.__setattr__(self, "hima_enabled", True)
         return self
 
     @field_validator("calculate_kv_scales", mode="after")

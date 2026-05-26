@@ -1,0 +1,99 @@
+{
+  "summary": {
+    "concurrency": 1,
+    "num_turns": 4,
+    "max_tokens": 96,
+    "n_unique_instances": 1,
+    "runtime_sec": 2.19,
+    "num_requests": 4,
+    "total_input_tokens": 4305,
+    "total_output_tokens": 343,
+    "output_throughput_tok_s": 156.9,
+    "overall_prefix_cache_hit_rate": 0.2453,
+    "overall_prompt_cached_ratio": 0.2453,
+    "overall_prompt_tokens": 4305.0,
+    "overall_prompt_tokens_cached": 1056.0,
+    "overall_preemptions": 0.0,
+    "final_kv_usage_perc": 0.0,
+    "avg_ttft_ms": 149.0,
+    "p50_ttft_ms": 85.2,
+    "p95_ttft_ms": 108.4,
+    "p99_ttft_ms": 108.4,
+    "by_turn": [
+      {
+        "turn": 0,
+        "n": 1,
+        "avg_prompt_tokens": 764.0,
+        "avg_completion_tokens": 96.0,
+        "avg_ttft_ms": 318.1,
+        "p50_ttft_ms": 318.1,
+        "p95_ttft_ms": 318.1
+      },
+      {
+        "turn": 1,
+        "n": 1,
+        "avg_prompt_tokens": 1034.0,
+        "avg_completion_tokens": 71.0,
+        "avg_ttft_ms": 85.2,
+        "p50_ttft_ms": 85.2,
+        "p95_ttft_ms": 85.2
+      },
+      {
+        "turn": 2,
+        "n": 1,
+        "avg_prompt_tokens": 1151.0,
+        "avg_completion_tokens": 87.0,
+        "avg_ttft_ms": 108.4,
+        "p50_ttft_ms": 108.4,
+        "p95_ttft_ms": 108.4
+      },
+      {
+        "turn": 3,
+        "n": 1,
+        "avg_prompt_tokens": 1356.0,
+        "avg_completion_tokens": 89.0,
+        "avg_ttft_ms": 84.1,
+        "p50_ttft_ms": 84.1,
+        "p95_ttft_ms": 84.1
+      }
+    ]
+  },
+  "per_request": [
+    {
+      "agent": 0,
+      "instance_id": "django__django-16139",
+      "turn": 0,
+      "prompt_tokens": 764,
+      "completion_tokens": 96,
+      "ttft_ms": 318.1,
+      "total_ms": 767.4
+    },
+    {
+      "agent": 0,
+      "instance_id": "django__django-16139",
+      "turn": 1,
+      "prompt_tokens": 1034,
+      "completion_tokens": 71,
+      "ttft_ms": 85.2,
+      "total_ms": 412.8
+    },
+    {
+      "agent": 0,
+      "instance_id": "django__django-16139",
+      "turn": 2,
+      "prompt_tokens": 1151,
+      "completion_tokens": 87,
+      "ttft_ms": 108.4,
+      "total_ms": 509.7
+    },
+    {
+      "agent": 0,
+      "instance_id": "django__django-16139",
+      "turn": 3,
+      "prompt_tokens": 1356,
+      "completion_tokens": 89,
+      "ttft_ms": 84.1,
+      "total_ms": 495.8
+    }
+  ]
+}
