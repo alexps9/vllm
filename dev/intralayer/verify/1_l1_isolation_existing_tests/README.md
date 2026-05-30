@@ -93,7 +93,10 @@ CUDA_VISIBLE_DEVICES=3,4 KMP_AFFINITY=disabled \
 
 ## Status
 
-**Path A n=3 ✅ done.** Path B (TP=4) + pressure curve still queued.
+**Path A n=3 ✅ done.** **Pressure curve ✅ done** (fresh, 2026-05-30) —
+L1 anchor survives to cold-burst K=20 vs LRU's K=10, a **2× wider survival
+window**; see [`pressure_curve_result.md`](pressure_curve_result.md). Path B
+(TP=4, 122B) still queued.
 
 ## Result — Path A n=3 (fresh same-environment, util=0.9)
 
