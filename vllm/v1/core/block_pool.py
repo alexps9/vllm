@@ -171,7 +171,9 @@ class BlockPool:
         lpb_factory = maybe_get_free_queue_factory()
         if lpb_factory is not None:
             _hima_rt = get_runtime()
-            self.free_block_queue = lpb_factory(self.blocks, runtime=_hima_rt)
+            self.free_block_queue = lpb_factory(
+                self.blocks, runtime=_hima_rt, block_size=hash_block_size
+            )
             if _hima_rt is not None:
                 _hima_rt.register_lpb_queue(self.free_block_queue)
         else:

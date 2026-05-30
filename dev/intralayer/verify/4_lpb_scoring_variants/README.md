@@ -112,9 +112,17 @@ done
 
 ## Status
 
-pending — blocked by Phase 10a (env knob in lpb_free_queue.py) and
-Phase 7 (the W1 driver).
+**done (2026-05-30).** Phase 10a (env knob) landed; Phase 10b ran on the
+PathA anchor-survival scenario. See [`results.md`](results.md) and
+[`run.sh`](run.sh).
 
 ## Result
 
-_(filled in after Phase 10b completes)_
+**The LPB scoring variant makes no difference** — lazy = eager =
+depth_tokens = eager_depth_tokens, bit-identical PhaseH hit% (88.87 %) and
+anchor survival (126720 cached). The two suspected bugs (lazy refresh,
+depth-as-integer) are real in principle but benign: the 500×-warmed
+anchor's hit count dominates regardless, and the depth-cost rescale is
+monotone so it doesn't reorder eviction. L1 still beats the LRU floor
+(88.87 vs 85.91 %, +2.96 pp). **Decision: keep `lazy`**; the knob remains a
+diagnostic. Full table + reasoning in [`results.md`](results.md).

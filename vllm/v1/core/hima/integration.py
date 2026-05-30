@@ -105,10 +105,13 @@ class HiMARuntime:
     def record_hit(self, path_block_ids: list[int]) -> None:
         """Record a prefix-cache hit; update path-counts and LPB depths."""
         self.path_counter.record_hit(tuple(path_block_ids))
-        # Push depth info into every registered LPBFreeBlockQueue.
+        # Push depth info into every registered LPBFreeBlockQueue. The
+        # 'eager' scoring variant additionally re-scores the block now that
+        # its hit count just incremented (verify/4).
         for depth, block_id in enumerate(path_block_ids, start=1):
             for q in self._lpb_queues:
                 q.set_block_depth(block_id, depth)
+                q.maybe_eager_refresh(block_id)
 
     # --------------- admission (used by Scheduler) ------------------------ #
 

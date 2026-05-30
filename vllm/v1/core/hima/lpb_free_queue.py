@@ -21,6 +21,7 @@ That eliminates ~all heap overhead on the common alloc/free cycle.
 from __future__ import annotations
 
 import logging
+import os
 import time
 from typing import TYPE_CHECKING
 
@@ -33,6 +34,29 @@ if TYPE_CHECKING:
     from vllm.v1.core.kv_cache_utils import KVCacheBlock
 
 logger = logging.getLogger(__name__)
+
+# LPB scoring variant (verify/4 attribution knob). Selects how the eviction
+# score is computed, to discriminate two suspected LPB scoring bugs:
+#   - lazy refresh : score is only (re)computed when a block is appended to
+#     the free queue; ``record_hit`` increments ``n_b`` but the heap score
+#     stays stale until the next append.
+#   - depth-as-integer : ``c_pool(depth)`` is fed the integer path index
+#     (1..K) instead of a token count, so the cost curve barely varies and
+#     LPB degenerates to LFU-on-hit-count.
+#
+#   "lazy"               current behaviour (default; reproduces both bugs)
+#   "eager"              refresh the score on every record_hit
+#   "depth_tokens"       feed c_pool(depth * block_size) instead of c_pool(depth)
+#   "eager_depth_tokens" both fixes combined
+_VALID_SCORING = {"lazy", "eager", "depth_tokens", "eager_depth_tokens"}
+_SCORING_MODE = os.environ.get("VLLM_HIMA_LPB_SCORING", "lazy")
+if _SCORING_MODE not in _VALID_SCORING:
+    logger.warning(
+        "[hima] unknown VLLM_HIMA_LPB_SCORING=%r; falling back to 'lazy' "
+        "(valid: %s)", _SCORING_MODE, sorted(_VALID_SCORING),
+    )
+    _SCORING_MODE = "lazy"
+_SCORING_LOGGED = False
 
 # Offset that guarantees any block with n_b > 0 sorts STRICTLY ABOVE any
 # block whose score is a wall-clock time.monotonic() (~1e9 on Linux).
@@ -59,7 +83,23 @@ class LPBFreeBlockQueue:
         blocks: list[KVCacheBlock],
         runtime: HiMARuntime | None = None,
         pool_kind: PoolKind = PoolKind.KV,
+        block_size: int = 1,
     ) -> None:
+        # verify/4 scoring variant (see module-level _SCORING_MODE).
+        self._eager = _SCORING_MODE in ("eager", "eager_depth_tokens")
+        self._depth_tokens = _SCORING_MODE in ("depth_tokens", "eager_depth_tokens")
+        # Tokens per prefix-tree depth unit; only used by the depth_tokens
+        # variants to feed the cost curve a real token count instead of the
+        # integer path index.
+        self._block_size = max(1, block_size)
+        global _SCORING_LOGGED
+        if not _SCORING_LOGGED:
+            logger.info(
+                "[hima] LPB scoring variant: %s (eager=%s depth_tokens=%s, "
+                "block_size=%d)",
+                _SCORING_MODE, self._eager, self._depth_tokens, self._block_size,
+            )
+            _SCORING_LOGGED = True
         self._blocks_by_id: dict[int, KVCacheBlock] = {b.block_id: b for b in blocks}
         # Cold queue starts with every block (none have hits yet).
         self._cold = FreeKVCacheBlockQueue(blocks)
@@ -210,6 +250,17 @@ class LPBFreeBlockQueue:
             return
         self.update_score(block, self._score_for(block))
 
+    def maybe_eager_refresh(self, block_id: int) -> None:
+        """verify/4 'eager' variant: re-score ``block_id`` right after a hit
+        was recorded against it (``n_b`` just incremented), so the hot-heap
+        score doesn't go stale. No-op for the 'lazy' variants, and no-op if
+        the block isn't currently in the free queue."""
+        if not self._eager:
+            return
+        block = self._blocks_by_id.get(block_id)
+        if block is not None:
+            self.refresh_lpb_score(block)
+
     # --------------------------- internals ------------------------------- #
 
     def _score_for(self, block: KVCacheBlock) -> float:
@@ -243,7 +294,12 @@ class LPBFreeBlockQueue:
         cache = self._c_cache
         c = cache.get(depth)
         if c is None:
-            c = self._c_curve(depth)
+            # depth_tokens variant feeds the cost curve a token count
+            # (depth × block_size) instead of the integer path index, so
+            # c_pool actually varies with prefix length. Memoised by depth
+            # (block_size is fixed per queue).
+            curve_arg = depth * self._block_size if self._depth_tokens else depth
+            c = self._c_curve(curve_arg)
             cache[depth] = c
         # ``n_b`` is already int; Python int*float is a single C call, no
         # need for an explicit ``float(n_b)`` conversion.
