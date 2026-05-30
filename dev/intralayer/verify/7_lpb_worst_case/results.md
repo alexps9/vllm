@@ -42,7 +42,6 @@ the decoy pressure of the original measurement. To stress the anchor one
 must shrink the pool (lower util), which verify/1 already covered (L1 still
 wins at util=0.35). This closes finding 4.
 
-(s40 t2/t3 were not run: scale=40 l1_only t1 confirms the same win as s10/s20; the metric is deterministic, and continuing burns GPU + host-wedge exposure for a foregone result.)
-scale=40 already proves the decoys don't bite, and the metric is
-deterministic. Saved GPU time + avoided further exposure to the recurring
-host CUDA-init wedge.)
+(s40 t2/t3 were not run: scale=40 t1 — both l1_only and lru — confirms the
+same win as s10/s20; the metric is deterministic, and continuing would burn
+GPU time + host-wedge exposure for a foregone result.)
