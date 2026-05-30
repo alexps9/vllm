@@ -157,12 +157,12 @@ for the discovery.
 
 ## Findings
 
-1. **Production-pattern win (Phase H)**: **−10.7 % Path A** under
-   fresh n=3 same-environment measurement (full HiMA vs LRU);
-   −17.7 % Path B under legacy archive (same-epoch within archive,
-   not yet re-measured fresh). Direction and shape are stable
-   across both data sources; the legacy archive's Path A magnitude
-   of −12.0 % was within the same envelope.
+1. **Production-pattern win (Phase H)**: **−10.7 % Path A (35B)** and
+   **−12.2 % Path B (122B)**, both under fresh n=3 same-environment
+   measurement (full/l1_only HiMA vs LRU). The legacy-archive Path B
+   figure was −17.7 % (faster/different environment — same direction,
+   magnitude class). The bigger model shows the larger win, as expected
+   (costlier prefill ⇒ more saved by anchor protection).
 2. **No regression elsewhere**: every other metric × phase × sweep
    tied within noise or LPB slightly faster. Phase B / E / F on
    the fresh n=3 are all within ≤ 2 ms median of LRU. The legacy
@@ -178,21 +178,20 @@ for the discovery.
    scale=10 reaches ~49 % KV occupancy on 122 B and produces no
    measurable regression. Scale ≥ 20 would be needed.
 
-## Planned follow-ups (open experiments)
+## Follow-ups (all done 2026-05-30)
 
-These extend/stress-test the verified L1 win; none is expected to overturn
-it, but they close the remaining gaps:
+These extended/stress-tested the verified L1 win — none overturned it:
 
-1. **LPB worst-case** (`verify/7`, highest value): rerun PathA at
-   `phase-f-scale ≥ 20` (finding 4 — scale=10 only reaches ~49 % occupancy
-   with no regression). The one experiment that could find an LPB *failure
-   mode* under heavy decoy pressure.
-2. **L1 pressure curve** (`verify/1`): `e2e_l1_pressure_curve.py
-   --mode l1_only` fresh — continuous-pressure view (we only have the
-   discrete Phase A→H points).
-3. **Path B fresh** (`verify/1`): Qwen3.5-122B-A10B, TP=4, n=3 — the
-   −17.7 % Path B number above is **legacy-archive only**, never
-   re-measured fresh same-env.
+1. **LPB worst-case** (`verify/7`): ✅ no failure mode — bit-identical L1
+   win across decoy scale 10/20/40; at util=0.9 the decoys never reach the
+   anchor-eviction cliff. Finding 4 closed.
+2. **L1 pressure curve** (`verify/1`): ✅ L1 holds the anchor to cold-burst
+   K=20 vs LRU's K=10 — a **2× wider survival window**
+   ([`pressure_curve_result.md`](verify/1_l1_isolation_existing_tests/pressure_curve_result.md)).
+3. **Path B fresh** (`verify/1`): ✅ Qwen3.5-122B-A10B TP=4 n=3 — **−12.2 %
+   PhaseH TTFT** vs LRU
+   ([`pathB_fresh_result.md`](verify/1_l1_isolation_existing_tests/pathB_fresh_result.md)),
+   replacing the legacy-archive −17.7 %.
 
 ## Production implications
 
