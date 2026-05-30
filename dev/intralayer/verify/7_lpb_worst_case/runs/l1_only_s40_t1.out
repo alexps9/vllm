@@ -74,3 +74,103 @@ WARNING 05-30 16:59:46 [system_utils.py:157] We must use the `spawn` multiproces
 (Worker_TP0 pid=3289351) INFO 05-30 17:00:34 [monitor.py:53] torch.compile took 4.61 s in total
 (Worker_TP1 pid=3289352) INFO 05-30 17:00:35 [decorators.py:311] Directly load AOT compilation from path /scratch/yuzhou/.cache/vllm/torch_compile_cache/torch_aot_compile/7014f12e1c33a9c8eb4947c21f6e95bbeb726c3d0545c0b2fe7bc633a10e4f04/rank_1_0/model
 (Worker_TP0 pid=3289351) INFO 05-30 17:00:35 [monitor.py:81] Initial profiling/warmup run took 0.89 s
+(Worker_TP0 pid=3289351) INFO 05-30 17:00:36 [gpu_model_runner.py:6279] Profiling CUDA graph memory: PIECEWISE=19 (largest=128), FULL=11 (largest=64)
+(Worker_TP1 pid=3289352) INFO 05-30 17:00:36 [gpu_model_runner.py:6279] Profiling CUDA graph memory: PIECEWISE=19 (largest=128), FULL=11 (largest=64)
+(Worker_TP0 pid=3289351) INFO 05-30 17:00:37 [custom_all_reduce.py:215] Registering 320 cuda graph addresses
+(Worker_TP1 pid=3289352) INFO 05-30 17:00:37 [custom_all_reduce.py:215] Registering 320 cuda graph addresses
+(Worker_TP1 pid=3289352) INFO 05-30 17:00:39 [gpu_model_runner.py:6365] Estimated CUDA graph memory: 0.32 GiB total
+(Worker_TP0 pid=3289351) INFO 05-30 17:00:39 [gpu_model_runner.py:6365] Estimated CUDA graph memory: 0.32 GiB total
+(Worker_TP0 pid=3289351) INFO 05-30 17:00:39 [gpu_worker.py:466] Available KV cache memory: 88.33 GiB
+(Worker_TP0 pid=3289351) INFO 05-30 17:00:39 [gpu_worker.py:481] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.9000 is equivalent to --gpu-memory-utilization=0.8977 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.9023. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.
+(Worker_TP1 pid=3289352) INFO 05-30 17:00:39 [gpu_worker.py:481] CUDA graph memory profiling is enabled (default since v0.21.0). The current --gpu-memory-utilization=0.9000 is equivalent to --gpu-memory-utilization=0.8977 without CUDA graph memory profiling. To maintain the same effective KV cache size as before, increase --gpu-memory-utilization to 0.9023. To disable, set VLLM_MEMORY_PROFILER_ESTIMATE_CUDAGRAPHS=0.
+(EngineCore pid=3288706) INFO 05-30 17:00:39 [kv_cache_utils.py:1733] GPU KV cache size: 8,363,148 tokens
+(EngineCore pid=3288706) INFO 05-30 17:00:39 [kv_cache_utils.py:1734] Maximum concurrency for 61,024 tokens per request: 137.05x
+(Worker_TP0 pid=3289351) 2026-05-30 17:00:39,722 - INFO - autotuner.py:457 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
+(Worker_TP1 pid=3289352) 2026-05-30 17:00:39,723 - INFO - autotuner.py:457 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
+(Worker_TP0 pid=3289351) [AutoTuner]: Tuning trtllm::fused_moe::gemm1:   0%|          | 0/8 [00:00<?, ?profile/s](Worker_TP1 pid=3289352) [AutoTuner]: Tuning trtllm::fused_moe::gemm1:   0%|          | 0/8 [00:00<?, ?profile/s][AutoTuner]: Tuning trtllm::fused_moe::gemm1:  12%|█▎        | 1/8 [00:00<00:00,  8.89profile/s][AutoTuner]: Tuning trtllm::fused_moe::gemm1:  38%|███▊      | 3/8 [00:00<00:00, 26.15profile/s][AutoTuner]: Tuning trtllm::fused_moe::gemm1:  50%|█████     | 4/8 [00:00<00:00, 19.57profile/s][AutoTuner]: Tuning trtllm::fused_moe::gemm1:  75%|███████▌  | 6/8 [00:00<00:00, 15.26profile/s][AutoTuner]: Tuning trtllm::fused_moe::gemm1:  75%|███████▌  | 6/8 [00:00<00:00, 13.71profile/s][AutoTuner]: Tuning trtllm::fused_moe::gemm1: 100%|██████████| 8/8 [00:00<00:00, 10.08profile/s][AutoTuner]: Tuning trtllm::fused_moe::gemm1: 100%|██████████| 8/8 [00:00<00:00, 11.63profile/s]
+(Worker_TP0 pid=3289351) [AutoTuner]: Tuning trtllm::fused_moe::gemm2:   0%|          | 0/8 [00:00<?, ?profile/s][AutoTuner]: Tuning trtllm::fused_moe::gemm1: 100%|██████████| 8/8 [00:00<00:00,  9.42profile/s][AutoTuner]: Tuning trtllm::fused_moe::gemm1: 100%|██████████| 8/8 [00:00<00:00, 10.75profile/s]
+(Worker_TP1 pid=3289352) [AutoTuner]: Tuning trtllm::fused_moe::gemm2:   0%|          | 0/8 [00:00<?, ?profile/s][AutoTuner]: Tuning trtllm::fused_moe::gemm2:  25%|██▌       | 2/8 [00:00<00:00, 15.14profile/s][AutoTuner]: Tuning trtllm::fused_moe::gemm2:  25%|██▌       | 2/8 [00:00<00:00, 15.13profile/s][AutoTuner]: Tuning trtllm::fused_moe::gemm2:  50%|█████     | 4/8 [00:00<00:00, 13.24profile/s][AutoTuner]: Tuning trtllm::fused_moe::gemm2:  50%|█████     | 4/8 [00:00<00:00, 13.22profile/s][AutoTuner]: Tuning trtllm::fused_moe::gemm2:  75%|███████▌  | 6/8 [00:00<00:00,  8.24profile/s][AutoTuner]: Tuning trtllm::fused_moe::gemm2:  75%|███████▌  | 6/8 [00:00<00:00,  8.21profile/s][AutoTuner]: Tuning trtllm::fused_moe::gemm2:  88%|████████▊ | 7/8 [00:00<00:00,  6.57profile/s][AutoTuner]: Tuning trtllm::fused_moe::gemm2:  88%|████████▊ | 7/8 [00:00<00:00,  6.55profile/s][AutoTuner]: Tuning trtllm::fused_moe::gemm2: 100%|██████████| 8/8 [00:01<00:00,  5.47profile/s][AutoTuner]: Tuning trtllm::fused_moe::gemm2: 100%|██████████| 8/8 [00:01<00:00,  6.87profile/s]
+[AutoTuner]: Tuning trtllm::fused_moe::gemm2: 100%|██████████| 8/8 [00:01<00:00,  5.46profile/s][AutoTuner]: Tuning trtllm::fused_moe::gemm2: 100%|██████████| 8/8 [00:01<00:00,  6.85profile/s]
+(Worker_TP0 pid=3289351) 2026-05-30 17:00:41,782 - INFO - autotuner.py:466 - flashinfer.jit: [Autotuner]: Autotuning process ends
+(Worker_TP1 pid=3289352) 2026-05-30 17:00:41,782 - INFO - autotuner.py:466 - flashinfer.jit: [Autotuner]: Autotuning process ends
+(Worker_TP0 pid=3289351) Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):   0%|          | 0/19 [00:00<?, ?it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  11%|█         | 2/19 [00:00<00:01,  9.90it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  21%|██        | 4/19 [00:00<00:01, 10.20it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  32%|███▏      | 6/19 [00:00<00:01, 10.41it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  42%|████▏     | 8/19 [00:00<00:01, 10.39it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  53%|█████▎    | 10/19 [00:00<00:00, 10.52it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  63%|██████▎   | 12/19 [00:01<00:00, 10.50it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  74%|███████▎  | 14/19 [00:01<00:00, 10.50it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  84%|████████▍ | 16/19 [00:01<00:00, 10.53it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE):  95%|█████████▍| 18/19 [00:01<00:00, 10.52it/s]Capturing CUDA graphs (mixed prefill-decode, PIECEWISE): 100%|██████████| 19/19 [00:01<00:00,  9.97it/s]
+(Worker_TP0 pid=3289351) Capturing CUDA graphs (decode, FULL):   0%|          | 0/11 [00:00<?, ?it/s]Capturing CUDA graphs (decode, FULL):  18%|█▊        | 2/11 [00:00<00:00, 10.68it/s]Capturing CUDA graphs (decode, FULL):  36%|███▋      | 4/11 [00:00<00:00, 10.98it/s]Capturing CUDA graphs (decode, FULL):  55%|█████▍    | 6/11 [00:00<00:00, 11.02it/s]Capturing CUDA graphs (decode, FULL):  73%|███████▎  | 8/11 [00:00<00:00, 11.18it/s]Capturing CUDA graphs (decode, FULL):  91%|█████████ | 10/11 [00:00<00:00, 11.24it/s]Capturing CUDA graphs (decode, FULL): 100%|██████████| 11/11 [00:00<00:00, 11.14it/s]
+(Worker_TP0 pid=3289351) INFO 05-30 17:00:45 [custom_all_reduce.py:215] Registering 2400 cuda graph addresses
+(Worker_TP1 pid=3289352) INFO 05-30 17:00:45 [custom_all_reduce.py:215] Registering 2400 cuda graph addresses
+(Worker_TP1 pid=3289352) INFO 05-30 17:00:46 [gpu_worker.py:619] CUDA graph pool memory: 0.28 GiB (actual), 0.32 GiB (estimated), difference: 0.04 GiB (14.9%).
+(Worker_TP0 pid=3289351) INFO 05-30 17:00:46 [gpu_model_runner.py:6456] Graph capturing finished in 4 secs, took 0.28 GiB
+(Worker_TP0 pid=3289351) INFO 05-30 17:00:46 [gpu_worker.py:619] CUDA graph pool memory: 0.28 GiB (actual), 0.32 GiB (estimated), difference: 0.04 GiB (14.9%).
+(Worker_TP1 pid=3289352) INFO 05-30 17:00:46 [jit_monitor.py:54] Kernel JIT monitor activated — Triton JIT compilations during inference will be logged as warnings.
+(Worker_TP0 pid=3289351) INFO 05-30 17:00:46 [jit_monitor.py:54] Kernel JIT monitor activated — Triton JIT compilations during inference will be logged as warnings.
+(EngineCore pid=3288706) INFO 05-30 17:00:46 [core.py:357] init engine (profile, create kv cache, warmup model) took 18.96 s (compilation: 4.78 s)
+(EngineCore pid=3288706) WARNING 05-30 17:00:46 [integration.py:258] HiMA: CuMemVMMPool unavailable (cuMemCreate failed: rc=2 -- out of memory); falling back to InMemoryVMMActuator. Cross-pool remaps are best-effort.
+(EngineCore pid=3288706) WARNING 05-30 17:00:46 [cost_curve.py:230] [hima] No VLLM_HIMA_CSIGMA_* calibration present. Using legacy default (Qwen3.5-35B-A3B / H200 BF16 reference). On RTX PRO 6000 Blackwell this is materially wrong; calibrate via benchmarks/hima_cost_curve.py.
+(EngineCore pid=3288706) INFO 05-30 17:00:46 [core.py:174] HiMA enabled (page=2048 KiB, kv_slots=2193, rec_slots=6578).
+(EngineCore pid=3288706) [transformers] `Qwen2VLImageProcessorFast` is deprecated. The `Fast` suffix for image processors has been removed; use `Qwen2VLImageProcessor` instead.
+(EngineCore pid=3288706) [transformers] The `use_fast` parameter is deprecated and will be removed in a future version. Use `backend="torchvision"` instead of `use_fast=True`, or `backend="pil"` instead of `use_fast=False`.
+(EngineCore pid=3288706) INFO 05-30 17:00:59 [lpb_free_queue.py:97] [hima] LPB scoring variant: lazy (eager=False depth_tokens=False, block_size=1056)
+(EngineCore pid=3288706) INFO 05-30 17:00:59 [coordinator_hima.py:91] HiMACoordinator: attached to runtime (cost_curves L*=21780)
+(EngineCore pid=3288706) INFO 05-30 17:00:59 [budgeter_task.py:93] HiMA L2 disabled; budgeter daemon not started.
+(EngineCore pid=3288706) INFO 05-30 17:00:59 [vllm.py:977] Asynchronous scheduling is enabled.
+(EngineCore pid=3288706) INFO 05-30 17:00:59 [kernel.py:270] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+(EngineCore pid=3288706) INFO 05-30 17:01:00 [compilation.py:312] Enabled custom fusions: allreduce_rms
+
+[l1_only] Phase A: warming anchor 500x ...
+(Worker_TP0 pid=3289351) WARNING 05-30 17:01:00 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _zero_kv_blocks_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+(Worker_TP0 pid=3289351) WARNING 05-30 17:01:00 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _compute_slot_mapping_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+(Worker_TP0 pid=3289351) WARNING 05-30 17:01:00 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _causal_conv1d_fwd_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+(Worker_TP0 pid=3289351) WARNING 05-30 17:01:00 [jit_monitor.py:103] Triton kernel JIT compilation during inference: batch_memcpy_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+(Worker_TP0 pid=3289351) WARNING 05-30 17:01:00 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _fused_post_conv_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+  warm[  0] cached=0/4737  wall=487ms
+  warm[  1] cached=4224/4737  wall=56ms
+  warm[250] cached=4224/4737  wall=57ms
+  warm[499] cached=4224/4737  wall=69ms
+
+[l1_only] BASELINE anchor probe: cached=4224/4737 (89.2%)
+
+[l1_only] Phase B: cc burst over 10 sessions; each turn issued with max_tokens=1 (TTFT) then max_tokens=21 (TPOT/throughput).
+  [l1_only] session  1: 52 turns done (elapsed 42s)
+  [l1_only] session  2: 37 turns done (elapsed 51s)
+  [l1_only] session  3: 20 turns done (elapsed 55s)
+  [l1_only] session  4: 8 turns done (elapsed 58s)
+  [l1_only] session  5: 18 turns done (elapsed 62s)
+  [l1_only] session  6: 13 turns done (elapsed 65s)
+  [l1_only] session  7: 15 turns done (elapsed 69s)
+  [l1_only] session  8: 16 turns done (elapsed 72s)
+  [l1_only] session  9: 16 turns done (elapsed 76s)
+  [l1_only] session 10: 43 turns done (elapsed 87s)
+
+[l1_only] Phase G: concurrent swarm (30 anchored requests submitted as a single batch).
+  swarm TTFT batch_wall=394ms  sum_cached=126720/142590 (88.9%)
+  swarm full batch_wall=479ms  throughput=1314.5 tok/s
+
+[l1_only] Phase E: no-shared-prefix cold flow (50 unique 2K-token random prompts; trial seed = 1001).
+  cold[ 0] cached=  0 wall=111ms
+  cold[25] cached=  0 wall=104ms
+  cold[49] cached=  0 wall=103ms
+
+[l1_only] Phase F: decoy-warming adversarial worst case (200 decoys × 30000-tok × 5 hits, then 2000 cold-unique prompts).
+  decoy[0]: 30000 tokens (~28.4 blocks)
+  decoy[100]: 30000 tokens (~28.4 blocks)
+  decoy[199]: 30000 tokens (~28.4 blocks)
+  total decoy footprint: 6000000 tokens (~5682 blocks)
+  decoy_warm[  0] last cached=0/30000 wall=513ms
+  decoy_warm[  1] last cached=29568/30000 wall=75ms
+  decoy_warm[  2] last cached=29568/30000 wall=74ms
+  decoy_warm[  4] last cached=29568/30000 wall=74ms
+  decoy[ 0] cached=  0 wall=120ms
+  decoy[1000] cached=  0 wall=105ms
+  decoy[1999] cached=  0 wall=105ms
+
+[l1_only] Phase H: POST-pressure concurrent swarm (30 anchored requests, batched after Phase F's churn).
+  H swarm TTFT batch_wall=412ms  sum_cached=126720/142590 (88.9%)
+  H swarm full batch_wall=479ms  throughput=1316.1 tok/s
+
+[l1_only] FINAL anchor probe (post-E/F/H): cached=4224/4737 (89.2%)
+
+[l1_only] Done (trial 1). 783s total. Log: dev/intralayer/runs/vllm/compare_l1_only_pathA_s40_t1.jsonl
+(EngineCore pid=3288706) INFO 05-30 17:14:03 [core.py:1326] Shutdown initiated (timeout=0)
+(EngineCore pid=3288706) INFO 05-30 17:14:03 [core.py:1349] Shutdown complete
+(Worker_TP1 pid=3289352) INFO 05-30 17:14:03 [multiproc_executor.py:872] WorkerProc shutting down.
+(Worker_TP0 pid=3289351) INFO 05-30 17:14:03 [multiproc_executor.py:775] Parent process exited, terminating worker queues
+(Worker_TP0 pid=3289351) INFO 05-30 17:14:03 [multiproc_executor.py:872] WorkerProc shutting down.

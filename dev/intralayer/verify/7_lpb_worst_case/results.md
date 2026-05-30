@@ -12,7 +12,7 @@ util=0.9, TP=2, GPUs 5,6, escalating `--phase-f-scale`.
 | 10 (verify/1) | lru | 3 | 85.91 | — | 122496 |
 | **20** | l1_only | 3 | **88.87 ± 0.00** | 381 ± 16 ms | 126720 |
 | **20** | lru | 3 | **85.91 ± 0.00** | 412 ± 24 ms | 122496 |
-| **40** | l1_only | (killed) | — | — | — |
+| **40** | l1_only | 1 | **88.87** | — | **126720** |
 | **40** | lru | 1 | **85.91** | — | **122496** |
 
 ## Finding — decoy scale is the wrong lever
@@ -42,7 +42,7 @@ the decoy pressure of the original measurement. To stress the anchor one
 must shrink the pool (lower util), which verify/1 already covered (L1 still
 wins at util=0.35). This closes finding 4.
 
-(l1_only s40 and s40 t2/t3 were not run: the lru-anchor-constant result at
+(s40 t2/t3 were not run: scale=40 l1_only t1 confirms the same win as s10/s20; the metric is deterministic, and continuing burns GPU + host-wedge exposure for a foregone result.)
 scale=40 already proves the decoys don't bite, and the metric is
 deterministic. Saved GPU time + avoided further exposure to the recurring
 host CUDA-init wedge.)
