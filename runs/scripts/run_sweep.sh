@@ -4,9 +4,9 @@
 #
 # Modes (after HiMA sub-flag split):
 #   baseline  — no HiMA
-#   l1_only   — HiMA L1 (LPB intra-pool eviction) + partial-cache
-#   l2_only   — HiMA L2 (admitter + budgeter + planner) + partial-cache
-#   full      — both L1 and L2 + partial-cache (was "hima" before split)
+#   l1_only   — HiMA L1 (LPB intra-pool eviction)
+#   l2_only   — HiMA L2 (admitter + budgeter + planner)
+#   full      — both L1 and L2 (was "hima" before split)
 #
 # Required env:
 #   MODEL       model weights path

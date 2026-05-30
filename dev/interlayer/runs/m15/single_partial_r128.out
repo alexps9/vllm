@@ -1,99 +1,0 @@
-[partial_cache] Loading Qwen/Qwen3-8B (TP=1, util=0.6, block_size=1024) …
-WARNING 05-24 12:33:07 [envs.py:2052] Unknown vLLM environment variable detected: VLLM_PARTIAL_CACHE_ENABLED
-WARNING 05-24 12:33:07 [envs.py:2052] Unknown vLLM environment variable detected: VLLM_PARTIAL_CACHE_MIN_R
-Could not cache non-existence of file. Will ignore error and continue. Error: [Errno 13] Permission denied: '/scratch/yuzhou/.cache/huggingface/hub/models--Qwen--Qwen3-8B/.no_exist/b968826d9c46dd6066d109eabc6255188de91218/processor_config.json'
-Could not cache non-existence of file. Will ignore error and continue. Error: [Errno 13] Permission denied: '/scratch/yuzhou/.cache/huggingface/hub/models--Qwen--Qwen3-8B/.no_exist/b968826d9c46dd6066d109eabc6255188de91218/preprocessor_config.json'
-(EngineCore pid=836883) Loading safetensors checkpoint shards:   0% Completed | 0/5 [00:00<?, ?it/s]
-(EngineCore pid=836873) Loading safetensors checkpoint shards:  20% Completed | 1/5 [00:01<00:05,  1.26s/it]
-(EngineCore pid=836873) Loading safetensors checkpoint shards:  40% Completed | 2/5 [00:02<00:03,  1.28s/it]
-(EngineCore pid=836873) Loading safetensors checkpoint shards:  60% Completed | 3/5 [00:03<00:02,  1.28s/it]
-(EngineCore pid=836873) Loading safetensors checkpoint shards:  80% Completed | 4/5 [00:04<00:01,  1.18s/it]
-(EngineCore pid=836873) Loading safetensors checkpoint shards: 100% Completed | 5/5 [00:05<00:00,  1.11it/s]
-(EngineCore pid=836873) Loading safetensors checkpoint shards: 100% Completed | 5/5 [00:05<00:00,  1.05s/it]
-(EngineCore pid=836873) 
-(EngineCore pid=836873) 2026-05-24 12:33:32,078 - INFO - autotuner.py:457 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
-(EngineCore pid=836873) 2026-05-24 12:33:32,109 - INFO - autotuner.py:466 - flashinfer.jit: [Autotuner]: Autotuning process ends
-(EngineCore pid=836873) Capturing CUDA graphs (PIECEWISE):   0%|          | 0/4 [00:00<?, ?it/s]Capturing CUDA graphs (PIECEWISE):  25%|██▌       | 1/4 [00:00<00:00,  6.98it/s]Capturing CUDA graphs (PIECEWISE):  75%|███████▌  | 3/4 [00:00<00:00, 10.04it/s]Capturing CUDA graphs (PIECEWISE): 100%|██████████| 4/4 [00:00<00:00,  9.58it/s]Capturing CUDA graphs (PIECEWISE): 100%|██████████| 4/4 [00:00<00:00,  9.40it/s]
-(EngineCore pid=836873) Capturing CUDA graphs (FULL):   0%|          | 0/3 [00:00<?, ?it/s]Capturing CUDA graphs (FULL): 100%|██████████| 3/3 [00:00<00:00, 34.04it/s]
-
-[partial_cache] cc burst over 10 sessions, max_tokens=1 (TTFT) then max_tokens=21 (TPOT).
-  session  0: 4 turns done (el  session   session  1: 21 turns done (ela  session   session  2: 15 turns done (ela  session   session  3: 14 turns done (elapsed 30s)
-  session  4: 5 turns done (ela  session   session  5: 10 turns done (elapsed 40s)
-  session  6: 5 turns done (ela  session   session  7: 11 turns done (elapsed 49s)
-  session  8: 9 turns done (ela  session   session  9: 12 turns done (elapsed 59s)
-
-[partial_cache] Done. Wrote dev/interlayer/runs/09_cc_partial_cache.jsonl
-218]                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(EngineCore pid=836788) ERROR 05-24 12:33:31 [core.py:1218]   File "/data/yuzhou/projects/vllm-songyang/vllm/tracing/otel.py", line 178, in sync_wrapper
-(EngineCore pid=836788) ERROR 05-24 12:33:31 [core.py:1218]     return func(*args, **kwargs)
-(EngineCore pid=836788) ERROR 05-24 12:33:31 [core.py:1218]            ^^^^^^^^^^^^^^^^^^^^^
-(EngineCore pid=836788) ERROR 05-24 12:33:31 [core.py:1218]   File "/data/yuzhou/projects/vllm-songyang/vllm/v1/engine/core.py", line 313, in _initialize_kv_caches
-(EngineCore pid=836788) ERROR 05-24 12:33:31 [core.py:1218]     kv_cache_configs = get_kv_cache_configs(
-(EngineCore pid=836788) ERROR 05-24 12:33:31 [core.py:1218]                        ^^^^^^^^^^^^^^^^^^^^^
-(EngineCore pid=836788) ERROR 05-24 12:33:31 [core.py:1218]   File "/data/yuzhou/projects/vllm-songyang/vllm/v1/core/kv_cache_utils.py", line 2038, in get_kv_cache_configs
-(EngineCore pid=836788) ERROR 05-24 12:33:31 [core.py:1218]     _check_enough_kv_cache_memory(
-(EngineCore pid=836788) ERROR 05-24 12:33:31 [core.py:1218]   File "/data/yuzhou/projects/vllm-songyang/vllm/v1/core/kv_cache_utils.py", line 698, in _check_enough_kv_cache_memory
-(EngineCore pid=836788) ERROR 05-24 12:33:31 [core.py:1218]     raise ValueError(
-(EngineCore pid=836788) ERROR 05-24 12:33:31 [core.py:1218] ValueError: No available memory for the cache blocks. Try increasing `gpu_memory_utilization` when initializing the engine (this flag also controls CPU memory reservation on the CPU backend, despite its name). See https://docs.vllm.ai/en/latest/configuration/conserving_memory/ for more details.
-(EngineCore pid=836788) Process EngineCore:
-(EngineCore pid=836788) Traceback (most recent call last):
-(EngineCore pid=836788)   File "/usr/lib/python3.12/multiprocessing/process.py", line 314, in _bootstrap
-(EngineCore pid=836788)     self.run()
-(EngineCore pid=836788)   File "/usr/lib/python3.12/multiprocessing/process.py", line 108, in run
-(EngineCore pid=836788)     self._target(*self._args, **self._kwargs)
-(EngineCore pid=836788)   File "/data/yuzhou/projects/vllm-songyang/vllm/v1/engine/core.py", line 1222, in run_engine_core
-(EngineCore pid=836788)     raise e
-(EngineCore pid=836788)   File "/data/yuzhou/projects/vllm-songyang/vllm/v1/engine/core.py", line 1192, in run_engine_core
-(EngineCore pid=836788)     engine_core = EngineCoreProc(*args, engine_index=dp_rank, **kwargs)
-(EngineCore pid=836788)                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(EngineCore pid=836788)   File "/data/yuzhou/projects/vllm-songyang/vllm/tracing/otel.py", line 178, in sync_wrapper
-(EngineCore pid=836788)     return func(*args, **kwargs)
-(EngineCore pid=836788)            ^^^^^^^^^^^^^^^^^^^^^
-(EngineCore pid=836788)   File "/data/yuzhou/projects/vllm-songyang/vllm/v1/engine/core.py", line 958, in __init__
-(EngineCore pid=836788)     super().__init__(
-(EngineCore pid=836788)   File "/data/yuzhou/projects/vllm-songyang/vllm/v1/engine/core.py", line 128, in __init__
-(EngineCore pid=836788)     kv_cache_config = self._initialize_kv_caches(vllm_config)
-(EngineCore pid=836788)                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-(EngineCore pid=836788)   File "/data/yuzhou/projects/vllm-songyang/vllm/tracing/otel.py", line 178, in sync_wrapper
-(EngineCore pid=836788)     return func(*args, **kwargs)
-(EngineCore pid=836788)            ^^^^^^^^^^^^^^^^^^^^^
-(EngineCore pid=836788)   File "/data/yuzhou/projects/vllm-songyang/vllm/v1/engine/core.py", line 313, in _initialize_kv_caches
-(EngineCore pid=836788)     kv_cache_configs = get_kv_cache_configs(
-(EngineCore pid=836788)                        ^^^^^^^^^^^^^^^^^^^^^
-(EngineCore pid=836788)   File "/data/yuzhou/projects/vllm-songyang/vllm/v1/core/kv_cache_utils.py", line 2038, in get_kv_cache_configs
-(EngineCore pid=836788)     _check_enough_kv_cache_memory(
-(EngineCore pid=836788)   File "/data/yuzhou/projects/vllm-songyang/vllm/v1/core/kv_cache_utils.py", line 698, in _check_enough_kv_cache_memory
-(EngineCore pid=836788)     raise ValueError(
-(EngineCore pid=836788) ValueError: No available memory for the cache blocks. Try increasing `gpu_memory_utilization` when initializing the engine (this flag also controls CPU memory reservation on the CPU backend, despite its name). See https://docs.vllm.ai/en/latest/configuration/conserving_memory/ for more details.
-Traceback (most recent call last):
-  File "/data/yuzhou/projects/vllm-songyang/dev/interlayer/09_cc_workload_compare.py", line 179, in <module>
-    main()
-  File "/data/yuzhou/projects/vllm-songyang/dev/interlayer/09_cc_workload_compare.py", line 110, in main
-    llm = LLM(
-          ^^^^
-  File "/data/yuzhou/projects/vllm-songyang/vllm/entrypoints/llm.py", line 367, in __init__
-    self.llm_engine = LLMEngine.from_engine_args(
-                      ^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/data/yuzhou/projects/vllm-songyang/vllm/v1/engine/llm_engine.py", line 170, in from_engine_args
-    return cls(
-           ^^^^
-  File "/data/yuzhou/projects/vllm-songyang/vllm/v1/engine/llm_engine.py", line 104, in __init__
-    self.engine_core = EngineCoreClient.make_client(
-                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/data/yuzhou/projects/vllm-songyang/vllm/v1/engine/core_client.py", line 101, in make_client
-    return SyncMPClient(vllm_config, executor_class, log_stats)
-           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/data/yuzhou/projects/vllm-songyang/vllm/tracing/otel.py", line 178, in sync_wrapper
-    return func(*args, **kwargs)
-           ^^^^^^^^^^^^^^^^^^^^^
-  File "/data/yuzhou/projects/vllm-songyang/vllm/v1/engine/core_client.py", line 723, in __init__
-    super().__init__(
-  File "/data/yuzhou/projects/vllm-songyang/vllm/v1/engine/core_client.py", line 535, in __init__
-    with launch_core_engines(
-  File "/usr/lib/python3.12/contextlib.py", line 144, in __exit__
-    next(self.gen)
-  File "/data/yuzhou/projects/vllm-songyang/vllm/v1/engine/utils.py", line 1133, in launch_core_engines
-    wait_for_engine_startup(
-  File "/data/yuzhou/projects/vllm-songyang/vllm/v1/engine/utils.py", line 1192, in wait_for_engine_startup
-    raise RuntimeError(
-RuntimeError: Engine core initialization failed. See root cause above. Failed core proc(s): {}

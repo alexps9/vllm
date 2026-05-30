@@ -1,39 +1,0 @@
-WARNING: The version of the system or its configuration does not allow enabling CPU profiling:
-- CPU IP/backtrace sampling will be disabled.
-- CPU context switch tracing will be disabled.
-Try the 'nsys status --environment' command to learn more.
-
-[baseline] Loading Qwen/Qwen3-8B (TP=1, util=0.6, block_size=1024) …
-Could not cache non-existence of file. Will ignore error and continue. Error: [Errno 13] Permission denied: '/scratch/yuzhou/.cache/huggingface/hub/models--Qwen--Qwen3-8B/.no_exist/b968826d9c46dd6066d109eabc6255188de91218/processor_config.json'
-Could not cache non-existence of file. Will ignore error and continue. Error: [Errno 13] Permission denied: '/scratch/yuzhou/.cache/huggingface/hub/models--Qwen--Qwen3-8B/.no_exist/b968826d9c46dd6066d109eabc6255188de91218/preprocessor_config.json'
-(EngineCore pid=2361609) Loading safetensors checkpoint shards:   0% Completed | 0/5 [00:00<?, ?it/s]
-(EngineCore pid=2361609) Loading safetensors checkpoint shards:  20% Completed | 1/5 [00:01<00:04,  1.22s/it]
-(EngineCore pid=2361609) Loading safetensors checkpoint shards:  40% Completed | 2/5 [00:03<00:04,  1.56s/it]
-(EngineCore pid=2361609) Loading safetensors checkpoint shards:  60% Completed | 3/5 [00:04<00:03,  1.73s/it]
-(EngineCore pid=2361609) Loading safetensors checkpoint shards:  80% Completed | 4/5 [00:06<00:01,  1.66s/it]
-(EngineCore pid=2361609) Loading safetensors checkpoint shards: 100% Completed | 5/5 [00:07<00:00,  1.28s/it]
-(EngineCore pid=2361609) Loading safetensors checkpoint shards: 100% Completed | 5/5 [00:07<00:00,  1.42s/it]
-(EngineCore pid=2361609) 
-(EngineCore pid=2361609) 2026-05-24 01:54:48,540 - INFO - autotuner.py:457 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
-(EngineCore pid=2361609) 2026-05-24 01:54:48,575 - INFO - autotuner.py:466 - flashinfer.jit: [Autotuner]: Autotuning process ends
-(EngineCore pid=2361609) Capturing CUDA graphs (PIECEWISE):   0%|          | 0/4 [00:00<?, ?it/s]Capturing CUDA graphs (PIECEWISE):  50%|█████     | 2/4 [00:00<00:00, 16.10it/s]Capturing CUDA graphs (PIECEWISE): 100%|██████████| 4/4 [00:00<00:00, 18.57it/s]
-(EngineCore pid=2361609) Capturing CUDA graphs (FULL):   0%|          | 0/3 [00:00<?, ?it/s]Capturing CUDA graphs (FULL): 100%|██████████| 3/3 [00:00<00:00, 22.78it/s]Capturing CUDA graphs (FULL): 100%|██████████| 3/3 [00:00<00:00, 22.72it/s]
-
-[baseline] cc burst over 10 sessions, max_tokens=1 (TTFT) then max_tokens=21 (TPOT).
-  session  0: 4 turns done (elapsed 1s)
-  session  1: 21 turns done (elapsed 5s)
-  session  2: 15 turns done (elapsed 8s)
-  session  3: 14 turns done (elapsed 11s)
-  session  4: 5 turns done (elapsed 12s)
-  session  5: 10 turns done (elapsed 15s)
-  session  6: 5 turns done (elapsed 16s)
-  session  7: 11 turns done (elapsed 18s)
-  session  8: 9 turns done (elapsed 20s)
-  session  9: 12 turns done (elapsed 22s)
-
-[baseline] Done. Wrote dev/interlayer/runs/09_cc_baseline.jsonl
-Collecting data...
-Generating '/tmp/nsys-report-73de.qdstrm'
-[1/1] [0%                          ] baseline_cpu.nsys-rep[1/1] [0%                          ] baseline_cpu.nsys-rep[1/1] [5%                          ] baseline_cpu.nsys-rep[1/1] [5%                          ] baseline_cpu.nsys-rep[1/1] [6%                          ] baseline_cpu.nsys-rep[1/1] [5%                          ] baseline_cpu.nsys-rep[1/1] [9%                          ] baseline_cpu.nsys-rep[1/1] [8%                          ] baseline_cpu.nsys-rep[1/1] [10%                         ] baseline_cpu.nsys-rep[1/1] [12%                         ] baseline_cpu.nsys-rep[1/1] [11%                         ] baseline_cpu.nsys-rep[1/1] [12%                         ] baseline_cpu.nsys-rep[1/1] [13%                         ] baseline_cpu.nsys-rep[1/1] [14%                         ] baseline_cpu.nsys-rep[1/1] [13%                         ] baseline_cpu.nsys-rep[1/1] [14%                         ] baseline_cpu.nsys-rep[1/1] [=15%                        ] baseline_cpu.nsys-rep[1/1] [14%                         ] baseline_cpu.nsys-rep[1/1] [13%                         ] baseline_cpu.nsys-rep[1/1] [12%                         ] baseline_cpu.nsys-rep[1/1] [11%                         ] baseline_cpu.nsys-rep[1/1] [10%                         ] baseline_cpu.nsys-rep[1/1] [9%                          ] baseline_cpu.nsys-rep[1/1] [8%                          ] baseline_cpu.nsys-rep[1/1] [7%                          ] baseline_cpu.nsys-rep[1/1] [6%                          ] baseline_cpu.nsys-rep[1/1] [5%                          ] baseline_cpu.nsys-rep[1/1] [5%                          ] baseline_cpu.nsys-rep[1/1] [6%                          ] baseline_cpu.nsys-rep[1/1] [7%                          ] baseline_cpu.nsys-rep[1/1] [8%                          ] baseline_cpu.nsys-rep[1/1] [9%                          ] baseline_cpu.nsys-rep[1/1] [10%                         ] baseline_cpu.nsys-rep[1/1] [11%                         ] baseline_cpu.nsys-rep[1/1] [12%                         ] baseline_cpu.nsys-rep[1/1] [13%                         ] baseline_cpu.nsys-rep[1/1] [14%                         ] baseline_cpu.nsys-rep[1/1] [=15%                        ] baseline_cpu.nsys-rep[1/1] [=16%                        ] baseline_cpu.nsys-rep[1/1] [=17%                        ] baseline_cpu.nsys-rep[1/1] [==18%                       ] baseline_cpu.nsys-rep[1/1] [==19%                       ] baseline_cpu.nsys-rep[1/1] [==20%                       ] baseline_cpu.nsys-rep[1/1] [==21%                       ] baseline_cpu.nsys-rep[1/1] [===22%                      ] baseline_cpu.nsys-rep[1/1] [===23%                      ] baseline_cpu.nsys-rep[1/1] [===24%                      ] baseline_cpu.nsys-rep[1/1] [====25%                     ] baseline_cpu.nsys-rep[1/1] [====26%                     ] baseline_cpu.nsys-rep[1/1] [====27%                     ] baseline_cpu.nsys-rep[1/1] [====28%                     ] baseline_cpu.nsys-rep[1/1] [=====29%                    ] baseline_cpu.nsys-rep[1/1] [=====30%                    ] baseline_cpu.nsys-rep[1/1] [=====31%                    ] baseline_cpu.nsys-rep[1/1] [=====32%                    ] baseline_cpu.nsys-rep[1/1] [======34%                   ] baseline_cpu.nsys-rep[1/1] [======35%                   ] baseline_cpu.nsys-rep[1/1] [=======36%                  ] baseline_cpu.nsys-rep[1/1] [=======38%                  ] baseline_cpu.nsys-rep[1/1] [=======39%                  ] baseline_cpu.nsys-rep[1/1] [========40%                 ] baseline_cpu.nsys-rep[1/1] [========41%                 ] baseline_cpu.nsys-rep[1/1] [=========43%                ] baseline_cpu.nsys-rep[1/1] [=========44%                ] baseline_cpu.nsys-rep[1/1] [=========45%                ] baseline_cpu.nsys-rep[1/1] [==========47%               ] baseline_cpu.nsys-rep[1/1] [==========48%               ] baseline_cpu.nsys-rep[1/1] [==========49%               ] baseline_cpu.nsys-rep[1/1] [===========50%              ] baseline_cpu.nsys-rep[1/1] [===========51%              ] baseline_cpu.nsys-rep[1/1] [========================100%] baseline_cpu.nsys-rep[1/1] [========================100%] baseline_cpu.nsys-rep
-Generated:
-	/data/yuzhou/projects/vllm-songyang/dev/interlayer/runs/nsys/baseline_cpu.nsys-rep

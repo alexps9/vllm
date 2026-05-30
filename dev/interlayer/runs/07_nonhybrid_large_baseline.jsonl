@@ -1,7 +1,0 @@
-{"kind": "row", "R": 0, "turn1_len": 8192, "turn2_len": 8208, "turn1_cached": 7168, "turn1_wall_s": 0.037136510999971506, "turn2_cached": 8192, "turn2_wall_s": 0.01871587749997161, "turn2_uncached": 16, "reps": 3}
-{"kind": "row", "R": 64, "turn1_len": 8256, "turn2_len": 8272, "turn1_cached": 8192, "turn1_wall_s": 0.02278774599994904, "turn2_cached": 8192, "turn2_wall_s": 0.019159403000003294, "turn2_uncached": 80, "reps": 3}
-{"kind": "row", "R": 256, "turn1_len": 8448, "turn2_len": 8464, "turn1_cached": 8192, "turn1_wall_s": 0.0262558069998704, "turn2_cached": 8192, "turn2_wall_s": 0.022814160999814703, "turn2_uncached": 272, "reps": 3}
-{"kind": "row", "R": 512, "turn1_len": 8704, "turn2_len": 8720, "turn1_cached": 8192, "turn1_wall_s": 0.02717307900002197, "turn2_cached": 8192, "turn2_wall_s": 0.029366192999987106, "turn2_uncached": 528, "reps": 3}
-{"kind": "row", "R": 800, "turn1_len": 8992, "turn2_len": 9008, "turn1_cached": 8192, "turn1_wall_s": 0.03835828699970989, "turn2_cached": 8192, "turn2_wall_s": 0.03519529549998879, "turn2_uncached": 816, "reps": 3}
-{"kind": "row", "R": 1000, "turn1_len": 9192, "turn2_len": 9208, "turn1_cached": 8192, "turn1_wall_s": 0.041116173500086006, "turn2_cached": 8192, "turn2_wall_s": 0.0401258899998993, "turn2_uncached": 1016, "reps": 3}
-{"kind": "row", "R": 1023, "turn1_len": 9215, "turn2_len": 9231, "turn1_cached": 8192, "turn1_wall_s": 0.03986731149984735, "turn2_cached": 9216, "turn2_wall_s": 0.02079740999988644, "turn2_uncached": 15, "reps": 3}

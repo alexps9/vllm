@@ -3,7 +3,7 @@
 > **Scaffold only — no code, no result data yet.** This README
 > documents the *design* of the scenario. The `VLLM_HIMA_LPB_SCORING`
 > env knob must be added to `vllm/v1/core/hima/lpb_free_queue.py`
-> first (Phase 10a, task #53), and [`verify/2`](../2_songyang_w1_regression_repro/README.md)
+> first (Phase 10a, task #53), and the W1 workload
 > must produce a baseline turns=64 cell before this scenario can fire.
 > Until both land, this folder contains only this README + an empty
 > `runs/`.
@@ -27,7 +27,7 @@ Two suspected bugs in `vllm/v1/core/hima/lpb_free_queue.py:_score_for`:
 
 Either bug could explain a hit-rate collapse under pressure. This
 scenario discriminates between them by running a single high-pressure
-cell ([`verify/2`](../2_songyang_w1_regression_repro/README.md)
+cell (the W1 workload
 turns=64) under each scoring variant.
 
 ## Expected outcome
@@ -74,13 +74,13 @@ scenario.
 
 ## Workloads
 
-After Phase 10a lands, run [`verify/2`](../2_songyang_w1_regression_repro/README.md)
+After Phase 10a lands, run the W1 workload
 turns=64 cell at 2 configs (lru baseline, l1_only) × 4 scoring
 variants = 8 cells.
 
 | variant | lru | l1_only |
 |---|---|---|
-| lazy (current) | (= verify/2 cell) | (= verify/2 cell) |
+| lazy (current) | (= W1 cell) | (= W1 cell) |
 | eager | ✓ | ✓ |
 | depth_tokens | ✓ | ✓ |
 | eager_depth_tokens | ✓ | ✓ |
@@ -91,7 +91,7 @@ has no effect when LPB isn't active.
 
 ## How to repro
 
-Prereq: Phase 10a (env knob landed) + Phase 7 (verify/2 driver
+Prereq: Phase 10a (env knob landed) + Phase 7 (the W1 driver
 exists).
 
 ```bash
@@ -103,7 +103,7 @@ for variant in lazy eager depth_tokens eager_depth_tokens; do
     CUDA_VISIBLE_DEVICES=0 KMP_AFFINITY=disabled \
       VLLM_HIMA_LPB_SCORING=$variant \
       .venv/bin/python -u \
-        dev/intralayer/verify/2_songyang_w1_regression_repro/driver.py \
+        dev/intralayer/driver.py \
           --turns 64 --config $mode --clients 16 \
       > "$OUTDIR/turns64_${variant}_${mode}.out" 2>&1
   done
@@ -113,7 +113,7 @@ done
 ## Status
 
 pending — blocked by Phase 10a (env knob in lpb_free_queue.py) and
-Phase 7 (verify/2 driver).
+Phase 7 (the W1 driver).
 
 ## Result
 

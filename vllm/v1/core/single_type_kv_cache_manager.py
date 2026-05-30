@@ -5,10 +5,7 @@ from abc import ABC, abstractmethod
 from collections import defaultdict
 from collections.abc import Sequence
 
-from vllm.logger import init_logger
 from vllm.utils.math_utils import cdiv
-
-logger = init_logger(__name__)
 from vllm.v1.core.block_pool import BlockPool
 from vllm.v1.core.kv_cache_utils import (
     BlockHashList,
@@ -229,26 +226,10 @@ class SingleTypeKVCacheManager(ABC):
         req_blocks.extend([self._null_block] * num_skipped_blocks)
         # Add the remaining computed blocks.
         req_blocks.extend(new_computed_blocks)
-        # Record how many leading blocks of ``req_blocks`` are "already
-        # cached as full" — i.e. either a null skip-slot or a block that
-        # already has a block_hash in ``cached_block_hash_to_block``. Future
-        # ``cache_blocks()`` calls use this counter to skip blocks that
-        # already have a hash (cache_full_blocks() asserts blk.block_hash
-        # is None, so re-caching a hashed block would crash).
-        #
-        # Counting ``len(req_blocks)`` here used to be safe because every
-        # entry was guaranteed to be either null or fully cached. With the
-        # interlayer partial-cache (M.4/M.5), `_try_partial_extension` can
-        # append a block that is only PARTIALLY cached (has R valid tokens
-        # but no full-block hash yet). Counting it as "cached" would cause
-        # the eventual full-block caching to be skipped — the block gets
-        # extended to full but never enters ``cached_block_hash_to_block``,
-        # so future turns can't hit it as a full block (verify/2 root cause).
-        # Derive the count from the actual predicate instead.
-        self.num_cached_block[request_id] = sum(
-            1 for b in req_blocks
-            if b.is_null or b.block_hash is not None
-        )
+        # All cached hits (including skipped nulls) are already cached; mark
+        # them so cache_blocks() will not try to re-cache blocks that already
+        # have a block_hash set.
+        self.num_cached_block[request_id] = len(req_blocks)
 
         if num_external_computed_tokens > 0:
             # Allocate new blocks for external computed tokens.
@@ -498,96 +479,6 @@ class SingleTypeKVCacheManager(ABC):
 
 
 class FullAttentionManager(SingleTypeKVCacheManager):
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__(*args, **kwargs)
-        # M.9 fix: dedup partial-cache writes within a request lifetime.
-        # cache_blocks fires every scheduling step (including every decode
-        # step), but the partial last block only grows by 1 token per
-        # decode step, so most calls are redundant. Track per-request the
-        # last cached partial_len so we skip work when nothing changed.
-        # Cleared in free().
-        self._last_cached_partial_len: dict[str, int] = {}
-        # M.10 root-cause: distribution of cache_blocks calls.
-        self._cache_blocks_total: int = 0
-        self._cache_blocks_decode: int = 0
-        self._cache_blocks_insert_off: int = 0
-        self._cache_blocks_dedup_hit: int = 0
-        self._cache_blocks_full_path: int = 0
-
-    def cache_blocks(
-        self,
-        request: Request,
-        num_tokens: int,
-        alignment_tokens: int | None = None,
-    ) -> None:
-        """Wraps the base ``cache_blocks`` to also cache the *partial* last
-        block — Finding M (interlayer/partial-block bubble). Only attention
-        groups go through this path (mamba state is per-block, can't be
-        sub-cached). No-op behaviour unless ``VLLM_PARTIAL_CACHE_ENABLED=1``
-        is set in env (the cache_partial_block helper short-circuits).
-        """
-        super().cache_blocks(request, num_tokens, alignment_tokens)
-        self._cache_blocks_total += 1
-        if self._cache_blocks_total % 500 == 0:
-            logger.info(
-                "[interlayer/cache_blocks] tot=%d decode=%d insert_off=%d "
-                "dedup_hit=%d full_path=%d",
-                self._cache_blocks_total, self._cache_blocks_decode,
-                self._cache_blocks_insert_off, self._cache_blocks_dedup_hit,
-                self._cache_blocks_full_path,
-            )
-        # M.9 root-cause hunt: VLLM_PARTIAL_CACHE_INSERT_OFF=1 disables
-        # the insert path entirely so we can compare with a build that
-        # ONLY has the lookup path (which short-circuits on empty map).
-        import os  # noqa: PLC0415
-        if os.environ.get("VLLM_PARTIAL_CACHE_INSERT_OFF", "0") == "1":
-            self._cache_blocks_insert_off += 1
-            return
-        # M.9 fix: skip partial-cache writes during decode steps.
-        # During decode, partial_len grows by 1 per step but the
-        # intermediate entries are useless — only the FINAL one (at
-        # request finish) is what future turns hit. Per-step cache writes
-        # added ~1ms/step (= ~14% throughput regression on cc workload).
-        # We instead cache at the boundary where num_tokens reaches
-        # request.num_prompt_tokens (end of the prefill chunk that
-        # finishes the prompt) and again on the final cache_blocks call.
-        # Best-effort: this misses some opportunities but the common
-        # multi-turn pattern (turn N's content = turn N+1's prefix) still
-        # gets the prompt-boundary entry.
-        if num_tokens > request.num_prompt_tokens:
-            self._cache_blocks_decode += 1
-            return  # decode step; the partial-cache entry from the prefill
-                    # boundary still applies for future turns whose prefix
-                    # ends at this request's prompt boundary.
-        num_full_blocks = num_tokens // self.block_size
-        partial_len = num_tokens - num_full_blocks * self.block_size
-        last = self._last_cached_partial_len.get(request.request_id, -1)
-        if partial_len == last:
-            self._cache_blocks_dedup_hit += 1
-            return
-        self._cache_blocks_full_path += 1
-        if partial_len <= 0:
-            self._last_cached_partial_len.pop(request.request_id, None)
-            return
-        blocks = self.req_to_blocks.get(request.request_id)
-        if not blocks or num_full_blocks >= len(blocks):
-            return
-        partial_block = blocks[num_full_blocks]
-        inserted = self.block_pool.cache_partial_block(
-            request=request,
-            partial_block=partial_block,
-            num_full_blocks=num_full_blocks,
-            partial_len=partial_len,
-            block_size=self.block_size,
-            kv_cache_group_id=self.kv_cache_group_id,
-        )
-        if inserted:
-            self._last_cached_partial_len[request.request_id] = partial_len
-
-    def free(self, request_id: str) -> None:
-        super().free(request_id)
-        self._last_cached_partial_len.pop(request_id, None)
-
     @classmethod
     def find_longest_cache_hit(
         cls,

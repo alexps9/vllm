@@ -41,7 +41,6 @@ and validate (or invalidate) external regression reports.
 | # | scenario | status (2026-05-26 end-of-day) |
 |---|---|---|
 | 1 | [L1 isolation of existing intralayer tests](verify/1_l1_isolation_existing_tests/README.md) — rerun `compare_lru_lpb` + `e2e_l1_pressure_curve` under L1-only | **done (fresh n=3)** — L1 wins at both util=0.9 (−8.8 % PhaseH) and util=0.35 (−5 %). |
-| 2 | [Songyang SWE-bench W1 regression repro](verify/2_songyang_w1_regression_repro/README.md) — repro turns ≥ 32 hit-rate collapse on Qwen3-8B; 7-config × {32,64} matrix | **turns=32 done** — W1 collapse does NOT reproduce on single-group at util=0.55 (96.8 % hit across all configs vs W1's 44 %). Surprise: partial-cache regresses on single-group (+45 % TTFT) — under investigation. turns=64 blocked by Qwen3-8B 40 K context. |
 | 3 | [L2 isolation of existing intralayer tests](verify/3_l2_isolation_existing_tests/README.md) — mirror of (1) under L2-only | **done (stale baseline)** — L2-only +26.6 % TTFT vs stale-LRU; pending fresh same-env re-measure to confirm magnitude. |
 | 4 | [LPB scoring variants](verify/4_lpb_scoring_variants/README.md) — discriminate two suspected LPB bugs | **deferred** — original premise (L1 scoring bug → W1 regression) is weak now (L1 wins at util=0.9; W1 didn't repro on Qwen3-8B). |
 | 5 | [Path-counter window sensitivity](verify/5_window_sensitivity/README.md) — `VLLM_HIMA_HPB_WINDOW_S` sweep | **done (5/5)** — Songyang's "decay" hypothesis directionally right but quantitatively small (cliff K=20→K=25 between 60s and 600s windows). |

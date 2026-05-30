@@ -6,9 +6,9 @@ Branch: `hima` · Model: `Qwen/Qwen3.5-35B-A3B` · Hardware: 8× RTX PRO 6000 Bl
 
 Two workloads × four server configs (baseline / l1_only / l2_only / full) × two pressure settings (original / aggressive).
 - **baseline**: stock vLLM
-- **l1_only**: HiMA L1 (LPB intra-pool eviction + path counter) + partial-cache
-- **l2_only**: HiMA L2 (admitter + budgeter + planner) + partial-cache
-- **full**: both L1 and L2 + partial-cache
+- **l1_only**: HiMA L1 (LPB intra-pool eviction + path counter)
+- **l2_only**: HiMA L2 (admitter + budgeter + planner)
+- **full**: both L1 and L2
 
 | | original | aggressive |
 |---|---|---|
@@ -21,8 +21,7 @@ Two workloads × four server configs (baseline / l1_only / l2_only / full) × tw
 
 **HiMA env flags** (per layer; set both sub-flags for the full stack):
 ```
-VLLM_PARTIAL_CACHE_ENABLED=1  VLLM_PARTIAL_CACHE_MIN_R=256
-VLLM_HIMA_L1_ENABLE=1         VLLM_HIMA_L2_ENABLE=1   VLLM_HIMA_HPB_WINDOW_S=3600
+VLLM_HIMA_L1_ENABLE=1   VLLM_HIMA_L2_ENABLE=1   VLLM_HIMA_HPB_WINDOW_S=3600
 ```
 
 ---
@@ -88,12 +87,11 @@ python runs/scripts/plot.py /tmp/out_orig /tmp/out_orig/figures baseline,full
 Figures: `data/figures/original/w1.png`, `data/figures/original/w2.png`
 
 **W1:** Hit rate rises monotonically with turns (41% → 93%). HiMA ≈ baseline throughout.  
-**W2:** Hit rate 14–34% across conc 1–64. HiMA ≈ baseline; partial-cache did not trigger
-(low turn count → small partial-block tails).
+**W2:** Hit rate 14–34% across conc 1–64. HiMA ≈ baseline.
 
 ### Intralayer-only sweep (util=0.55, baseline vs hima_l1, n=1)
 
-Isolates L1 LPB from L2 partial-cache. Same aggressive workload as below.  
+Isolates L1 LPB from L2. Same aggressive workload as below.  
 Data: `data/intralayer_aggressive/{baseline,hima_l1}/{w1,w2}/`  ·  Figures: `data/figures/intralayer_aggressive/`
 
 **W1** (multi-turn):
@@ -119,7 +117,7 @@ Data: `data/intralayer_aggressive/{baseline,hima_l1}/{w1,w2}/`  ·  Figures: `da
 | 64 | 80.4% | **21.3% 🔴** | 686 | **346 🔴** |
 | 128 | 19.9% | 15.6% | 358 | 319 |
 
-**Verdict**: L1 LPB alone reproduces the same degradation pattern as full HiMA — the regression is in **L1**, not in L2 partial-cache. LPB ties baseline at low load (W1 turns ≤ 16, W2 conc ≤ 8) but collapses cache hit rate at moderate-to-high load (W1 turns ≥ 32, W2 conc ≥ 16). HiMA's intended win pattern requires a single high-value anchor warmed before cold-burst pressure (see `dev/intralayer/vllm.md`), which neither W1 nor W2 produces.
+**Verdict**: L1 LPB alone reproduces the same degradation pattern as full HiMA — the regression is in **L1**, not in L2. LPB ties baseline at low load (W1 turns ≤ 16, W2 conc ≤ 8) but collapses cache hit rate at moderate-to-high load (W1 turns ≥ 32, W2 conc ≥ 16). HiMA's intended win pattern requires a single high-value anchor warmed before cold-burst pressure (see `dev/intralayer/vllm.md`), which neither W1 nor W2 produces.
 
 ### Aggressive sweep, full HiMA (util=0.55, 16 clients, 16-turn agents, conc 1–128)
 
@@ -161,8 +159,4 @@ Figures: `data/figures/aggressive/w1.png`, `data/figures/aggressive/w2.png`
 
 1. **L1 LPB is the source of the regression.** The intralayer-only sweep (`hima_l1` mode, no L2) reproduces the same hit-rate collapse and TTFT spike as full HiMA on W1 turns ≥ 32 and W2 conc ≥ 16. With a reduced KV pool, LPB's windowed hit counter decays faster on shared prefixes than on per-conversation unique blocks, so LPB evicts the wrong blocks under diverse concurrent traffic.
 
-2. **L2 partial cache never triggered** (`dedup_hit=0` throughout). Two likely reasons:
-   - Qwen3.5-35B-A3B maps to two KV-cache groups (full-attn + mamba), but `_try_partial_extension` requires exactly one group.
-   - `VLLM_PARTIAL_CACHE_MIN_R=256` threshold was not met for our workload's block-alignment pattern.
-
-3. **HiMA's design scenario** requires: one high-value anchor prefix warmed 500× **before** cold-burst traffic evicts it under LRU. That pattern does not arise in diverse concurrent workloads — it's reproducible via `dev/intralayer/compare_lru_lpb.py` Phase A→H pipeline (see `dev/intralayer/vllm.md`).
+2. **HiMA's design scenario** requires: one high-value anchor prefix warmed 500× **before** cold-burst traffic evicts it under LRU. That pattern does not arise in diverse concurrent workloads — it's reproducible via `dev/intralayer/compare_lru_lpb.py` Phase A→H pipeline (see `dev/intralayer/vllm.md`).

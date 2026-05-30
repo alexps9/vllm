@@ -1,40 +1,0 @@
-WARNING: The version of the system or its configuration does not allow enabling CPU profiling:
-- CPU context switch tracing will be disabled.
-Try the 'nsys status --environment' command to learn more.
-
-[partial_cache] Loading Qwen/Qwen3-8B (TP=1, util=0.6, block_size=1024) …
-WARNING 05-24 02:32:43 [envs.py:2052] Unknown vLLM environment variable detected: VLLM_PARTIAL_CACHE_ENABLED
-WARNING 05-24 02:32:43 [envs.py:2052] Unknown vLLM environment variable detected: VLLM_PARTIAL_CACHE_NVTX
-Could not cache non-existence of file. Will ignore error and continue. Error: [Errno 13] Permission denied: '/scratch/yuzhou/.cache/huggingface/hub/models--Qwen--Qwen3-8B/.no_exist/b968826d9c46dd6066d109eabc6255188de91218/processor_config.json'
-Could not cache non-existence of file. Will ignore error and continue. Error: [Errno 13] Permission denied: '/scratch/yuzhou/.cache/huggingface/hub/models--Qwen--Qwen3-8B/.no_exist/b968826d9c46dd6066d109eabc6255188de91218/preprocessor_config.json'
-(EngineCore pid=2474813) Loading safetensors checkpoint shards:   0% Completed | 0/5 [00:00<?, ?it/s]
-(EngineCore pid=2474813) Loading safetensors checkpoint shards:  20% Completed | 1/5 [00:02<00:08,  2.07s/it]
-(EngineCore pid=2474813) Loading safetensors checkpoint shards:  40% Completed | 2/5 [00:04<00:06,  2.09s/it]
-(EngineCore pid=2474813) Loading safetensors checkpoint shards:  60% Completed | 3/5 [00:06<00:04,  2.08s/it]
-(EngineCore pid=2474813) Loading safetensors checkpoint shards:  80% Completed | 4/5 [00:07<00:01,  1.93s/it]
-(EngineCore pid=2474813) Loading safetensors checkpoint shards: 100% Completed | 5/5 [00:08<00:00,  1.47s/it]
-(EngineCore pid=2474813) Loading safetensors checkpoint shards: 100% Completed | 5/5 [00:08<00:00,  1.72s/it]
-(EngineCore pid=2474813) 
-(EngineCore pid=2474813) 2026-05-24 02:33:20,615 - INFO - autotuner.py:457 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
-(EngineCore pid=2474813) 2026-05-24 02:33:20,651 - INFO - autotuner.py:466 - flashinfer.jit: [Autotuner]: Autotuning process ends
-(EngineCore pid=2474813) Capturing CUDA graphs (PIECEWISE):   0%|          | 0/4 [00:00<?, ?it/s]Capturing CUDA graphs (PIECEWISE):  50%|█████     | 2/4 [00:00<00:00, 15.55it/s]Capturing CUDA graphs (PIECEWISE): 100%|██████████| 4/4 [00:00<00:00, 18.01it/s]
-(EngineCore pid=2474813) Capturing CUDA graphs (FULL):   0%|          | 0/3 [00:00<?, ?it/s]Capturing CUDA graphs (FULL): 100%|██████████| 3/3 [00:00<00:00, 21.55it/s]Capturing CUDA graphs (FULL): 100%|██████████| 3/3 [00:00<00:00, 21.50it/s]
-
-[partial_cache] cc burst over 10 sessions, max_tokens=1 (TTFT) then max_tokens=21 (TPOT).
-  session  0: 4 turns done (elapsed 1s)
-  session  1: 21 turns done (elapsed 6s)
-  session  2: 15 turns done (elapsed 9s)
-  session  3: 14 turns done (elapsed 12s)
-  session  4: 5 turns done (elapsed 13s)
-  session  5: 10 turns done (elapsed 15s)
-  session  6: 5 turns done (elapsed 16s)
-  session  7: 11 turns done (elapsed 19s)
-  session  8: 9 turns done (elapsed 21s)
-  session  9: 12 turns done (elapsed 24s)
-
-[partial_cache] Done. Wrote dev/interlayer/runs/09_cc_partial_cache.jsonl
-Collecting data...
-Generating '/tmp/nsys-report-b59e.qdstrm'
-[1/1] [0%                          ] partial_nvtx.nsys-rep[1/1] [0%                          ] partial_nvtx.nsys-rep[1/1] [5%                          ] partial_nvtx.nsys-rep[1/1] [6%                          ] partial_nvtx.nsys-rep[1/1] [7%                          ] partial_nvtx.nsys-rep[1/1] [6%                          ] partial_nvtx.nsys-rep[1/1] [7%                          ] partial_nvtx.nsys-rep[1/1] [8%                          ] partial_nvtx.nsys-rep[1/1] [9%                          ] partial_nvtx.nsys-rep[1/1] [10%                         ] partial_nvtx.nsys-rep[1/1] [11%                         ] partial_nvtx.nsys-rep[1/1] [10%                         ] partial_nvtx.nsys-rep[1/1] [11%                         ] partial_nvtx.nsys-rep[1/1] [12%                         ] partial_nvtx.nsys-rep[1/1] [11%                         ] partial_nvtx.nsys-rep[1/1] [12%                         ] partial_nvtx.nsys-rep[1/1] [13%                         ] partial_nvtx.nsys-rep[1/1] [14%                         ] partial_nvtx.nsys-rep[1/1] [=15%                        ] partial_nvtx.nsys-rep[1/1] [=16%                        ] partial_nvtx.nsys-rep[1/1] [==18%                       ] partial_nvtx.nsys-rep[1/1] [==19%                       ] partial_nvtx.nsys-rep[1/1] [==20%                       ] partial_nvtx.nsys-rep[1/1] [==21%                       ] partial_nvtx.nsys-rep[1/1] [===22%                      ] partial_nvtx.nsys-rep[1/1] [===23%                      ] partial_nvtx.nsys-rep[1/1] [===24%                      ] partial_nvtx.nsys-rep[1/1] [====25%                     ] partial_nvtx.nsys-rep[1/1] [====26%                     ] partial_nvtx.nsys-rep[1/1] [====27%                     ] partial_nvtx.nsys-rep[1/1] [====28%                     ] partial_nvtx.nsys-rep[1/1] [=====29%                    ] partial_nvtx.nsys-rep[1/1] [=====30%                    ] partial_nvtx.nsys-rep[1/1] [=====31%                    ] partial_nvtx.nsys-rep[1/1] [=====32%                    ] partial_nvtx.nsys-rep[1/1] [======33%                   ] partial_nvtx.nsys-rep[1/1] [======34%                   ] partial_nvtx.nsys-rep[1/1] [======35%                   ] partial_nvtx.nsys-rep[1/1] [=======36%                  ] partial_nvtx.nsys-rep[1/1] [=======37%                  ] partial_nvtx.nsys-rep[1/1] [=======38%                  ] partial_nvtx.nsys-rep[1/1] [=======39%                  ] partial_nvtx.nsys-rep[1/1] [========41%                 ] partial_nvtx.nsys-rep[1/1] [========42%                 ] partial_nvtx.nsys-rep[1/1] [=========43%                ] partial_nvtx.nsys-rep[1/1] [=========44%                ] partial_nvtx.nsys-rep[1/1] [=========45%                ] partial_nvtx.nsys-rep[1/1] [=========46%                ] partial_nvtx.nsys-rep[1/1] [==========47%               ] partial_nvtx.nsys-rep[1/1] [==========48%               ] partial_nvtx.nsys-rep[1/1] [==========49%               ] partial_nvtx.nsys-rep[1/1] [===========50%              ] partial_nvtx.nsys-rep[1/1] [===========51%              ] partial_nvtx.nsys-rep[1/1] [===========52%              ] partial_nvtx.nsys-rep[1/1] [============54%             ] partial_nvtx.nsys-rep[1/1] [============55%             ] partial_nvtx.nsys-rep[1/1] [============56%             ] partial_nvtx.nsys-rep[1/1] [============57%             ] partial_nvtx.nsys-rep[1/1] [=============59%            ] partial_nvtx.nsys-rep[1/1] [=============60%            ] partial_nvtx.nsys-rep[1/1] [==============61%           ] partial_nvtx.nsys-rep[1/1] [==============62%           ] partial_nvtx.nsys-rep[1/1] [==============64%           ] partial_nvtx.nsys-rep[1/1] [===============65%          ] partial_nvtx.nsys-rep[1/1] [===============66%          ] partial_nvtx.nsys-rep[1/1] [================68%         ] partial_nvtx.nsys-rep[1/1] [================69%         ] partial_nvtx.nsys-rep[1/1] [================70%         ] partial_nvtx.nsys-rep[1/1] [========================100%] partial_nvtx.nsys-rep[1/1] [========================100%] partial_nvtx.nsys-rep
-Generated:
-	/data/yuzhou/projects/vllm-songyang/dev/interlayer/runs/nsys/partial_nvtx.nsys-rep

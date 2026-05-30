@@ -1,35 +1,0 @@
-[partial_cache] Loading Qwen/Qwen3-8B (TP=1, util=0.6, block_size=1024) …
-WARNING 05-24 01:27:07 [envs.py:2052] Unknown vLLM environment variable detected: VLLM_PARTIAL_CACHE_ENABLED
-Could not cache non-existence of file. Will ignore error and continue. Error: [Errno 13] Permission denied: '/scratch/yuzhou/.cache/huggingface/hub/models--Qwen--Qwen3-8B/.no_exist/b968826d9c46dd6066d109eabc6255188de91218/processor_config.json'
-Could not cache non-existence of file. Will ignore error and continue. Error: [Errno 13] Permission denied: '/scratch/yuzhou/.cache/huggingface/hub/models--Qwen--Qwen3-8B/.no_exist/b968826d9c46dd6066d109eabc6255188de91218/preprocessor_config.json'
-(EngineCore pid=2280231) Loading safetensors checkpoint shards:   0% Completed | 0/5 [00:00<?, ?it/s]
-(EngineCore pid=2280231) Loading safetensors checkpoint shards:  20% Completed | 1/5 [00:00<00:03,  1.23it/s]
-(EngineCore pid=2280231) Loading safetensors checkpoint shards:  40% Completed | 2/5 [00:01<00:02,  1.23it/s]
-(EngineCore pid=2280231) Loading safetensors checkpoint shards:  60% Completed | 3/5 [00:02<00:01,  1.24it/s]
-(EngineCore pid=2280231) Loading safetensors checkpoint shards:  80% Completed | 4/5 [00:03<00:00,  1.35it/s]
-(EngineCore pid=2280231) Loading safetensors checkpoint shards: 100% Completed | 5/5 [00:03<00:00,  1.75it/s]
-(EngineCore pid=2280231) Loading safetensors checkpoint shards: 100% Completed | 5/5 [00:03<00:00,  1.50it/s]
-(EngineCore pid=2280231) 
-(EngineCore pid=2280231) 2026-05-24 01:27:29,854 - INFO - autotuner.py:457 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
-(EngineCore pid=2280231) 2026-05-24 01:27:29,880 - INFO - autotuner.py:466 - flashinfer.jit: [Autotuner]: Autotuning process ends
-(EngineCore pid=2280231) Capturing CUDA graphs (PIECEWISE):   0%|          | 0/4 [00:00<?, ?it/s]Capturing CUDA graphs (PIECEWISE):  75%|███████▌  | 3/4 [00:00<00:00, 24.21it/s]Capturing CUDA graphs (PIECEWISE): 100%|██████████| 4/4 [00:00<00:00, 25.34it/s]
-(EngineCore pid=2280231) Capturing CUDA graphs (FULL):   0%|          | 0/3 [00:00<?, ?it/s]Capturing CUDA graphs (FULL): 100%|██████████| 3/3 [00:00<00:00, 31.49it/s]
-
-[partial_cache] cc burst over 10 sessions, max_tokens=1 (TTFT) then max_tokens=21 (TPOT).
-  session  0: 4 turns done (elapsed 1s)
-  session  1: 21 turns done (elapsed 5s)
-  session  2: 15 turns done (elapsed 8s)
-  session  3: 14 turns done (elapsed 11s)
-  session  4: 5 turns done (elapsed 12s)
-  session  5: 10 turns done (elapsed 15s)
-  session  6: 5 turns done (elapsed 15s)
-  session  7: 11 turns done (elapsed 18s)
-  session  8: 9 turns done (elapsed 20s)
-  session  9: 12 turns done (elapsed 22s)
-
-[partial_cache] Done. Wrote dev/interlayer/runs/09_cc_partial_cache.jsonl
-Collecting data...
-Generating '/tmp/nsys-report-7dea.qdstrm'
-[1/1] [0%                          ] partial.nsys-rep[1/1] [0%                          ] partial.nsys-rep[1/1] [12%                         ] partial.nsys-rep[1/1] [10%                         ] partial.nsys-rep[1/1] [8%                          ] partial.nsys-rep[1/1] [=16%                        ] partial.nsys-rep[1/1] [14%                         ] partial.nsys-rep[1/1] [=16%                        ] partial.nsys-rep[1/1] [==18%                       ] partial.nsys-rep[1/1] [=15%                        ] partial.nsys-rep[1/1] [13%                         ] partial.nsys-rep[1/1] [12%                         ] partial.nsys-rep[1/1] [14%                         ] partial.nsys-rep[1/1] [=15%                        ] partial.nsys-rep[1/1] [14%                         ] partial.nsys-rep[1/1] [13%                         ] partial.nsys-rep[1/1] [14%                         ] partial.nsys-rep[1/1] [=15%                        ] partial.nsys-rep[1/1] [14%                         ] partial.nsys-rep[1/1] [13%                         ] partial.nsys-rep[1/1] [12%                         ] partial.nsys-rep[1/1] [11%                         ] partial.nsys-rep[1/1] [10%                         ] partial.nsys-rep[1/1] [9%                          ] partial.nsys-rep[1/1] [8%                          ] partial.nsys-rep[1/1] [7%                          ] partial.nsys-rep[1/1] [9%                          ] partial.nsys-rep[1/1] [11%                         ] partial.nsys-rep[1/1] [13%                         ] partial.nsys-rep[1/1] [=15%                        ] partial.nsys-rep[1/1] [=17%                        ] partial.nsys-rep[1/1] [==19%                       ] partial.nsys-rep[1/1] [===22%                      ] partial.nsys-rep[1/1] [===24%                      ] partial.nsys-rep[1/1] [====26%                     ] partial.nsys-rep[1/1] [====28%                     ] partial.nsys-rep[1/1] [=====30%                    ] partial.nsys-rep[1/1] [=====32%                    ] partial.nsys-rep[1/1] [======34%                   ] partial.nsys-rep[1/1] [=======36%                  ] partial.nsys-rep[1/1] [=======38%                  ] partial.nsys-rep[1/1] [========40%                 ] partial.nsys-rep[1/1] [========42%                 ] partial.nsys-rep[1/1] [=========44%                ] partial.nsys-rep[1/1] [=========46%                ] partial.nsys-rep[1/1] [==========48%               ] partial.nsys-rep[1/1] [===========50%              ] partial.nsys-rep[1/1] [===========51%              ] partial.nsys-rep[1/1] [========================100%] partial.nsys-rep[1/1] [========================100%] partial.nsys-rep
-Generated:
-	/data/yuzhou/projects/vllm-songyang/dev/interlayer/runs/nsys/partial.nsys-rep

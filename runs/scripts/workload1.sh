@@ -22,7 +22,7 @@ REPO="${REPO:-$(dirname "$SCRIPT_DIR")}"
 BENCH="$REPO/benchmarks/multi_turn/benchmark_serving_multi_turn.py"
 MODEL_NAME="${MODEL_NAME:-qwen35}"
 TOKENIZER="${MODEL:?set MODEL env var to model weights path}"
-PORT=8000
+PORT=${PORT:-8000}
 
 # aggressive when util is lowered
 if [[ "${VLLM_UTIL:-0.85}" == "0.55" ]]; then
@@ -36,13 +36,14 @@ fi
 cd "$REPO"; source .venv/bin/activate 2>/dev/null || true; mkdir -p "$OUT_DIR"
 
 snap() {
-  python - <<'PY'
-import json, urllib.request
+  python - "${PORT}" <<'PY'
+import json, sys, urllib.request
+PORT=int(sys.argv[1])
 T=("vllm:prefix_cache_queries_total","vllm:prefix_cache_hits_total",
    "vllm:num_preemptions_total","vllm:prompt_tokens_total",
    "vllm:prompt_tokens_cached_total","vllm:kv_cache_usage_perc")
 b={k:0.0 for k in T}
-txt=urllib.request.urlopen("http://127.0.0.1:8000/metrics",timeout=10).read().decode()
+txt=urllib.request.urlopen("http://127.0.0.1:" + str(PORT) + "/metrics",timeout=10).read().decode()
 for l in txt.splitlines():
     if not l or l.startswith("#"): continue
     h=l.split("{",1)[0].split(" ",1)[0]

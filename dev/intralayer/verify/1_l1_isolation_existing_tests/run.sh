@@ -3,7 +3,7 @@
 # Self-contained: every command needed to reproduce the result is in this file.
 #
 # Prereqs: phase 1 sub-flags ✅, phase 3 driver --mode flags ✅,
-# dev/intralayer/cc_long_traces.jsonl symlink ✅ (pointer to dev/interlayer/).
+# dev/intralayer/cc_long_traces.jsonl ✅ (canonical conversation-trace dataset).
 #
 # Usage:
 #   cd /data/yuzhou/projects/vllm-songyang

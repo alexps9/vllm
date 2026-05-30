@@ -1,6 +1,0 @@
-{"kind": "row", "R": 0, "turn1_len": 512, "turn2_len": 528, "turn1_cached": 0, "turn1_wall_s": 0.032810472999699414, "turn2_cached": 512, "turn2_wall_s": 0.019603770000230725, "turn2_uncached": 16}
-{"kind": "row", "R": 16, "turn1_len": 528, "turn2_len": 544, "turn1_cached": 0, "turn1_wall_s": 0.02132776400003422, "turn2_cached": 512, "turn2_wall_s": 0.01992783400010012, "turn2_uncached": 32}
-{"kind": "row", "R": 64, "turn1_len": 576, "turn2_len": 592, "turn1_cached": 0, "turn1_wall_s": 0.02308054800005266, "turn2_cached": 512, "turn2_wall_s": 0.02245366900024237, "turn2_uncached": 80}
-{"kind": "row", "R": 128, "turn1_len": 640, "turn2_len": 656, "turn1_cached": 0, "turn1_wall_s": 0.02065037400006986, "turn2_cached": 512, "turn2_wall_s": 0.020046536000336346, "turn2_uncached": 144}
-{"kind": "row", "R": 200, "turn1_len": 712, "turn2_len": 728, "turn1_cached": 0, "turn1_wall_s": 0.02172442899973248, "turn2_cached": 512, "turn2_wall_s": 0.021042150000084803, "turn2_uncached": 216}
-{"kind": "row", "R": 255, "turn1_len": 767, "turn2_len": 783, "turn1_cached": 0, "turn1_wall_s": 0.024396536000040214, "turn2_cached": 512, "turn2_wall_s": 0.01706733599985455, "turn2_uncached": 271}

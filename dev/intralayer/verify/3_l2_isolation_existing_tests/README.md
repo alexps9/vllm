@@ -45,8 +45,7 @@ LRU baseline cells (`compare_lru_path{A,B}_t{1,2,3}` in
 
 Prereq: Phase 1 (sub-flags) ✅ + Phase 3 (`--mode l2_only` in drivers) ✅.
 **Data file prereq**: `dev/intralayer/cc_long_traces.jsonl` must exist
-(symlink `../interlayer/cc_long_traces.jsonl` was created on 2026-05-26 —
-the canonical file lives in `dev/interlayer/`).
+(the canonical conversation-trace dataset).
 
 ```bash
 cd /data/yuzhou/projects/vllm-songyang

@@ -1,6 +1,0 @@
-_bootstrap (threading.py:1032);_bootstrap_inner (threading.py:1075);run (threading.py:1012);process_input_sockets (vllm/v1/engine/core.py:1438);poll (zmq/sugar/poll.py:106) 799
-_bootstrap (threading.py:1032);_bootstrap_inner (threading.py:1075);run (tqdm/_monitor.py:60);wait (threading.py:655);wait (threading.py:359) 1598
-_bootstrap (threading.py:1032);_bootstrap_inner (threading.py:1075);run (threading.py:1012);_report_usage_worker (vllm/usage/usage_lib.py:174);_report_continuous_usage (vllm/usage/usage_lib.py:256) 799
-_bootstrap (threading.py:1032);_bootstrap_inner (threading.py:1075);run (threading.py:1012);_run (vllm/v1/engine/utils.py:248);wait (threading.py:655);wait (threading.py:355) 799
-_bootstrap (threading.py:1032);_bootstrap_inner (threading.py:1075);run (threading.py:1012);process_output_sockets (vllm/v1/engine/core.py:1505);get (queue.py:171);wait (threading.py:355) 799
-<module> (<string>:1);spawn_main (multiprocessing/spawn.py:122);_main (multiprocessing/spawn.py:135);_bootstrap (multiprocessing/process.py:314);run (multiprocessing/process.py:108);run_engine_core (vllm/v1/engine/core.py:1133);run_busy_loop (vllm/v1/engine/core.py:1172);_process_input_queue (vllm/v1/engine/core.py:1194);get (queue.py:171);wait (threading.py:355) 799

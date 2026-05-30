@@ -14,7 +14,7 @@ hypothesis is not obviously false.
 If short windows show meaningfully different behavior, the dismissal
 of his hypothesis was directionally wrong. If long and short windows
 behave identically on our workload, it's well-founded. Either way,
-this result pins down which window value [`verify/2`](../2_songyang_w1_regression_repro/README.md)
+this result pins down which window value the W1 workload
 should use — and forces it to be encoded explicitly in file names.
 
 ## Expected outcome
@@ -24,12 +24,12 @@ Two plausible cases:
 1. **Insensitive**: anchor survival % similar across all window values
    on the existing Path A/B / pressure-curve workloads → decay is a
    no-op in our test regime. Songyang's hypothesis genuinely doesn't
-   explain his regression. verify/2 should pick the value matching
+   explain his regression. the W1 run should pick the value matching
    his prod config (3600 s) for repro fidelity.
 2. **Sensitive at the lower end**: short windows (30 s / 60 s) show
    the anchor losing protection while long windows (3600 s / 86400 s)
    preserve it → Songyang's "decay" hypothesis was directionally
-   right at default windows. verify/2 must then run at *both* 60 s
+   right at default windows. the W1 run must then run at *both* 60 s
    (default) and 3600 s (Songyang's value) to distinguish hypotheses.
 
 ## Workload
@@ -120,7 +120,7 @@ TP=2, util=0.35, Qwen3.5-35B-A3B):
    Phase H finding (where L1-only TTFT loses at util=0.9 — see
    [`verify/1`](../1_l1_isolation_existing_tests/why_l1_lost.md)).
 
-### Recommendation for [`verify/2`](../2_songyang_w1_regression_repro/README.md)
+### Recommendation for the W1 workload
 
 Pin the window to **3600 s** (matching Songyang's prod config) so any
 regression we observe is not a "we picked too short a window" artifact.

@@ -55,8 +55,7 @@ not need rerunning — they don't touch HiMA.
 
 Prereq: Phase 1 (sub-flags) ✅ + Phase 3 (`--mode l1_only` in drivers) ✅.
 **Data file prereq**: `dev/intralayer/cc_long_traces.jsonl` must exist
-(symlink `../interlayer/cc_long_traces.jsonl` was created on 2026-05-26 —
-the canonical file lives in `dev/interlayer/`).
+(the canonical conversation-trace dataset).
 
 ```bash
 cd /data/yuzhou/projects/vllm-songyang
@@ -196,7 +195,7 @@ at util=0.9 too. See [`why_l1_lost.md`](why_l1_lost.md) for the
 historical investigation, the LPB-vs-LRU CPU microbenchmark, and the
 `maybe_get_free_queue_factory` bug fix landed during this scenario.
 
-### Implication for [verify/2](../2_songyang_w1_regression_repro/README.md)
+### Implication for the W1 workload
 
 Songyang's SWE-bench W1 runs at **util=0.55** — between our two
 operating points (util=0.35 and util=0.9). With L1 now winning at
@@ -207,6 +206,6 @@ turns-≥32 hit-rate collapse may still be a pressure-curve cliff effect
 similar to verify/5's K=15→20 cliff: at low turns enough KV slack
 remains, but as conversation grows enough blocks accumulate that LRU
 crosses the cliff and L1 (with admitter helping) preserves the prefix.
-The W1 hypothesis space now shifts to admitter behaviour or
-partial-cache interactions rather than LPB queue overhead (see
+The W1 hypothesis space now shifts to admitter behaviour rather than
+LPB queue overhead (see
 [journal/08, "Implications for sibling verify scenarios"](../6_lpb_heap_perf/journal/08_fresh_n3_final.md)).

@@ -1,31 +1,0 @@
-[partial_cache] Loading Qwen/Qwen3-8B (TP=1, util=0.6, block_size=1024) …
-WARNING 05-23 20:32:25 [envs.py:2052] Unknown vLLM environment variable detected: VLLM_PARTIAL_CACHE_ENABLED
-WARNING 05-23 20:32:25 [envs.py:2052] Unknown vLLM environment variable detected: VLLM_PARTIAL_CACHE_FORCE_MISS
-Could not cache non-existence of file. Will ignore error and continue. Error: [Errno 13] Permission denied: '/scratch/yuzhou/.cache/huggingface/hub/models--Qwen--Qwen3-8B/.no_exist/b968826d9c46dd6066d109eabc6255188de91218/processor_config.json'
-Could not cache non-existence of file. Will ignore error and continue. Error: [Errno 13] Permission denied: '/scratch/yuzhou/.cache/huggingface/hub/models--Qwen--Qwen3-8B/.no_exist/b968826d9c46dd6066d109eabc6255188de91218/preprocessor_config.json'
-(EngineCore pid=1478584) Loading safetensors checkpoint shards:   0% Completed | 0/5 [00:00<?, ?it/s]
-(EngineCore pid=1478584) Loading safetensors checkpoint shards:  20% Completed | 1/5 [00:01<00:05,  1.29s/it]
-(EngineCore pid=1478584) Loading safetensors checkpoint shards:  40% Completed | 2/5 [00:02<00:03,  1.32s/it]
-(EngineCore pid=1478584) Loading safetensors checkpoint shards:  60% Completed | 3/5 [00:03<00:02,  1.31s/it]
-(EngineCore pid=1478584) Loading safetensors checkpoint shards:  80% Completed | 4/5 [00:04<00:01,  1.21s/it]
-(EngineCore pid=1478584) Loading safetensors checkpoint shards: 100% Completed | 5/5 [00:05<00:00,  1.07it/s]
-(EngineCore pid=1478584) Loading safetensors checkpoint shards: 100% Completed | 5/5 [00:05<00:00,  1.09s/it]
-(EngineCore pid=1478584) 
-(EngineCore pid=1478584) 2026-05-23 20:32:57,547 - INFO - autotuner.py:457 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
-(EngineCore pid=1478584) 2026-05-23 20:32:57,574 - INFO - autotuner.py:466 - flashinfer.jit: [Autotuner]: Autotuning process ends
-(EngineCore pid=1478584) Capturing CUDA graphs (PIECEWISE):   0%|          | 0/4 [00:00<?, ?it/s]Capturing CUDA graphs (PIECEWISE):  50%|█████     | 2/4 [00:00<00:00, 19.81it/s]Capturing CUDA graphs (PIECEWISE): 100%|██████████| 4/4 [00:00<00:00, 23.70it/s]
-(EngineCore pid=1478584) Capturing CUDA graphs (FULL):   0%|          | 0/3 [00:00<?, ?it/s]Capturing CUDA graphs (FULL): 100%|██████████| 3/3 [00:00<00:00, 30.28it/s]
-
-[partial_cache] cc burst over 10 sessions, max_tokens=1 (TTFT) then max_tokens=21 (TPOT).
-  session  0: 4 turns done (elapsed 1s)
-  session  1: 21 turns done (elapsed 5s)
-  session  2: 15 turns done (elapsed 8s)
-  session  3: 14 turns done (elapsed 11s)
-  session  4: 5 turns done (elapsed 12s)
-  session  5: 10 turns done (elapsed 15s)
-  session  6: 5 turns done (elapsed 16s)
-  session  7: 11 turns done (elapsed 18s)
-  session  8: 9 turns done (elapsed 20s)
-  session  9: 12 turns done (elapsed 22s)
-
-[partial_cache] Done. Wrote dev/interlayer/runs/09_cc_partial_cache.jsonl

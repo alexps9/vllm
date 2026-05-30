@@ -3,15 +3,15 @@
 #
 # Modes (after HiMA sub-flag split, 2026-05-26):
 #   baseline  — no HiMA
-#   l1_only   — HiMA L1 (LPB intra-pool eviction) + partial-cache
-#   l2_only   — HiMA L2 (admitter + budgeter + planner) + partial-cache
-#   full      — both L1 and L2 + partial-cache
+#   l1_only   — HiMA L1 (LPB intra-pool eviction)
+#   l2_only   — HiMA L2 (admitter + budgeter + planner)
+#   full      — both L1 and L2
 #
 # Note: the prior ``hima`` mode (full stack) is renamed to ``full`` and
 # ``hima_l1`` (L1-only attempt via the legacy master switch, which was
-# actually full HiMA without partial-cache) is replaced by the cleaner
-# ``l1_only`` (true L1 isolation via the new sub-flag). The legacy
-# ``VLLM_HIMA_ENABLE`` env var no longer works; use the sub-flags.
+# actually full HiMA) is replaced by the cleaner ``l1_only`` (true L1
+# isolation via the new sub-flag). The legacy ``VLLM_HIMA_ENABLE`` env
+# var no longer works; use the sub-flags.
 #
 # Required env:
 #   MODEL   path to the model weights directory
@@ -35,10 +35,8 @@ cd "$REPO"
 source .venv/bin/activate
 
 EXTRA_ENV=()
-# Partial-cache + extended LPB window are shared across all HiMA modes.
+# Extended LPB window is shared across all HiMA modes.
 HIMA_COMMON=(
-  "VLLM_PARTIAL_CACHE_ENABLED=1"
-  "VLLM_PARTIAL_CACHE_MIN_R=256"
   "VLLM_HIMA_HPB_WINDOW_S=3600"
 )
 case "$MODE" in

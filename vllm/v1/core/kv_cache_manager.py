@@ -223,36 +223,6 @@ class KVCacheManager:
             )
         )
 
-        # ----- Interlayer / partial-block hit (Finding M.5) -----
-        # If the request has a NON-MAMBA single-group config and we hit on K
-        # full blocks, try to extend with a partial-block hit (R tokens) from
-        # the partial-block cache populated by FullAttentionManager.cache_blocks.
-        # SAFE because we only enter this path when (a) the env var is set,
-        # (b) there's exactly one KV cache group (so no per-group num_computed
-        # mismatch with mamba), (c) the partial cache is non-empty.
-        import os  # noqa: PLC0415
-        if (
-            os.environ.get("VLLM_PARTIAL_CACHE_ENABLED", "0") == "1"
-            and self.block_pool.cached_partial_block_map  # cheap empty check
-            and len(self.coordinator.kv_cache_config.kv_cache_groups) == 1
-            and num_new_computed_tokens > 0
-        ):
-            new_num, new_blocks = self._try_partial_extension(
-                request,
-                num_new_computed_tokens,
-                computed_blocks,
-                max_cache_hit_length,
-            )
-            # Diagnostic mode (M.9 root-cause hunt): when
-            # VLLM_PARTIAL_CACHE_PROBE_ONLY=1, run the cache+lookup paths
-            # but DON'T APPLY the partial extension. Lets us isolate
-            # whether the throughput regression comes from cache-side
-            # per-step overhead vs hit-side application to the request.
-            if os.environ.get("VLLM_PARTIAL_CACHE_PROBE_ONLY", "0") == "1":
-                pass  # discard new_num, new_blocks
-            else:
-                num_new_computed_tokens, computed_blocks = new_num, new_blocks
-
         if self.log_stats:
             assert self.prefix_cache_stats is not None
             self.prefix_cache_stats.record(
@@ -262,62 +232,6 @@ class KVCacheManager:
             )
 
         return self.create_kv_cache_blocks(computed_blocks), num_new_computed_tokens
-
-    def _try_partial_extension(
-        self,
-        request: Request,
-        num_new_computed_tokens: int,
-        computed_blocks: tuple[list, ...],
-        max_cache_hit_length: int,
-    ) -> tuple[int, tuple[list, ...]]:
-        """Finding M.5/M.9/M.10: probe the partial-block cache for an R-token
-        extension past the K full blocks that the coordinator returned.
-
-        Returns NEW tuple of lists (does not mutate caller's). This is
-        critical so probe-only diagnostic mode is actually side-effect-free,
-        AND so the caller can choose whether to apply the extension based
-        on the bumped num_computed_tokens.
-        """
-        # We know there's exactly 1 group (caller checked).
-        groups = self.coordinator.kv_cache_config.kv_cache_groups
-        group_id = 0
-        spec = groups[0].kv_cache_spec
-        block_size = spec.block_size
-        num_full_blocks = num_new_computed_tokens // block_size
-        max_extension = max_cache_hit_length - num_new_computed_tokens
-        if max_extension <= 0:
-            return num_new_computed_tokens, computed_blocks
-        candidates = self.block_pool.get_partial_extensions_for(
-            request=request,
-            num_full_blocks=num_full_blocks,
-            block_size=block_size,
-            kv_cache_group_id=group_id,
-        )
-        # M.14: skip partial-cache hits with R below a threshold. Small R
-        # gives a small prefill saving but the same per-launch GPU sync
-        # and Inductor dispatch overhead, so it's net-negative in the
-        # async-scheduling loop. Threshold tunable via env var (default
-        # 0 = apply all hits; recommended 256 for Qwen3-8B / cc workload).
-        import os as _os  # noqa: PLC0415
-        min_r = int(_os.environ.get("VLLM_PARTIAL_CACHE_MIN_R", "0"))
-        for R, _candidate_block in candidates:
-            if R > max_extension or R < min_r:
-                continue
-            partial_block = self.block_pool.get_cached_partial_block(
-                request=request,
-                num_full_blocks=num_full_blocks,
-                partial_len=R,
-                block_size=block_size,
-                kv_cache_group_id=group_id,
-            )
-            if partial_block is not None:
-                # NEW LIST per group; preserve original tuple structure.
-                new_blocks = tuple(
-                    list(g) for g in computed_blocks
-                )
-                new_blocks[0].append(partial_block)
-                return num_new_computed_tokens + R, new_blocks
-        return num_new_computed_tokens, computed_blocks
 
     def allocate_slots(
         self,

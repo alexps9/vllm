@@ -1,8 +1,0 @@
-{"kind": "row", "R": 0, "turn1_len": 2112, "turn2_len": 2128, "turn1_cached": 0, "turn1_wall_s": 2.0886399959999835, "turn2_cached": 2112, "turn2_wall_s": 0.6633364479966986, "turn2_uncached": 16}
-{"kind": "row", "R": 32, "turn1_len": 2144, "turn2_len": 2160, "turn1_cached": 0, "turn1_wall_s": 0.15219559100296465, "turn2_cached": 2112, "turn2_wall_s": 0.07960978399933083, "turn2_uncached": 48}
-{"kind": "row", "R": 96, "turn1_len": 2208, "turn2_len": 2224, "turn1_cached": 0, "turn1_wall_s": 0.15459060699868132, "turn2_cached": 2112, "turn2_wall_s": 0.08221844500076259, "turn2_uncached": 112}
-{"kind": "row", "R": 256, "turn1_len": 2368, "turn2_len": 2384, "turn1_cached": 0, "turn1_wall_s": 0.15312139799789293, "turn2_cached": 2112, "turn2_wall_s": 0.08089429800020298, "turn2_uncached": 272}
-{"kind": "row", "R": 512, "turn1_len": 2624, "turn2_len": 2640, "turn1_cached": 0, "turn1_wall_s": 0.15374547999817878, "turn2_cached": 2112, "turn2_wall_s": 0.0925678159983363, "turn2_uncached": 528}
-{"kind": "row", "R": 800, "turn1_len": 2912, "turn2_len": 2928, "turn1_cached": 0, "turn1_wall_s": 0.15413271700163023, "turn2_cached": 2112, "turn2_wall_s": 0.08243294800195144, "turn2_uncached": 816}
-{"kind": "row", "R": 1000, "turn1_len": 3112, "turn2_len": 3128, "turn1_cached": 2112, "turn1_wall_s": 0.7255473250006617, "turn2_cached": 2112, "turn2_wall_s": 0.07707477299845777, "turn2_uncached": 1016}
-{"kind": "row", "R": 1055, "turn1_len": 3167, "turn2_len": 3183, "turn1_cached": 2112, "turn1_wall_s": 0.0991102129992214, "turn2_cached": 2112, "turn2_wall_s": 0.1486125789997459, "turn2_uncached": 1071}

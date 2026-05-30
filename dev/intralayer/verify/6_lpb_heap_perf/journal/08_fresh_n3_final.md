@@ -88,7 +88,7 @@ verify/2 (Songyang W1 repro) — its driver still pends (Phase 7),
 but the design should be aware that **L1-only is no longer the
 suspected regression source for util=0.9 workloads** — the LPB queue
 is now within noise of LRU. The W1 collapse hypothesis shifts to
-admitter or partial-cache interaction.
+admitter interaction.
 
 ## RESULT
 
