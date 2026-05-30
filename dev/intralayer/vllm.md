@@ -178,6 +178,22 @@ for the discovery.
    scale=10 reaches ~49 % KV occupancy on 122 B and produces no
    measurable regression. Scale ≥ 20 would be needed.
 
+## Planned follow-ups (open experiments)
+
+These extend/stress-test the verified L1 win; none is expected to overturn
+it, but they close the remaining gaps:
+
+1. **LPB worst-case** (`verify/7`, highest value): rerun PathA at
+   `phase-f-scale ≥ 20` (finding 4 — scale=10 only reaches ~49 % occupancy
+   with no regression). The one experiment that could find an LPB *failure
+   mode* under heavy decoy pressure.
+2. **L1 pressure curve** (`verify/1`): `e2e_l1_pressure_curve.py
+   --mode l1_only` fresh — continuous-pressure view (we only have the
+   discrete Phase A→H points).
+3. **Path B fresh** (`verify/1`): Qwen3.5-122B-A10B, TP=4, n=3 — the
+   −17.7 % Path B number above is **legacy-archive only**, never
+   re-measured fresh same-env.
+
 ## Production implications
 
 - **Production swarm pattern** (N concurrent agents sharing an
