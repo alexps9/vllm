@@ -79,7 +79,7 @@ why outcomes converge with LRU.
 | **skipG-v2 both-paths LPB** (`runs/sglang_skipG_v2_both_paths/`) | same skip-G + extended LPB to `evict_full` | 510 ± 9 H-TTFT | 509 ± 6 H-TTFT | 75.2 % |
 | **two-anchor Path A** (`runs/sglang/compare_*_pathA2anc_*`, n=3) | warm two anchors A & B; only touch B mid-pipeline; Phase H probes A — designed to expose LPB win on a cold-anchor whose hits are stale | 504.0 ± 3.0 H-TTFT, sum_cached=107254/142590 (75.2%) every trial | 502.0 ± 1.7 H-TTFT (Δ=−0.40 %, within noise), sum_cached=107254/142590 (75.2%) every trial | **byte-identical across all 6 trials** |
 | **GSP bench** (`runs/sglang_gsp/`, n=3, single GPU, the "proven LPB-win" workload from prelude commit `7c6828c9a`) | 8 groups × 10 prompts × 12 K-token system prompt × 64-token question @ RPS=2 — the scenario where the prelude branch reported −19.77 % mean TTFT (single-trial measurement) | 284.5 ± 47.5 mean TTFT | 282.0 ± 41.8 mean TTFT | **tied: −0.86 %** |
-| **🏆 skewed-popularity stress** (`runs/sglang_skewed/`, n=3, single GPU, `--max-mamba-cache-size 8`) | 12 groups × 12 K-token system prompt × Zipf(α=1.5) traffic, 200 prompts @ RPS=2; tight pool (8 slots < 12 groups) forces real snapshot rotation; skewed popularity gives LPB hit-count signal real work to do | 322.7 ± 7.1 mean TTFT, 342.6 ± 2.9 median TTFT, 30.5 ± 1.1 % cache hit | **270.4 ± 4.6 mean TTFT, 250.4 ± 9.0 median TTFT, 51.4 ± 2.2 % cache hit** | **mean −16.2 %, median −26.9 %, cache hit +68.7 %** ← **LPB FASTER, comparable to vLLM's −12 %/−17.7 % Path A/B win** |
+| **🏆 skewed-popularity stress** (`runs/sglang_skewed/`, n=3, single GPU, `--max-mamba-cache-size 8`) | 12 groups × 12 K-token system prompt × Zipf(α=1.5) traffic, 200 prompts @ RPS=2; tight pool (8 slots < 12 groups) forces real snapshot rotation; skewed popularity gives LPB hit-count signal real work to do | 322.7 ± 7.1 mean TTFT, 342.6 ± 2.9 median TTFT, 30.5 ± 1.1 % cache hit | **270.4 ± 4.6 mean TTFT, 250.4 ± 9.0 median TTFT, 51.4 ± 2.2 % cache hit** | **mean −16.2 %, median −26.9 %, cache hit +68.7 %** ← **LPB FASTER, comparable to vLLM's −10.7 %/−12.2 % Path A/B win** |
 
 **Across all 30+ trials and 7 workload variants, LRU and LPB
 report IDENTICAL cached% on every Phase H swarm** (every single
@@ -192,7 +192,7 @@ resident across multiple cold-group accesses in between.
 This is the LPB-favorable case the prior dev/intralayer pipeline
 couldn't trigger: structurally free leaves + tight pool +
 skewed hits. The −16.2 %/−26.9 % delta on this workload is
-**comparable to vLLM's −12 %/−17.7 % Path A/B Phase H win**.
+**comparable to vLLM's −10.7 %/−12.2 % Path A/B Phase H win**.
 
 ## Why eviction outcomes converge on sglang
 
@@ -290,7 +290,7 @@ tie-breaking to recency = LRU).
 For the goal ("worst case no regression, best case real perf
 gain"): **worst case ✓** (no regression across 7 variants),
 **best case ✓** (−15.7 %/−25.7 % on the skewed-popularity
-workload, comparable to vLLM's −12 %/−17.7 %).
+workload, comparable to vLLM's −10.7 %/−12.2 %).
 
 Future work — a scoring change that doesn't degenerate to
 recency when `bytes_per_mamba_slot >> bytes_per_kv_page` (e.g.,
