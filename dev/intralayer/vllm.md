@@ -13,7 +13,7 @@ sglang side ([`sglang.md`](sglang.md)).
 | component | verdict | evidence |
 |---|---|---|
 | **L1 — LPB free-block queue** | ✅ **win**: −8.8…−10.7 % Phase H TTFT, +~3 pp hit vs LRU (fresh same-env n=3) | [`verify/1`](verify/1_l1_isolation_existing_tests/README.md), [`verify/6`](verify/6_lpb_heap_perf/) |
-| L1 scoring (`VLLM_HIMA_LPB_SCORING`) | **no-op**: lazy = eager = depth_tokens, bit-identical; keep `lazy` | [`verify/4`](verify/4_lpb_scoring_variants/results.md) |
+| L1 scoring (`VLLM_HIMA_LPB_SCORING`) | **no-op**: lazy = eager = depth_tokens, bit-identical; keep `lazy` | [`verify/4`](verify/4_lpb_scoring_variants/RESULTS.md) |
 | **L2 — admitter / budgeter / planner** | **removed** (2026-05): measured neutral (≈ LRU, −1.3 %); code deleted, slated for from-scratch redesign | [`dev/archive/L2/`](../archive/L2/) |
 | interlayer partial-cache (pcache) | ❌ **removed**: no value on hybrid (mamba block-granular state caps the resume point) | git history (`M2_per_group_lift` journals) |
 

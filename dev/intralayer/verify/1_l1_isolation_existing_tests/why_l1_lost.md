@@ -1,5 +1,11 @@
 # Why does L1-only lose to LRU on PathA util=0.9?
 
+> **RESOLVED (2026-05-30): the "loss" was a stale-baseline phantom — not
+> real.** The +20% compared current-code L1 against an LRU archive from a
+> lighter-load epoch / different GPU pair. Fresh same-environment n=3 shows
+> L1-only **wins** (−8.8% PhaseH TTFT); see [`RESULTS.md`](RESULTS.md) +
+> verify/6 journal/07. Kept as the investigation record.
+
 (In-progress investigation, started after n=3 attribution table revealed
 L1-only is +20% TTFT worse than LRU on Phase H.)
 

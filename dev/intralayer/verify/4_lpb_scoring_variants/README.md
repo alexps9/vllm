@@ -113,7 +113,7 @@ done
 ## Status
 
 **done (2026-05-30).** Phase 10a (env knob) landed; Phase 10b ran on the
-PathA anchor-survival scenario. See [`results.md`](results.md) and
+PathA anchor-survival scenario. See [`results.md`](RESULTS.md) and
 [`run.sh`](run.sh).
 
 ## Result
@@ -125,4 +125,4 @@ depth-as-integer) are real in principle but benign: the 500×-warmed
 anchor's hit count dominates regardless, and the depth-cost rescale is
 monotone so it doesn't reorder eviction. L1 still beats the LRU floor
 (88.87 vs 85.91 %, +2.96 pp). **Decision: keep `lazy`**; the knob remains a
-diagnostic. Full table + reasoning in [`results.md`](results.md).
+diagnostic. Full table + reasoning in [`results.md`](RESULTS.md).
