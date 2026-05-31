@@ -1,28 +1,48 @@
 # SPDX-License-Identifier: Apache-2.0
 # SPDX-FileCopyrightText: Copyright contributors to the vLLM project
-"""LPB-ordered drop-in replacement for vLLM's ``FreeKVCacheBlockQueue``.
+"""Recency-aware LPB free-block queue; drop-in for ``FreeKVCacheBlockQueue``.
 
-Internally a two-tier structure:
+Three tiers, evicted in this order (lowest value first):
 
-* **cold queue** — vLLM-style ``FreeKVCacheBlockQueue`` (hand-tuned
-  doubly-linked list, O(1) every op, zero allocation per call). Holds
-  every block whose current score is the wall-clock LRU fallback
-  (i.e. ``n_b == 0``).
-* **hot heap** — ``LPBPriorityQueue`` (tuple-based heapq + lazy delete).
-  Holds every block whose score is ``_HIT_SCORE_OFFSET + n_b × c``.
+1. **evict-first set** — blocks whose windowed hits have *expired* (demoted
+   from the hot heap). They were hit once but went stale; they belong ahead
+   of fresh never-hit blocks. Order among them doesn't matter (all stale),
+   so a ``set`` gives O(1) add/remove/pop.
+2. **cold FIFO** — never-hit blocks (``priority == 0``), in
+   ``FreeKVCacheBlockQueue`` recency order (oldest at head). O(1) per op;
+   this is the common case for cold-flow traffic.
+3. **hot heap** — blocks carrying an in-window hit, keyed by the tuple
+   ``(priority, recency)`` and popped minimum-first. Only touched when tiers
+   1+2 are exhausted (real eviction pressure on hit-bearing blocks).
 
-Because the offset is 1e12 (≫ any wall-clock score), the hot heap's
-minimum is always strictly greater than any cold block's score. So
-``popleft`` can always serve from cold first and only touch the heap
-when cold is empty — which is the rare path for typical workloads.
-That eliminates ~all heap overhead on the common alloc/free cycle.
+   * ``priority = n_b_windowed × c_pool(depth)`` — value of keeping the block.
+   * ``recency`` — monotonic access stamp; tie-break so a *recently* re-hit
+     block out-survives a *stale* one of equal hit-value.
+
+Why recency is first-class (the verify/9 fix)
+---------------------------------------------
+The previous design scored hit blocks ``1e12 + n_b×c`` with **no recency**
+and **never demoted** stale hits. A block hit once long ago out-ranked every
+freshly freed block forever (within the window). On multi-turn agent traffic
+the freshly-generated conversation tail is ``n_b==0`` when freed, so it was
+evicted before a long-idle once-hit block that plain LRU would have dropped
+first — costing L1 hits LRU kept (verify/9: SWE-Bench conc=256, L1 cached
+1.5% vs LRU 3.5%, n=3).
+
+``_decay_hits`` (throttled to once per ``_decay_interval`` of clock time)
+migrates a hit block whose hits have aged out of the window into the
+evict-first tier, so it is dropped *before* the fresh tails — exactly like
+LRU — while a *live* re-hit block stays protected. This mirrors sglang's LPB
+(``n_hits/bytes`` priority + ``last_access_time`` tie-break + a real decay
+window); see ``dev/intralayer/sglang.md`` and ``dev/intralayer/vllm.md``.
+Keeping the O(1) cold FIFO for the common case keeps per-op cost ~3× LRU
+(verify/6 microbench), versus ~8× for a single all-blocks heap.
 """
 
 from __future__ import annotations
 
 import logging
 import os
-import time
 from typing import TYPE_CHECKING
 
 from vllm.v1.core.hima.config import PoolKind
@@ -35,19 +55,12 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# LPB scoring variant (verify/4 attribution knob). Selects how the eviction
-# score is computed, to discriminate two suspected LPB scoring bugs:
-#   - lazy refresh : score is only (re)computed when a block is appended to
-#     the free queue; ``record_hit`` increments ``n_b`` but the heap score
-#     stays stale until the next append.
-#   - depth-as-integer : ``c_pool(depth)`` is fed the integer path index
-#     (1..K) instead of a token count, so the cost curve barely varies and
-#     LPB degenerates to LFU-on-hit-count.
-#
-#   "lazy"               current behaviour (default; reproduces both bugs)
-#   "eager"              refresh the score on every record_hit
+# LPB scoring variant (verify/4 attribution knob). With the recency-aware
+# design the two suspected bugs are moot; kept as a diagnostic:
+#   "lazy"               recency stamped on free/refresh (default)
+#   "eager"              additionally re-stamp recency on every record_hit
 #   "depth_tokens"       feed c_pool(depth * block_size) instead of c_pool(depth)
-#   "eager_depth_tokens" both fixes combined
+#   "eager_depth_tokens" both
 _VALID_SCORING = {"lazy", "eager", "depth_tokens", "eager_depth_tokens"}
 _SCORING_MODE = os.environ.get("VLLM_HIMA_LPB_SCORING", "lazy")
 if _SCORING_MODE not in _VALID_SCORING:
@@ -58,24 +71,20 @@ if _SCORING_MODE not in _VALID_SCORING:
     _SCORING_MODE = "lazy"
 _SCORING_LOGGED = False
 
-# Offset that guarantees any block with n_b > 0 sorts STRICTLY ABOVE any
-# block whose score is a wall-clock time.monotonic() (~1e9 on Linux).
-# We want LPB ordering: cold/unused blocks evict first (lowest score),
-# heavily-hit blocks survive (highest score). The two paths must not
-# accidentally compare across scales.
-_HIT_SCORE_OFFSET = 1e12
-
-# Location sentinel for the per-block ``_loc`` map.
+# Per-block location sentinels for O(1) remove/refresh routing.
 _LOC_COLD = 0
 _LOC_HOT = 1
+_LOC_EVICT = 2
 
 
 class LPBFreeBlockQueue:
-    """Min-LPB-ordered free-block queue; drop-in for ``FreeKVCacheBlockQueue``.
+    """Recency-aware three-tier free-block queue; drop-in for
+    ``FreeKVCacheBlockQueue``.
 
-    Internally split into a fast cold FIFO and a hot LPB heap (see module
-    docstring). Public API mirrors ``FreeKVCacheBlockQueue`` plus a few
-    HiMA-specific helpers (``set_block_depth`` / ``refresh_lpb_score``).
+    BlockPool surface: ``num_free_blocks`` (attr), ``popleft`` /
+    ``popleft_n`` / ``append`` / ``append_n`` / ``remove`` /
+    ``get_all_free_blocks``. HiMA helpers: ``set_block_depth`` /
+    ``refresh_lpb_score`` / ``maybe_eager_refresh`` / ``score_of``.
     """
 
     def __init__(
@@ -85,229 +94,68 @@ class LPBFreeBlockQueue:
         pool_kind: PoolKind = PoolKind.KV,
         block_size: int = 1,
     ) -> None:
-        # verify/4 scoring variant (see module-level _SCORING_MODE).
         self._eager = _SCORING_MODE in ("eager", "eager_depth_tokens")
         self._depth_tokens = _SCORING_MODE in ("depth_tokens", "eager_depth_tokens")
-        # Tokens per prefix-tree depth unit; only used by the depth_tokens
-        # variants to feed the cost curve a real token count instead of the
-        # integer path index.
         self._block_size = max(1, block_size)
         global _SCORING_LOGGED
         if not _SCORING_LOGGED:
             logger.info(
-                "[hima] LPB scoring variant: %s (eager=%s depth_tokens=%s, "
-                "block_size=%d)",
+                "[hima] LPB recency-aware scoring (variant=%s eager=%s "
+                "depth_tokens=%s block_size=%d)",
                 _SCORING_MODE, self._eager, self._depth_tokens, self._block_size,
             )
             _SCORING_LOGGED = True
+
         self._blocks_by_id: dict[int, KVCacheBlock] = {b.block_id: b for b in blocks}
-        # Cold queue starts with every block (none have hits yet).
-        self._cold = FreeKVCacheBlockQueue(blocks)
-        # Hot heap is empty until something records a hit on a block that
-        # later gets re-appended to the free queue.
-        self._hot: LPBPriorityQueue[int] = LPBPriorityQueue()
-        # block_id → current location sentinel. Used for O(1) remove
-        # routing without searching both structures.
-        self._loc: dict[int, int] = {bid: _LOC_COLD for bid in self._blocks_by_id}
         self._runtime = runtime
         self.pool_kind = pool_kind
-        # block_id → prefix-tree depth (set by coordinator on cache_blocks)
+
+        # Tier 1: demoted, stale-hit blocks (drained first). Tier 2: cold
+        # FIFO of never-hit blocks. Tier 3: hot heap of in-window hits.
+        self._evict_first: set[int] = set()
+        self._cold = FreeKVCacheBlockQueue(blocks)
+        self._hot: LPBPriorityQueue[int] = LPBPriorityQueue()
+        self._loc: dict[int, int] = {bid: _LOC_COLD for bid in self._blocks_by_id}
+        # Recency stamp for hot-heap keys (lower = older).
+        self._stamp = 0.0
+        self._recency: dict[int, float] = {}
+        # block_id → prefix-tree depth (set by coordinator on cache_blocks).
         self._block_depth: dict[int, int] = {}
-        # Hot-loop attribute caches; bound on first ``_score_for`` call
-        # after ``_runtime`` is available.
-        self._pc_count = None  # bound method: path_counter.count
-        self._c_curve = None  # bound method: c_kv_ms or c_m_ms
-        # Memoise ``c_curve(depth)``; depths are small integers (1..~30).
+
+        # Decay throttle: re-scoring the hot set on every pop is wasteful;
+        # stale hits only need to demote on the window timescale.
+        window_s = (
+            runtime.config.hima_lpb_window_s if runtime is not None else 60.0
+        )
+        self._clock = runtime.path_counter.clock if runtime is not None else None
+        self._decay_interval = max(0.05, window_s / 16.0)
+        self._next_decay = 0.0  # 0 ⇒ scan on first eviction
+
+        # Hot-loop attribute caches; bound on first ``_priority`` call.
+        self._pc_count = None
+        self._c_curve = None
         self._c_cache: dict[int, float] = {}
-        # --- analysis instrumentation (cheap; counts only) -----------------
-        # Whether L1's hot-heap actually *engages*: popleft serves cold
-        # (n_b==0, LRU-order) first and only evicts a hot (hit) block when
-        # cold is exhausted. So ``_ev_hot`` > 0 means real pressure forced
-        # eviction of a hit-bearing block — the regime where LPB ordering
-        # can differ from LRU. ``_ev_hot==0`` for a whole run ⇒ L1 ≡ LRU on
-        # that workload (the hot-heap never mattered). Logged every 2000
-        # evictions at INFO so a run is analyzable post-hoc.
-        self._ev_cold = 0
-        self._ev_hot = 0
+
+        # Instrumentation: ``protected`` counts evictions of a block that
+        # still carried a windowed hit (came from the hot tier). ``0`` for a
+        # whole run ⇒ pressure never reached the hot tier ⇒ L1 ≡ LRU.
         self._ev_total = 0
+        self._ev_protected = 0
 
-    # ----------------------- legacy attribute ---------------------------- #
+        self.num_free_blocks = len(blocks)
 
-    @property
-    def num_free_blocks(self) -> int:
-        return self._cold.num_free_blocks + len(self._hot)
+    # ------------------------------ scoring ------------------------------ #
 
-    # -------------------- legacy queue interface ------------------------- #
+    def _next_stamp(self) -> float:
+        self._stamp += 1.0
+        return self._stamp
 
-    def popleft(self) -> KVCacheBlock:
-        if self._cold.num_free_blocks > 0:
-            b = self._cold.popleft()
-            del self._loc[b.block_id]
-            self._note_evict(1, 0)
-            return b
-        if not self._hot.is_empty():
-            block_id, _ = self._hot.popmin()
-            del self._loc[block_id]
-            self._note_evict(0, 1)
-            return self._blocks_by_id[block_id]
-        raise ValueError("No free blocks available")
-
-    def _note_evict(self, n_cold: int, n_hot: int) -> None:
-        """verify/9 analysis: track eviction source (cold FIFO vs hot LPB
-        heap) so we can tell whether L1's hot-heap actually engaged."""
-        self._ev_cold += n_cold
-        self._ev_hot += n_hot
-        self._ev_total += n_cold + n_hot
-        if self._ev_total % 2000 == 0:
-            logger.info(
-                "[hima/lpb] evicts tot=%d cold=%d hot=%d (hot=%.1f%%) | "
-                "free: cold=%d hot=%d",
-                self._ev_total, self._ev_cold, self._ev_hot,
-                100.0 * self._ev_hot / max(self._ev_total, 1),
-                self._cold.num_free_blocks, len(self._hot),
-            )
-
-    def popleft_n(self, n: int) -> list[KVCacheBlock]:
-        if n == 0:
-            return []
-        cold_n = self._cold.num_free_blocks
-        if n > cold_n + len(self._hot):
-            raise AssertionError(
-                f"popleft_n({n}) but only {cold_n + len(self._hot)} blocks are free"
-            )
-        if n <= cold_n:
-            ret = self._cold.popleft_n(n)
-            loc = self._loc
-            for b in ret:
-                del loc[b.block_id]
-            self._note_evict(n, 0)
-            return ret
-        # Drain cold first, then take the remainder from hot.
-        self._note_evict(cold_n, n - cold_n)
-        ret = self._cold.popleft_n(cold_n)
-        loc = self._loc
-        for b in ret:
-            del loc[b.block_id]
-        remainder = n - cold_n
-        popped = self._hot.popmin_n(remainder)
-        blocks_by_id = self._blocks_by_id
-        for bid, _ in popped:
-            ret.append(blocks_by_id[bid])
-            del loc[bid]
-        return ret
-
-    def append(self, block: KVCacheBlock) -> None:
-        score = self._score_for(block)
-        if score < _HIT_SCORE_OFFSET:
-            # Cold: goes to the fast FIFO. Block must not currently be in
-            # either queue — block_pool guarantees this by ref-count.
-            self._cold.append(block)
-            self._loc[block.block_id] = _LOC_COLD
-        else:
-            self._hot.add(block.block_id, score)
-            self._loc[block.block_id] = _LOC_HOT
-
-    def append_n(self, blocks: list[KVCacheBlock]) -> None:
-        for blk in blocks:
-            self.append(blk)
-
-    def remove(self, block: KVCacheBlock) -> None:
-        loc = self._loc.pop(block.block_id, None)
-        if loc is None:
-            raise RuntimeError(f"remove() called on an invalid block: {block}")
-        if loc == _LOC_COLD:
-            self._cold.remove(block)
-        else:
-            self._hot.remove(block.block_id)
-
-    def get_all_free_blocks(self) -> list[KVCacheBlock]:
-        # Cold side: iterate the doubly-linked list head→tail; hot side:
-        # iterate the heap dict. Both yield block ids only; map via
-        # ``_blocks_by_id``.
-        blocks_by_id = self._blocks_by_id
-        out: list[KVCacheBlock] = []
-        # Cold FIFO doesn't expose iteration; walk the linked list directly.
-        cur = self._cold.fake_free_list_head.next_free_block
-        tail = self._cold.fake_free_list_tail
-        while cur is not None and cur is not tail:
-            out.append(cur)
-            cur = cur.next_free_block
-        for bid in self._hot:
-            out.append(blocks_by_id[bid])
-        return out
-
-    # ------------------ HiMA-specific helpers (optional) ----------------- #
-
-    def update_score(self, block: KVCacheBlock, score: float) -> None:
-        """Re-score ``block``; migrate across cold/hot if needed."""
-        loc = self._loc.get(block.block_id)
-        if loc is None:
-            return
-        if score < _HIT_SCORE_OFFSET:
-            if loc == _LOC_HOT:
-                # Migrate hot → cold.
-                self._hot.remove(block.block_id)
-                self._cold.append(block)
-                self._loc[block.block_id] = _LOC_COLD
-            # If already cold, the FIFO doesn't track scores — no-op.
-        else:
-            if loc == _LOC_COLD:
-                # Migrate cold → hot.
-                self._cold.remove(block)
-                self._hot.add(block.block_id, score)
-                self._loc[block.block_id] = _LOC_HOT
-            else:
-                self._hot.update(block.block_id, score)
-
-    def score_of(self, block: KVCacheBlock) -> float:
-        loc = self._loc.get(block.block_id)
-        if loc is None:
-            raise KeyError(block.block_id)
-        if loc == _LOC_HOT:
-            return self._hot.score_of(block.block_id)
-        # Cold FIFO doesn't track per-block scores; return wall-clock-ish
-        # approximation so callers get a deterministic monotonic value.
-        return time.monotonic()
-
-    def set_block_depth(self, block_id: int, depth: int) -> None:
-        """Record prefix-tree depth for LPB scoring; called by HiMACoordinator."""
-        self._block_depth[block_id] = depth
-
-    def refresh_lpb_score(self, block: KVCacheBlock) -> None:
-        """Recompute the LPB score for ``block``; re-place if it crossed tier."""
-        loc = self._loc.get(block.block_id)
-        if loc is None:
-            return
-        self.update_score(block, self._score_for(block))
-
-    def maybe_eager_refresh(self, block_id: int) -> None:
-        """verify/4 'eager' variant: re-score ``block_id`` right after a hit
-        was recorded against it (``n_b`` just incremented), so the hot-heap
-        score doesn't go stale. No-op for the 'lazy' variants, and no-op if
-        the block isn't currently in the free queue."""
-        if not self._eager:
-            return
-        block = self._blocks_by_id.get(block_id)
-        if block is not None:
-            self.refresh_lpb_score(block)
-
-    # --------------------------- internals ------------------------------- #
-
-    def _score_for(self, block: KVCacheBlock) -> float:
-        """LPB eviction score.
-
-        Layout (popmin = evict-first):
-
-          * cold blocks (never hit while in cache) → ``time.monotonic()``
-            (~1e9). Among cold, FIFO order from the underlying doubly-
-            linked list does the LRU job.
-          * hit blocks → ``_HIT_SCORE_OFFSET + n_b × c_pool(depth)``,
-            which is *always* > any cold block's score, so cold evicts
-            first. Within hot, lower (hits × cost) evicts first.
-        """
+    def _priority(self, block_id: int) -> float:
+        """Windowed hit value ``n_b_windowed × c_pool(depth)``; 0 if no
+        in-window hit (then the block belongs in the cold/evict tiers)."""
         rt = self._runtime
         if rt is None:
-            return time.monotonic()
+            return 0.0
         pc_count = self._pc_count
         if pc_count is None:
             pc_count = rt.path_counter.count
@@ -316,24 +164,204 @@ class LPBFreeBlockQueue:
             self._c_curve = (
                 curves.c_kv_ms if self.pool_kind == PoolKind.KV else curves.c_m_ms
             )
-        bid = block.block_id
-        n_b = pc_count(bid)
+        n_b = pc_count(block_id)
         if n_b == 0:
-            return time.monotonic()
-        depth = self._block_depth.get(bid, 1)
+            return 0.0
+        depth = self._block_depth.get(block_id, 1)
         cache = self._c_cache
         c = cache.get(depth)
         if c is None:
-            # depth_tokens variant feeds the cost curve a token count
-            # (depth × block_size) instead of the integer path index, so
-            # c_pool actually varies with prefix length. Memoised by depth
-            # (block_size is fixed per queue).
             curve_arg = depth * self._block_size if self._depth_tokens else depth
             c = self._c_curve(curve_arg)
             cache[depth] = c
-        # ``n_b`` is already int; Python int*float is a single C call, no
-        # need for an explicit ``float(n_b)`` conversion.
-        return _HIT_SCORE_OFFSET + n_b * c
+        return n_b * c
+
+    def _decay_hits(self) -> None:
+        """Demote hot blocks whose windowed hits have expired into the
+        evict-first tier. Throttled to once per ``_decay_interval`` of clock
+        time; only re-pushes a still-hot block when its priority changed."""
+        if self._clock is None or self._hot.is_empty():
+            return
+        now = self._clock()
+        if now < self._next_decay:
+            return
+        self._next_decay = now + self._decay_interval
+        hot = self._hot
+        for bid in list(hot):
+            prio = self._priority(bid)
+            if prio == 0.0:
+                hot.remove(bid)
+                self._evict_first.add(bid)
+                self._loc[bid] = _LOC_EVICT
+            elif prio != hot.score_of(bid)[0]:
+                hot.update(bid, (prio, self._recency[bid]))
+
+    # ------------------------- queue operations -------------------------- #
+
+    def _note_evict(self, protected: bool) -> None:
+        self._ev_total += 1
+        if protected:
+            self._ev_protected += 1
+        if self._ev_total % 2000 == 0:
+            logger.info(
+                "[hima/lpb] evicts tot=%d protected=%d (%.1f%%) | "
+                "evict_q=%d cold=%d hot=%d",
+                self._ev_total, self._ev_protected,
+                100.0 * self._ev_protected / self._ev_total,
+                len(self._evict_first), self._cold.num_free_blocks, len(self._hot),
+            )
+
+    def popleft(self) -> KVCacheBlock:
+        if self.num_free_blocks <= 0:
+            raise ValueError("No free blocks available")
+        self._decay_hits()
+        self.num_free_blocks -= 1
+        if self._evict_first:
+            bid = self._evict_first.pop()
+            del self._loc[bid]
+            self._recency.pop(bid, None)
+            self._note_evict(False)
+            return self._blocks_by_id[bid]
+        if self._cold.num_free_blocks > 0:
+            b = self._cold.popleft()
+            del self._loc[b.block_id]
+            self._note_evict(False)
+            return b
+        bid, _ = self._hot.popmin()
+        del self._loc[bid]
+        self._recency.pop(bid, None)
+        self._note_evict(True)
+        return self._blocks_by_id[bid]
+
+    def popleft_n(self, n: int) -> list[KVCacheBlock]:
+        if n == 0:
+            return []
+        if n > self.num_free_blocks:
+            raise AssertionError(
+                f"popleft_n({n}) but only {self.num_free_blocks} blocks are free"
+            )
+        self._decay_hits()
+        self.num_free_blocks -= n
+        ret: list[KVCacheBlock] = []
+        bb = self._blocks_by_id
+        # Tier 1: stale-hit evict-first set.
+        while self._evict_first and len(ret) < n:
+            bid = self._evict_first.pop()
+            del self._loc[bid]
+            self._recency.pop(bid, None)
+            self._note_evict(False)
+            ret.append(bb[bid])
+        # Tier 2: cold FIFO.
+        need = n - len(ret)
+        if need > 0 and self._cold.num_free_blocks > 0:
+            k = min(need, self._cold.num_free_blocks)
+            for b in self._cold.popleft_n(k):
+                del self._loc[b.block_id]
+                self._note_evict(False)
+                ret.append(b)
+        # Tier 3: hot heap.
+        need = n - len(ret)
+        if need > 0:
+            for bid, _ in self._hot.popmin_n(need):
+                del self._loc[bid]
+                self._recency.pop(bid, None)
+                self._note_evict(True)
+                ret.append(bb[bid])
+        return ret
+
+    def append(self, block: KVCacheBlock) -> None:
+        bid = block.block_id
+        prio = self._priority(bid)
+        if prio > 0.0:
+            stamp = self._next_stamp()
+            self._recency[bid] = stamp
+            self._hot.add(bid, (prio, stamp))
+            self._loc[bid] = _LOC_HOT
+        else:
+            self._cold.append(block)
+            self._loc[bid] = _LOC_COLD
+        self.num_free_blocks += 1
+
+    def append_n(self, blocks: list[KVCacheBlock]) -> None:
+        for blk in blocks:
+            self.append(blk)
+
+    def remove(self, block: KVCacheBlock) -> None:
+        bid = block.block_id
+        loc = self._loc.pop(bid, None)
+        if loc is None:
+            raise RuntimeError(f"remove() called on an invalid block: {block}")
+        if loc == _LOC_COLD:
+            self._cold.remove(block)
+        elif loc == _LOC_HOT:
+            self._hot.remove(bid)
+            self._recency.pop(bid, None)
+        else:  # _LOC_EVICT
+            self._evict_first.discard(bid)
+            self._recency.pop(bid, None)
+        self.num_free_blocks -= 1
+
+    def get_all_free_blocks(self) -> list[KVCacheBlock]:
+        bb = self._blocks_by_id
+        out: list[KVCacheBlock] = [bb[bid] for bid in self._evict_first]
+        cur = self._cold.fake_free_list_head.next_free_block
+        tail = self._cold.fake_free_list_tail
+        while cur is not None and cur is not tail:
+            out.append(cur)
+            cur = cur.next_free_block
+        out.extend(bb[bid] for bid in self._hot)
+        return out
+
+    # ------------------ HiMA-specific helpers (optional) ----------------- #
+
+    def set_block_depth(self, block_id: int, depth: int) -> None:
+        """Record prefix-tree depth for LPB scoring; called by HiMACoordinator."""
+        self._block_depth[block_id] = depth
+
+    def refresh_lpb_score(self, block: KVCacheBlock) -> None:
+        """Recompute a free block's score after a hit. Bumps recency (a hit
+        is an access) and migrates it across tiers if its priority crossed 0.
+        No-op if the block isn't currently free."""
+        bid = block.block_id
+        loc = self._loc.get(bid)
+        if loc is None:
+            return
+        prio = self._priority(bid)
+        if prio > 0.0:
+            stamp = self._next_stamp()
+            self._recency[bid] = stamp
+            if loc == _LOC_HOT:
+                self._hot.update(bid, (prio, stamp))
+            else:  # promote cold/evict → hot
+                if loc == _LOC_COLD:
+                    self._cold.remove(block)
+                else:
+                    self._evict_first.discard(bid)
+                self._hot.add(bid, (prio, stamp))
+                self._loc[bid] = _LOC_HOT
+        elif loc == _LOC_HOT:
+            # Lost all in-window hits → demote to evict-first.
+            self._hot.remove(bid)
+            self._recency.pop(bid, None)
+            self._evict_first.add(bid)
+            self._loc[bid] = _LOC_EVICT
+
+    def maybe_eager_refresh(self, block_id: int) -> None:
+        """verify/4 'eager' variant: re-score right after a hit is recorded.
+        No-op for 'lazy' variants and for blocks not currently free."""
+        if not self._eager:
+            return
+        block = self._blocks_by_id.get(block_id)
+        if block is not None:
+            self.refresh_lpb_score(block)
+
+    def score_of(self, block: KVCacheBlock) -> tuple[float, float]:
+        bid = block.block_id
+        loc = self._loc.get(bid)
+        if loc == _LOC_HOT:
+            return self._hot.score_of(bid)
+        # cold / evict tiers carry no in-window hit.
+        return (0.0, self._recency.get(bid, 0.0))
 
 
 __all__ = ["LPBFreeBlockQueue"]

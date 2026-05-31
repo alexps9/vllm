@@ -17,7 +17,9 @@
 set -uo pipefail
 
 REPO="/data/yuzhou/projects/vllm-songyang"
-OUT="$REPO/dev/intralayer/verify/9_swebench_w2_real/runs"
+# OUT_TAG nests results under runs/<tag>/ so a pressure probe (different
+# util/concurrency) doesn't overwrite the normal-operating-point sweep.
+OUT="$REPO/dev/intralayer/verify/9_swebench_w2_real/runs${OUT_TAG:+/$OUT_TAG}"
 mkdir -p "$OUT"
 
 export REPO="$REPO"  # start_server.sh mis-derives this from its own path

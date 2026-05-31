@@ -56,7 +56,7 @@ def bench_lpb(n_blocks: int, n_ops: int, hot_blocks: int) -> int:
     """LPB rotate. Bootstrap a runtime so _score_for has real path_counter
     + cost_curves to consult. Seed `hot_blocks` blocks with hits so the
     score path matches realistic Phase H usage."""
-    cfg = HiMAConfig(hima_l1_enabled=True, hima_l2_enabled=False)
+    cfg = HiMAConfig(hima_l1_enabled=True)
     rt = enable_runtime(config=cfg)
     try:
         blocks = make_blocks(n_blocks)
@@ -82,7 +82,7 @@ def bench_lpb_with_update(
     n_blocks: int, n_ops: int, hot_blocks: int
 ) -> int:
     """LPB rotate + 1 update per op (matches refresh_lpb_score firing)."""
-    cfg = HiMAConfig(hima_l1_enabled=True, hima_l2_enabled=False)
+    cfg = HiMAConfig(hima_l1_enabled=True)
     rt = enable_runtime(config=cfg)
     try:
         blocks = make_blocks(n_blocks)

@@ -1,0 +1,31 @@
+==== [verify/9] baseline_t1 : starting server (baseline) on GPUs=2,3 ====
+[baseline] vllm serve TP=2 util=0.85 max_len=65536 max_seqs=64
+pid=3676420
+[verify/9] baseline_t1: server healthy, launching W2 client
+[verify/9] baseline_t1: client done rc=0
+ 3676420==== [verify/9] l1_only_t1 : starting server (l1_only) on GPUs=2,3 ====
+[l1_only] vllm serve TP=2 util=0.85 max_len=65536 max_seqs=64
+pid=3730707
+[verify/9] l1_only_t1: server healthy, launching W2 client
+[verify/9] l1_only_t1: client done rc=0
+ 3730707==== [verify/9] baseline_t2 : starting server (baseline) on GPUs=2,3 ====
+[baseline] vllm serve TP=2 util=0.85 max_len=65536 max_seqs=64
+pid=3778026
+[verify/9] baseline_t2: server healthy, launching W2 client
+[verify/9] baseline_t2: client done rc=0
+ 3778026==== [verify/9] l1_only_t2 : starting server (l1_only) on GPUs=2,3 ====
+[l1_only] vllm serve TP=2 util=0.85 max_len=65536 max_seqs=64
+pid=3818013
+[verify/9] l1_only_t2: server healthy, launching W2 client
+[verify/9] l1_only_t2: client done rc=0
+ 3818013==== [verify/9] baseline_t3 : starting server (baseline) on GPUs=2,3 ====
+[baseline] vllm serve TP=2 util=0.85 max_len=65536 max_seqs=64
+pid=3858572
+[verify/9] baseline_t3: server healthy, launching W2 client
+[verify/9] baseline_t3: client done rc=0
+ 3858572==== [verify/9] l1_only_t3 : starting server (l1_only) on GPUs=2,3 ====
+[l1_only] vllm serve TP=2 util=0.85 max_len=65536 max_seqs=64
+pid=3901556
+[verify/9] l1_only_t3: server healthy, launching W2 client
+[verify/9] l1_only_t3: client done rc=0
+ 3901556[verify/9] all cells done

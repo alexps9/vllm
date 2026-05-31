@@ -14,6 +14,8 @@ sglang side ([`sglang.md`](sglang.md)).
 |---|---|---|
 | **L1 — LPB free-block queue** | ✅ **win**: −8.8…−10.7 % Phase H TTFT, +~3 pp hit vs LRU (fresh same-env n=3) | [`verify/1`](verify/1_l1_isolation_existing_tests/README.md), [`verify/6`](verify/6_lpb_heap_perf/) |
 | L1 scoring (`VLLM_HIMA_LPB_SCORING`) | **no-op**: lazy = eager = depth_tokens, bit-identical; keep `lazy` | [`verify/4`](verify/4_lpb_scoring_variants/RESULTS.md) |
+| **L1 on real agent traffic (W2)** | **no win on SWE-Bench**: no cross-session shared anchor + (pre-fix) recency-blind eviction *lost* hits under pressure → drove the recency-aware rewrite below | [`verify/9`](verify/9_swebench_w2_real/RESULTS.md) |
+| **L1 recency-aware scoring** | ✅ **ideal-design fix** (2026-05-31): three-tier `(priority, recency)` + window decay; stale hits demote to LRU order so L1 can't fall behind LRU. Per-op cost re-verified ~3.9× LRU (= old two-tier). e2e win **pending n=3 GPU re-verify** | `tests/v1/core/test_hima_lpb_recency.py`, [`verify/6`](verify/6_lpb_heap_perf/) |
 | **L2 — admitter / budgeter / planner** | **removed** (2026-05): measured neutral (≈ LRU, −1.3 %); code deleted, slated for from-scratch redesign | [`dev/archive/L2/`](../archive/L2/) |
 | interlayer partial-cache (pcache) | ❌ **removed**: no value on hybrid (mamba block-granular state caps the resume point) | git history (`M2_per_group_lift` journals) |
 
@@ -28,7 +30,7 @@ pcache is gone.**
 
 | component | file |
 |---|---|
-| LPB-ordered free-block queue (heap, `_HIT_SCORE_OFFSET = 1e12`) | `vllm/v1/core/hima/lpb_free_queue.py` |
+| Recency-aware LPB free-block queue (heap, `(priority, recency)` key) | `vllm/v1/core/hima/lpb_free_queue.py` |
 | Engine knobs (`hima_l1_enabled` / `hima_l2_enabled`) | `vllm/engine/arg_utils.py` (threads through `CacheConfig`) |
 | HiMA runtime + windowed hit counter | `vllm/v1/core/hima/runtime.py` (`PathCountedHitCounter`) |
 | Cost curves per pool | `vllm/v1/core/hima/cost_curve.py` |
@@ -37,16 +39,52 @@ pcache is gone.**
 | Aggregator + figures | `dev/plot_lru_vs_lpb.py` |
 | Dataset | `dev/cc_long_traces.jsonl` (106 real Claude-Code sessions, 44 MB, committed) |
 
-LPB score: cold block = `time.monotonic()`; any block with
-`n_b > 0` (windowed hits) = `time.monotonic() + 1e12`. Binary
-protected/not, tie-broken by recency within the protected set.
-Replaces `FreeKVCacheBlockQueue` wholesale — applies to every pool,
-not just mamba.
+LPB design (recency-aware, the ideal design — 2026-05-31): **three tiers**,
+evicted lowest-value first, replacing `FreeKVCacheBlockQueue` wholesale
+(every pool, not just mamba):
 
-Wiring: `EngineArgs(hima_l1_enabled=True)` enables it (the L1
-sub-flag, post-cleanup). Window configurable via
-`VLLM_HIMA_HPB_WINDOW_S` (default 60 s — Path A uses 3600 to keep
-the anchor's hits from expiring across the multi-minute run).
+1. **evict-first set** — stale-hit blocks demoted from the hot heap (hits
+   expired). Drained first; a `set` (O(1)) since order among stale blocks
+   doesn't matter.
+2. **cold FIFO** — never-hit blocks (`priority == 0`), in
+   `FreeKVCacheBlockQueue` recency order. **O(1) per op — the common case.**
+3. **hot heap** — in-window hits, keyed by `(priority, recency)`:
+   `priority = n_b_windowed × c_pool(depth)`, `recency` = monotonic access
+   stamp (recent re-hit out-survives a stale hit of equal value). Touched
+   only when tiers 1+2 are exhausted.
+
+`_decay_hits` (throttled to once per ~window/16 of clock time) migrates a hot
+block whose hits have aged out of the window into the evict-first tier — so
+it is dropped *before* the fresh tails (which sit at the cold-FIFO tail),
+exactly like LRU, while a live re-hit block stays in the hot heap. Keeping
+the O(1) cold FIFO for the common case holds per-op cost at **~3.9× LRU**
+(846 ns vs 217 ns, verify/6 microbench) — same as the old two-tier; a naive
+single all-blocks heap was 8.1×.
+
+**Why recency is first-class.** The prior design was a two-tier
+`cold-FIFO + hot-heap` scoring `1e12 + n_b×c` with no recency term — so a
+block hit once long ago out-ranked every freshly freed block *forever*
+(within the window). On multi-turn agent traffic the freshly-generated
+conversation tail is `n_b==0` at the instant it is freed, so it was evicted
+before a long-idle once-hit block that plain LRU would have dropped first —
+costing L1 hits LRU kept (see [`verify/9`](verify/9_swebench_w2_real/RESULTS.md):
+SWE-Bench conc=256, L1 cached **1.5 %** vs LRU **3.5 %**, n=3). The
+recency-aware score makes stale hits *decay* and rejoin LRU order, so L1 can
+no longer fall behind LRU; it only diverges to *protect* a genuinely live,
+repeatedly-reused prefix. This mirrors sglang's LPB (`n_hits/bytes` priority
++ `last_access_time` tie-break + a real decay window); see
+[`sglang.md`](sglang.md) "Why eviction outcomes converge". Regression test:
+`tests/v1/core/test_hima_lpb_recency.py`.
+
+Wiring: `EngineArgs(hima_l1_enabled=True)` enables it (the L1 sub-flag,
+post-cleanup). Window via `VLLM_HIMA_HPB_WINDOW_S` (default 60 s). The
+window is now a real *decay* lever — it must be **shorter than the gap
+between reuses you want to stop protecting across**. Note the inherent
+tension: a long window (e.g. Path A's 3600 s, set to keep the synthetic
+500×-warmed anchor protected across a multi-minute pressure run) *disables*
+the decay that protects real agent traffic. There is no single window that
+is right for both an artificially-pinned anchor and live session tails —
+that gap is what a session-liveness signal (future work) would close.
 
 ## Sweeps
 

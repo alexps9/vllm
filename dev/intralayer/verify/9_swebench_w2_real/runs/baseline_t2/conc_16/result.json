@@ -1,0 +1,2475 @@
+{
+  "summary": {
+    "concurrency": 16,
+    "num_turns": 16,
+    "max_tokens": 256,
+    "n_unique_instances": 16,
+    "runtime_sec": 23.02,
+    "num_requests": 256,
+    "total_input_tokens": 1495995,
+    "total_output_tokens": 16493,
+    "output_throughput_tok_s": 716.5,
+    "overall_prefix_cache_hit_rate": 0.8082,
+    "overall_prompt_cached_ratio": 0.8082,
+    "overall_prompt_tokens": 1495995.0,
+    "overall_prompt_tokens_cached": 1209120.0,
+    "overall_preemptions": 0.0,
+    "final_kv_usage_perc": 0.0,
+    "avg_ttft_ms": 184.4,
+    "p50_ttft_ms": 178.3,
+    "p95_ttft_ms": 279.9,
+    "p99_ttft_ms": 320.9,
+    "by_turn": [
+      {
+        "turn": 0,
+        "n": 16,
+        "avg_prompt_tokens": 650.9,
+        "avg_completion_tokens": 132.1,
+        "avg_ttft_ms": 100.7,
+        "p50_ttft_ms": 75.3,
+        "p95_ttft_ms": 156.4
+      },
+      {
+        "turn": 1,
+        "n": 16,
+        "avg_prompt_tokens": 1477.2,
+        "avg_completion_tokens": 48.5,
+        "avg_ttft_ms": 156.6,
+        "p50_ttft_ms": 155.0,
+        "p95_ttft_ms": 229.9
+      },
+      {
+        "turn": 2,
+        "n": 16,
+        "avg_prompt_tokens": 1897.7,
+        "avg_completion_tokens": 60.5,
+        "avg_ttft_ms": 128.0,
+        "p50_ttft_ms": 115.7,
+        "p95_ttft_ms": 183.0
+      },
+      {
+        "turn": 3,
+        "n": 16,
+        "avg_prompt_tokens": 2401.2,
+        "avg_completion_tokens": 58.4,
+        "avg_ttft_ms": 181.7,
+        "p50_ttft_ms": 197.6,
+        "p95_ttft_ms": 246.2
+      },
+      {
+        "turn": 4,
+        "n": 16,
+        "avg_prompt_tokens": 3995.6,
+        "avg_completion_tokens": 65.1,
+        "avg_ttft_ms": 187.1,
+        "p50_ttft_ms": 201.1,
+        "p95_ttft_ms": 240.1
+      },
+      {
+        "turn": 5,
+        "n": 16,
+        "avg_prompt_tokens": 4342.7,
+        "avg_completion_tokens": 57.8,
+        "avg_ttft_ms": 209.9,
+        "p50_ttft_ms": 223.5,
+        "p95_ttft_ms": 266.9
+      },
+      {
+        "turn": 6,
+        "n": 16,
+        "avg_prompt_tokens": 5356.4,
+        "avg_completion_tokens": 57.4,
+        "avg_ttft_ms": 207.7,
+        "p50_ttft_ms": 206.4,
+        "p95_ttft_ms": 262.2
+      },
+      {
+        "turn": 7,
+        "n": 16,
+        "avg_prompt_tokens": 5615.9,
+        "avg_completion_tokens": 62.6,
+        "avg_ttft_ms": 172.9,
+        "p50_ttft_ms": 169.9,
+        "p95_ttft_ms": 215.5
+      },
+      {
+        "turn": 8,
+        "n": 16,
+        "avg_prompt_tokens": 5934.4,
+        "avg_completion_tokens": 53.0,
+        "avg_ttft_ms": 183.2,
+        "p50_ttft_ms": 167.6,
+        "p95_ttft_ms": 260.0
+      },
+      {
+        "turn": 9,
+        "n": 16,
+        "avg_prompt_tokens": 6713.4,
+        "avg_completion_tokens": 55.4,
+        "avg_ttft_ms": 233.8,
+        "p50_ttft_ms": 229.5,
+        "p95_ttft_ms": 298.4
+      },
+      {
+        "turn": 10,
+        "n": 16,
+        "avg_prompt_tokens": 7140.9,
+        "avg_completion_tokens": 57.6,
+        "avg_ttft_ms": 187.3,
+        "p50_ttft_ms": 175.5,
+        "p95_ttft_ms": 266.7
+      },
+      {
+        "turn": 11,
+        "n": 16,
+        "avg_prompt_tokens": 7641.4,
+        "avg_completion_tokens": 68.2,
+        "avg_ttft_ms": 189.7,
+        "p50_ttft_ms": 190.4,
+        "p95_ttft_ms": 230.4
+      },
+      {
+        "turn": 12,
+        "n": 16,
+        "avg_prompt_tokens": 9245.7,
+        "avg_completion_tokens": 66.0,
+        "avg_ttft_ms": 197.7,
+        "p50_ttft_ms": 176.6,
+        "p95_ttft_ms": 264.0
+      },
+      {
+        "turn": 13,
+        "n": 16,
+        "avg_prompt_tokens": 9593.7,
+        "avg_completion_tokens": 61.8,
+        "avg_ttft_ms": 210.5,
+        "p50_ttft_ms": 205.1,
+        "p95_ttft_ms": 281.4
+      },
+      {
+        "turn": 14,
+        "n": 16,
+        "avg_prompt_tokens": 10611.5,
+        "avg_completion_tokens": 67.5,
+        "avg_ttft_ms": 215.9,
+        "p50_ttft_ms": 188.3,
+        "p95_ttft_ms": 287.0
+      },
+      {
+        "turn": 15,
+        "n": 16,
+        "avg_prompt_tokens": 10881.0,
+        "avg_completion_tokens": 58.9,
+        "avg_ttft_ms": 188.1,
+        "p50_ttft_ms": 153.1,
+        "p95_ttft_ms": 294.2
+      }
+    ]
+  },
+  "per_request": [
+    {
+      "agent": 0,
+      "instance_id": "django__django-16139",
+      "turn": 0,
+      "prompt_tokens": 764,
+      "completion_tokens": 256,
+      "ttft_ms": 69.4,
+      "total_ms": 1506.1
+    },
+    {
+      "agent": 0,
+      "instance_id": "django__django-16139",
+      "turn": 1,
+      "prompt_tokens": 1491,
+      "completion_tokens": 71,
+      "ttft_ms": 77.5,
+      "total_ms": 774.7
+    },
+    {
+      "agent": 0,
+      "instance_id": "django__django-16139",
+      "turn": 2,
+      "prompt_tokens": 1934,
+      "completion_tokens": 62,
+      "ttft_ms": 80.1,
+      "total_ms": 839.6
+    },
+    {
+      "agent": 0,
+      "instance_id": "django__django-16139",
+      "turn": 3,
+      "prompt_tokens": 2439,
+      "completion_tokens": 69,
+      "ttft_ms": 101.7,
+      "total_ms": 981.4
+    },
+    {
+      "agent": 0,
+      "instance_id": "django__django-16139",
+      "turn": 4,
+      "prompt_tokens": 4044,
+      "completion_tokens": 55,
+      "ttft_ms": 142.7,
+      "total_ms": 1147.0
+    },
+    {
+      "agent": 0,
+      "instance_id": "django__django-16139",
+      "turn": 5,
+      "prompt_tokens": 4381,
+      "completion_tokens": 48,
+      "ttft_ms": 206.4,
+      "total_ms": 880.4
+    },
+    {
+      "agent": 0,
+      "instance_id": "django__django-16139",
+      "turn": 6,
+      "prompt_tokens": 5385,
+      "completion_tokens": 52,
+      "ttft_ms": 244.0,
+      "total_ms": 1087.0
+    },
+    {
+      "agent": 0,
+      "instance_id": "django__django-16139",
+      "turn": 7,
+      "prompt_tokens": 5639,
+      "completion_tokens": 52,
+      "ttft_ms": 111.5,
+      "total_ms": 1175.7
+    },
+    {
+      "agent": 0,
+      "instance_id": "django__django-16139",
+      "turn": 8,
+      "prompt_tokens": 5947,
+      "completion_tokens": 47,
+      "ttft_ms": 121.3,
+      "total_ms": 948.3
+    },
+    {
+      "agent": 0,
+      "instance_id": "django__django-16139",
+      "turn": 9,
+      "prompt_tokens": 6720,
+      "completion_tokens": 62,
+      "ttft_ms": 271.8,
+      "total_ms": 1242.2
+    },
+    {
+      "agent": 0,
+      "instance_id": "django__django-16139",
+      "turn": 10,
+      "prompt_tokens": 7154,
+      "completion_tokens": 42,
+      "ttft_ms": 148.5,
+      "total_ms": 772.5
+    },
+    {
+      "agent": 0,
+      "instance_id": "django__django-16139",
+      "turn": 11,
+      "prompt_tokens": 7639,
+      "completion_tokens": 85,
+      "ttft_ms": 161.5,
+      "total_ms": 1632.9
+    },
+    {
+      "agent": 0,
+      "instance_id": "django__django-16139",
+      "turn": 12,
+      "prompt_tokens": 9260,
+      "completion_tokens": 68,
+      "ttft_ms": 169.1,
+      "total_ms": 1272.0
+    },
+    {
+      "agent": 0,
+      "instance_id": "django__django-16139",
+      "turn": 13,
+      "prompt_tokens": 9610,
+      "completion_tokens": 61,
+      "ttft_ms": 238.3,
+      "total_ms": 947.1
+    },
+    {
+      "agent": 0,
+      "instance_id": "django__django-16139",
+      "turn": 14,
+      "prompt_tokens": 10627,
+      "completion_tokens": 133,
+      "ttft_ms": 287.0,
+      "total_ms": 2464.7
+    },
+    {
+      "agent": 0,
+      "instance_id": "django__django-16139",
+      "turn": 15,
+      "prompt_tokens": 10962,
+      "completion_tokens": 45,
+      "ttft_ms": 128.7,
+      "total_ms": 660.6
+    },
+    {
+      "agent": 1,
+      "instance_id": "sympy__sympy-13773",
+      "turn": 0,
+      "prompt_tokens": 605,
+      "completion_tokens": 256,
+      "ttft_ms": 71.5,
+      "total_ms": 1686.5
+    },
+    {
+      "agent": 1,
+      "instance_id": "sympy__sympy-13773",
+      "turn": 1,
+      "prompt_tokens": 1333,
+      "completion_tokens": 42,
+      "ttft_ms": 75.3,
+      "total_ms": 577.7
+    },
+    {
+      "agent": 1,
+      "instance_id": "sympy__sympy-13773",
+      "turn": 2,
+      "prompt_tokens": 1747,
+      "completion_tokens": 45,
+      "ttft_ms": 75.5,
+      "total_ms": 663.7
+    },
+    {
+      "agent": 1,
+      "instance_id": "sympy__sympy-13773",
+      "turn": 3,
+      "prompt_tokens": 2235,
+      "completion_tokens": 53,
+      "ttft_ms": 203.4,
+      "total_ms": 879.4
+    },
+    {
+      "agent": 1,
+      "instance_id": "sympy__sympy-13773",
+      "turn": 4,
+      "prompt_tokens": 3824,
+      "completion_tokens": 64,
+      "ttft_ms": 243.8,
+      "total_ms": 1397.0
+    },
+    {
+      "agent": 1,
+      "instance_id": "sympy__sympy-13773",
+      "turn": 5,
+      "prompt_tokens": 4170,
+      "completion_tokens": 58,
+      "ttft_ms": 197.0,
+      "total_ms": 1182.9
+    },
+    {
+      "agent": 1,
+      "instance_id": "sympy__sympy-13773",
+      "turn": 6,
+      "prompt_tokens": 5184,
+      "completion_tokens": 58,
+      "ttft_ms": 164.5,
+      "total_ms": 1147.8
+    },
+    {
+      "agent": 1,
+      "instance_id": "sympy__sympy-13773",
+      "turn": 7,
+      "prompt_tokens": 5444,
+      "completion_tokens": 58,
+      "ttft_ms": 184.9,
+      "total_ms": 1401.0
+    },
+    {
+      "agent": 1,
+      "instance_id": "sympy__sympy-13773",
+      "turn": 8,
+      "prompt_tokens": 5758,
+      "completion_tokens": 53,
+      "ttft_ms": 156.4,
+      "total_ms": 1018.7
+    },
+    {
+      "agent": 1,
+      "instance_id": "sympy__sympy-13773",
+      "turn": 9,
+      "prompt_tokens": 6537,
+      "completion_tokens": 20,
+      "ttft_ms": 221.1,
+      "total_ms": 548.5
+    },
+    {
+      "agent": 1,
+      "instance_id": "sympy__sympy-13773",
+      "turn": 10,
+      "prompt_tokens": 6929,
+      "completion_tokens": 2,
+      "ttft_ms": 134.1,
+      "total_ms": 137.7
+    },
+    {
+      "agent": 1,
+      "instance_id": "sympy__sympy-13773",
+      "turn": 11,
+      "prompt_tokens": 7374,
+      "completion_tokens": 53,
+      "ttft_ms": 220.0,
+      "total_ms": 929.9
+    },
+    {
+      "agent": 1,
+      "instance_id": "sympy__sympy-13773",
+      "turn": 12,
+      "prompt_tokens": 8963,
+      "completion_tokens": 58,
+      "ttft_ms": 167.7,
+      "total_ms": 1178.1
+    },
+    {
+      "agent": 1,
+      "instance_id": "sympy__sympy-13773",
+      "turn": 13,
+      "prompt_tokens": 9303,
+      "completion_tokens": 58,
+      "ttft_ms": 165.3,
+      "total_ms": 1098.3
+    },
+    {
+      "agent": 1,
+      "instance_id": "sympy__sympy-13773",
+      "turn": 14,
+      "prompt_tokens": 10317,
+      "completion_tokens": 58,
+      "ttft_ms": 330.7,
+      "total_ms": 1019.8
+    },
+    {
+      "agent": 1,
+      "instance_id": "sympy__sympy-13773",
+      "turn": 15,
+      "prompt_tokens": 10577,
+      "completion_tokens": 58,
+      "ttft_ms": 325.9,
+      "total_ms": 1389.0
+    },
+    {
+      "agent": 2,
+      "instance_id": "django__django-12497",
+      "turn": 0,
+      "prompt_tokens": 547,
+      "completion_tokens": 100,
+      "ttft_ms": 70.7,
+      "total_ms": 604.5
+    },
+    {
+      "agent": 2,
+      "instance_id": "django__django-12497",
+      "turn": 1,
+      "prompt_tokens": 1373,
+      "completion_tokens": 65,
+      "ttft_ms": 77.3,
+      "total_ms": 485.6
+    },
+    {
+      "agent": 2,
+      "instance_id": "django__django-12497",
+      "turn": 2,
+      "prompt_tokens": 1810,
+      "completion_tokens": 76,
+      "ttft_ms": 74.9,
+      "total_ms": 898.2
+    },
+    {
+      "agent": 2,
+      "instance_id": "django__django-12497",
+      "turn": 3,
+      "prompt_tokens": 2329,
+      "completion_tokens": 43,
+      "ttft_ms": 116.4,
+      "total_ms": 635.4
+    },
+    {
+      "agent": 2,
+      "instance_id": "django__django-12497",
+      "turn": 4,
+      "prompt_tokens": 3908,
+      "completion_tokens": 69,
+      "ttft_ms": 205.1,
+      "total_ms": 1264.7
+    },
+    {
+      "agent": 2,
+      "instance_id": "django__django-12497",
+      "turn": 5,
+      "prompt_tokens": 4259,
+      "completion_tokens": 76,
+      "ttft_ms": 109.9,
+      "total_ms": 1368.2
+    },
+    {
+      "agent": 2,
+      "instance_id": "django__django-12497",
+      "turn": 6,
+      "prompt_tokens": 5291,
+      "completion_tokens": 72,
+      "ttft_ms": 186.3,
+      "total_ms": 1408.9
+    },
+    {
+      "agent": 2,
+      "instance_id": "django__django-12497",
+      "turn": 7,
+      "prompt_tokens": 5565,
+      "completion_tokens": 76,
+      "ttft_ms": 179.8,
+      "total_ms": 1704.9
+    },
+    {
+      "agent": 2,
+      "instance_id": "django__django-12497",
+      "turn": 8,
+      "prompt_tokens": 5897,
+      "completion_tokens": 51,
+      "ttft_ms": 205.5,
+      "total_ms": 1000.7
+    },
+    {
+      "agent": 2,
+      "instance_id": "django__django-12497",
+      "turn": 9,
+      "prompt_tokens": 6674,
+      "completion_tokens": 47,
+      "ttft_ms": 157.0,
+      "total_ms": 907.9
+    },
+    {
+      "agent": 2,
+      "instance_id": "django__django-12497",
+      "turn": 10,
+      "prompt_tokens": 7093,
+      "completion_tokens": 59,
+      "ttft_ms": 223.7,
+      "total_ms": 1163.9
+    },
+    {
+      "agent": 2,
+      "instance_id": "django__django-12497",
+      "turn": 11,
+      "prompt_tokens": 7595,
+      "completion_tokens": 67,
+      "ttft_ms": 201.5,
+      "total_ms": 1501.9
+    },
+    {
+      "agent": 2,
+      "instance_id": "django__django-12497",
+      "turn": 12,
+      "prompt_tokens": 9198,
+      "completion_tokens": 70,
+      "ttft_ms": 200.3,
+      "total_ms": 1206.3
+    },
+    {
+      "agent": 2,
+      "instance_id": "django__django-12497",
+      "turn": 13,
+      "prompt_tokens": 9550,
+      "completion_tokens": 74,
+      "ttft_ms": 175.6,
+      "total_ms": 1506.4
+    },
+    {
+      "agent": 2,
+      "instance_id": "django__django-12497",
+      "turn": 14,
+      "prompt_tokens": 10580,
+      "completion_tokens": 87,
+      "ttft_ms": 144.6,
+      "total_ms": 1471.9
+    },
+    {
+      "agent": 2,
+      "instance_id": "django__django-12497",
+      "turn": 15,
+      "prompt_tokens": 10869,
+      "completion_tokens": 91,
+      "ttft_ms": 124.3,
+      "total_ms": 1199.8
+    },
+    {
+      "agent": 3,
+      "instance_id": "django__django-15320",
+      "turn": 0,
+      "prompt_tokens": 616,
+      "completion_tokens": 127,
+      "ttft_ms": 71.0,
+      "total_ms": 878.9
+    },
+    {
+      "agent": 3,
+      "instance_id": "django__django-15320",
+      "turn": 1,
+      "prompt_tokens": 1469,
+      "completion_tokens": 52,
+      "ttft_ms": 74.8,
+      "total_ms": 620.9
+    },
+    {
+      "agent": 3,
+      "instance_id": "django__django-15320",
+      "turn": 2,
+      "prompt_tokens": 1893,
+      "completion_tokens": 68,
+      "ttft_ms": 82.3,
+      "total_ms": 889.9
+    },
+    {
+      "agent": 3,
+      "instance_id": "django__django-15320",
+      "turn": 3,
+      "prompt_tokens": 2404,
+      "completion_tokens": 58,
+      "ttft_ms": 246.2,
+      "total_ms": 954.1
+    },
+    {
+      "agent": 3,
+      "instance_id": "django__django-15320",
+      "turn": 4,
+      "prompt_tokens": 3998,
+      "completion_tokens": 43,
+      "ttft_ms": 210.0,
+      "total_ms": 730.9
+    },
+    {
+      "agent": 3,
+      "instance_id": "django__django-15320",
+      "turn": 5,
+      "prompt_tokens": 4323,
+      "completion_tokens": 63,
+      "ttft_ms": 223.5,
+      "total_ms": 1414.1
+    },
+    {
+      "agent": 3,
+      "instance_id": "django__django-15320",
+      "turn": 6,
+      "prompt_tokens": 5342,
+      "completion_tokens": 61,
+      "ttft_ms": 262.2,
+      "total_ms": 1159.4
+    },
+    {
+      "agent": 3,
+      "instance_id": "django__django-15320",
+      "turn": 7,
+      "prompt_tokens": 5605,
+      "completion_tokens": 73,
+      "ttft_ms": 204.0,
+      "total_ms": 1693.7
+    },
+    {
+      "agent": 3,
+      "instance_id": "django__django-15320",
+      "turn": 8,
+      "prompt_tokens": 5934,
+      "completion_tokens": 43,
+      "ttft_ms": 149.8,
+      "total_ms": 901.1
+    },
+    {
+      "agent": 3,
+      "instance_id": "django__django-15320",
+      "turn": 9,
+      "prompt_tokens": 6703,
+      "completion_tokens": 32,
+      "ttft_ms": 165.4,
+      "total_ms": 723.2
+    },
+    {
+      "agent": 3,
+      "instance_id": "django__django-15320",
+      "turn": 10,
+      "prompt_tokens": 7107,
+      "completion_tokens": 42,
+      "ttft_ms": 237.2,
+      "total_ms": 833.1
+    },
+    {
+      "agent": 3,
+      "instance_id": "django__django-15320",
+      "turn": 11,
+      "prompt_tokens": 7592,
+      "completion_tokens": 51,
+      "ttft_ms": 230.4,
+      "total_ms": 1113.1
+    },
+    {
+      "agent": 3,
+      "instance_id": "django__django-15320",
+      "turn": 12,
+      "prompt_tokens": 9179,
+      "completion_tokens": 59,
+      "ttft_ms": 171.3,
+      "total_ms": 1277.5
+    },
+    {
+      "agent": 3,
+      "instance_id": "django__django-15320",
+      "turn": 13,
+      "prompt_tokens": 9520,
+      "completion_tokens": 70,
+      "ttft_ms": 167.7,
+      "total_ms": 1268.8
+    },
+    {
+      "agent": 3,
+      "instance_id": "django__django-15320",
+      "turn": 14,
+      "prompt_tokens": 10546,
+      "completion_tokens": 54,
+      "ttft_ms": 172.5,
+      "total_ms": 1045.0
+    },
+    {
+      "agent": 3,
+      "instance_id": "django__django-15320",
+      "turn": 15,
+      "prompt_tokens": 10802,
+      "completion_tokens": 48,
+      "ttft_ms": 263.6,
+      "total_ms": 724.7
+    },
+    {
+      "agent": 4,
+      "instance_id": "django__django-12284",
+      "turn": 0,
+      "prompt_tokens": 609,
+      "completion_tokens": 109,
+      "ttft_ms": 82.3,
+      "total_ms": 909.5
+    },
+    {
+      "agent": 4,
+      "instance_id": "django__django-12284",
+      "turn": 1,
+      "prompt_tokens": 1444,
+      "completion_tokens": 33,
+      "ttft_ms": 169.0,
+      "total_ms": 531.4
+    },
+    {
+      "agent": 4,
+      "instance_id": "django__django-12284",
+      "turn": 2,
+      "prompt_tokens": 1849,
+      "completion_tokens": 54,
+      "ttft_ms": 169.1,
+      "total_ms": 655.9
+    },
+    {
+      "agent": 4,
+      "instance_id": "django__django-12284",
+      "turn": 3,
+      "prompt_tokens": 2346,
+      "completion_tokens": 68,
+      "ttft_ms": 238.9,
+      "total_ms": 1197.8
+    },
+    {
+      "agent": 4,
+      "instance_id": "django__django-12284",
+      "turn": 4,
+      "prompt_tokens": 3950,
+      "completion_tokens": 90,
+      "ttft_ms": 205.6,
+      "total_ms": 1656.7
+    },
+    {
+      "agent": 4,
+      "instance_id": "django__django-12284",
+      "turn": 5,
+      "prompt_tokens": 4322,
+      "completion_tokens": 56,
+      "ttft_ms": 236.2,
+      "total_ms": 1098.6
+    },
+    {
+      "agent": 4,
+      "instance_id": "django__django-12284",
+      "turn": 6,
+      "prompt_tokens": 5334,
+      "completion_tokens": 50,
+      "ttft_ms": 254.0,
+      "total_ms": 1161.2
+    },
+    {
+      "agent": 4,
+      "instance_id": "django__django-12284",
+      "turn": 7,
+      "prompt_tokens": 5586,
+      "completion_tokens": 34,
+      "ttft_ms": 157.4,
+      "total_ms": 854.9
+    },
+    {
+      "agent": 4,
+      "instance_id": "django__django-12284",
+      "turn": 8,
+      "prompt_tokens": 5876,
+      "completion_tokens": 80,
+      "ttft_ms": 183.1,
+      "total_ms": 1576.8
+    },
+    {
+      "agent": 4,
+      "instance_id": "django__django-12284",
+      "turn": 9,
+      "prompt_tokens": 6682,
+      "completion_tokens": 35,
+      "ttft_ms": 204.0,
+      "total_ms": 802.9
+    },
+    {
+      "agent": 4,
+      "instance_id": "django__django-12284",
+      "turn": 10,
+      "prompt_tokens": 7089,
+      "completion_tokens": 104,
+      "ttft_ms": 175.5,
+      "total_ms": 2163.9
+    },
+    {
+      "agent": 4,
+      "instance_id": "django__django-12284",
+      "turn": 11,
+      "prompt_tokens": 7636,
+      "completion_tokens": 105,
+      "ttft_ms": 192.1,
+      "total_ms": 1778.8
+    },
+    {
+      "agent": 4,
+      "instance_id": "django__django-12284",
+      "turn": 12,
+      "prompt_tokens": 9277,
+      "completion_tokens": 104,
+      "ttft_ms": 264.0,
+      "total_ms": 1782.9
+    },
+    {
+      "agent": 4,
+      "instance_id": "django__django-12284",
+      "turn": 13,
+      "prompt_tokens": 9663,
+      "completion_tokens": 64,
+      "ttft_ms": 278.0,
+      "total_ms": 991.8
+    },
+    {
+      "agent": 4,
+      "instance_id": "django__django-12284",
+      "turn": 14,
+      "prompt_tokens": 10683,
+      "completion_tokens": 62,
+      "ttft_ms": 274.8,
+      "total_ms": 1116.1
+    },
+    {
+      "agent": 4,
+      "instance_id": "django__django-12284",
+      "turn": 15,
+      "prompt_tokens": 10947,
+      "completion_tokens": 29,
+      "ttft_ms": 176.5,
+      "total_ms": 462.0
+    },
+    {
+      "agent": 5,
+      "instance_id": "sympy__sympy-15308",
+      "turn": 0,
+      "prompt_tokens": 449,
+      "completion_tokens": 100,
+      "ttft_ms": 81.9,
+      "total_ms": 1081.2
+    },
+    {
+      "agent": 5,
+      "instance_id": "sympy__sympy-15308",
+      "turn": 1,
+      "prompt_tokens": 1275,
+      "completion_tokens": 34,
+      "ttft_ms": 178.3,
+      "total_ms": 540.7
+    },
+    {
+      "agent": 5,
+      "instance_id": "sympy__sympy-15308",
+      "turn": 2,
+      "prompt_tokens": 1681,
+      "completion_tokens": 63,
+      "ttft_ms": 97.6,
+      "total_ms": 799.0
+    },
+    {
+      "agent": 5,
+      "instance_id": "sympy__sympy-15308",
+      "turn": 3,
+      "prompt_tokens": 2187,
+      "completion_tokens": 38,
+      "ttft_ms": 126.6,
+      "total_ms": 840.1
+    },
+    {
+      "agent": 5,
+      "instance_id": "sympy__sympy-15308",
+      "turn": 4,
+      "prompt_tokens": 3761,
+      "completion_tokens": 73,
+      "ttft_ms": 142.2,
+      "total_ms": 1387.3
+    },
+    {
+      "agent": 5,
+      "instance_id": "sympy__sympy-15308",
+      "turn": 5,
+      "prompt_tokens": 4116,
+      "completion_tokens": 58,
+      "ttft_ms": 224.7,
+      "total_ms": 1113.3
+    },
+    {
+      "agent": 5,
+      "instance_id": "sympy__sympy-15308",
+      "turn": 6,
+      "prompt_tokens": 5130,
+      "completion_tokens": 60,
+      "ttft_ms": 241.6,
+      "total_ms": 1361.5
+    },
+    {
+      "agent": 5,
+      "instance_id": "sympy__sympy-15308",
+      "turn": 7,
+      "prompt_tokens": 5392,
+      "completion_tokens": 86,
+      "ttft_ms": 169.9,
+      "total_ms": 1540.6
+    },
+    {
+      "agent": 5,
+      "instance_id": "sympy__sympy-15308",
+      "turn": 8,
+      "prompt_tokens": 5734,
+      "completion_tokens": 30,
+      "ttft_ms": 194.0,
+      "total_ms": 694.5
+    },
+    {
+      "agent": 5,
+      "instance_id": "sympy__sympy-15308",
+      "turn": 9,
+      "prompt_tokens": 6490,
+      "completion_tokens": 81,
+      "ttft_ms": 298.4,
+      "total_ms": 1530.2
+    },
+    {
+      "agent": 5,
+      "instance_id": "sympy__sympy-15308",
+      "turn": 10,
+      "prompt_tokens": 6943,
+      "completion_tokens": 60,
+      "ttft_ms": 186.1,
+      "total_ms": 1375.7
+    },
+    {
+      "agent": 5,
+      "instance_id": "sympy__sympy-15308",
+      "turn": 11,
+      "prompt_tokens": 7446,
+      "completion_tokens": 102,
+      "ttft_ms": 138.7,
+      "total_ms": 1790.0
+    },
+    {
+      "agent": 5,
+      "instance_id": "sympy__sympy-15308",
+      "turn": 12,
+      "prompt_tokens": 9084,
+      "completion_tokens": 78,
+      "ttft_ms": 173.2,
+      "total_ms": 1486.0
+    },
+    {
+      "agent": 5,
+      "instance_id": "sympy__sympy-15308",
+      "turn": 13,
+      "prompt_tokens": 9444,
+      "completion_tokens": 102,
+      "ttft_ms": 152.5,
+      "total_ms": 1629.1
+    },
+    {
+      "agent": 5,
+      "instance_id": "sympy__sympy-15308",
+      "turn": 14,
+      "prompt_tokens": 10502,
+      "completion_tokens": 79,
+      "ttft_ms": 176.5,
+      "total_ms": 1253.3
+    },
+    {
+      "agent": 5,
+      "instance_id": "sympy__sympy-15308",
+      "turn": 15,
+      "prompt_tokens": 10783,
+      "completion_tokens": 77,
+      "ttft_ms": 202.9,
+      "total_ms": 1114.1
+    },
+    {
+      "agent": 6,
+      "instance_id": "scikit-learn__scikit-learn-13439",
+      "turn": 0,
+      "prompt_tokens": 779,
+      "completion_tokens": 112,
+      "ttft_ms": 104.0,
+      "total_ms": 1420.4
+    },
+    {
+      "agent": 6,
+      "instance_id": "scikit-learn__scikit-learn-13439",
+      "turn": 1,
+      "prompt_tokens": 1617,
+      "completion_tokens": 49,
+      "ttft_ms": 208.5,
+      "total_ms": 761.1
+    },
+    {
+      "agent": 6,
+      "instance_id": "scikit-learn__scikit-learn-13439",
+      "turn": 2,
+      "prompt_tokens": 2038,
+      "completion_tokens": 97,
+      "ttft_ms": 115.7,
+      "total_ms": 1847.3
+    },
+    {
+      "agent": 6,
+      "instance_id": "scikit-learn__scikit-learn-13439",
+      "turn": 3,
+      "prompt_tokens": 2578,
+      "completion_tokens": 83,
+      "ttft_ms": 141.5,
+      "total_ms": 1679.9
+    },
+    {
+      "agent": 6,
+      "instance_id": "scikit-learn__scikit-learn-13439",
+      "turn": 4,
+      "prompt_tokens": 4197,
+      "completion_tokens": 60,
+      "ttft_ms": 175.2,
+      "total_ms": 1451.7
+    },
+    {
+      "agent": 6,
+      "instance_id": "scikit-learn__scikit-learn-13439",
+      "turn": 5,
+      "prompt_tokens": 4539,
+      "completion_tokens": 97,
+      "ttft_ms": 266.9,
+      "total_ms": 1872.7
+    },
+    {
+      "agent": 6,
+      "instance_id": "scikit-learn__scikit-learn-13439",
+      "turn": 6,
+      "prompt_tokens": 5592,
+      "completion_tokens": 83,
+      "ttft_ms": 214.5,
+      "total_ms": 1562.2
+    },
+    {
+      "agent": 6,
+      "instance_id": "scikit-learn__scikit-learn-13439",
+      "turn": 7,
+      "prompt_tokens": 5877,
+      "completion_tokens": 84,
+      "ttft_ms": 177.7,
+      "total_ms": 1722.9
+    },
+    {
+      "agent": 6,
+      "instance_id": "scikit-learn__scikit-learn-13439",
+      "turn": 8,
+      "prompt_tokens": 6217,
+      "completion_tokens": 86,
+      "ttft_ms": 254.3,
+      "total_ms": 1505.3
+    },
+    {
+      "agent": 6,
+      "instance_id": "scikit-learn__scikit-learn-13439",
+      "turn": 9,
+      "prompt_tokens": 7029,
+      "completion_tokens": 63,
+      "ttft_ms": 263.0,
+      "total_ms": 1194.7
+    },
+    {
+      "agent": 6,
+      "instance_id": "scikit-learn__scikit-learn-13439",
+      "turn": 10,
+      "prompt_tokens": 7464,
+      "completion_tokens": 77,
+      "ttft_ms": 165.1,
+      "total_ms": 1206.4
+    },
+    {
+      "agent": 6,
+      "instance_id": "scikit-learn__scikit-learn-13439",
+      "turn": 11,
+      "prompt_tokens": 7984,
+      "completion_tokens": 74,
+      "ttft_ms": 180.7,
+      "total_ms": 1133.2
+    },
+    {
+      "agent": 6,
+      "instance_id": "scikit-learn__scikit-learn-13439",
+      "turn": 12,
+      "prompt_tokens": 9594,
+      "completion_tokens": 66,
+      "ttft_ms": 151.5,
+      "total_ms": 1068.6
+    },
+    {
+      "agent": 6,
+      "instance_id": "scikit-learn__scikit-learn-13439",
+      "turn": 13,
+      "prompt_tokens": 9942,
+      "completion_tokens": 71,
+      "ttft_ms": 128.4,
+      "total_ms": 992.6
+    },
+    {
+      "agent": 6,
+      "instance_id": "scikit-learn__scikit-learn-13439",
+      "turn": 14,
+      "prompt_tokens": 10969,
+      "completion_tokens": 93,
+      "ttft_ms": 249.7,
+      "total_ms": 990.0
+    },
+    {
+      "agent": 6,
+      "instance_id": "scikit-learn__scikit-learn-13439",
+      "turn": 15,
+      "prompt_tokens": 11264,
+      "completion_tokens": 64,
+      "ttft_ms": 131.1,
+      "total_ms": 474.3
+    },
+    {
+      "agent": 7,
+      "instance_id": "matplotlib__matplotlib-18869",
+      "turn": 0,
+      "prompt_tokens": 733,
+      "completion_tokens": 94,
+      "ttft_ms": 73.2,
+      "total_ms": 1205.7
+    },
+    {
+      "agent": 7,
+      "instance_id": "matplotlib__matplotlib-18869",
+      "turn": 1,
+      "prompt_tokens": 1553,
+      "completion_tokens": 34,
+      "ttft_ms": 227.3,
+      "total_ms": 496.7
+    },
+    {
+      "agent": 7,
+      "instance_id": "matplotlib__matplotlib-18869",
+      "turn": 2,
+      "prompt_tokens": 1959,
+      "completion_tokens": 71,
+      "ttft_ms": 88.7,
+      "total_ms": 1396.0
+    },
+    {
+      "agent": 7,
+      "instance_id": "matplotlib__matplotlib-18869",
+      "turn": 3,
+      "prompt_tokens": 2473,
+      "completion_tokens": 61,
+      "ttft_ms": 201.7,
+      "total_ms": 1208.9
+    },
+    {
+      "agent": 7,
+      "instance_id": "matplotlib__matplotlib-18869",
+      "turn": 4,
+      "prompt_tokens": 4070,
+      "completion_tokens": 45,
+      "ttft_ms": 240.1,
+      "total_ms": 852.0
+    },
+    {
+      "agent": 7,
+      "instance_id": "matplotlib__matplotlib-18869",
+      "turn": 5,
+      "prompt_tokens": 4397,
+      "completion_tokens": 58,
+      "ttft_ms": 244.0,
+      "total_ms": 1259.3
+    },
+    {
+      "agent": 7,
+      "instance_id": "matplotlib__matplotlib-18869",
+      "turn": 6,
+      "prompt_tokens": 5411,
+      "completion_tokens": 44,
+      "ttft_ms": 206.4,
+      "total_ms": 877.5
+    },
+    {
+      "agent": 7,
+      "instance_id": "matplotlib__matplotlib-18869",
+      "turn": 7,
+      "prompt_tokens": 5657,
+      "completion_tokens": 52,
+      "ttft_ms": 165.0,
+      "total_ms": 1031.2
+    },
+    {
+      "agent": 7,
+      "instance_id": "matplotlib__matplotlib-18869",
+      "turn": 8,
+      "prompt_tokens": 5965,
+      "completion_tokens": 57,
+      "ttft_ms": 113.9,
+      "total_ms": 990.9
+    },
+    {
+      "agent": 7,
+      "instance_id": "matplotlib__matplotlib-18869",
+      "turn": 9,
+      "prompt_tokens": 6748,
+      "completion_tokens": 33,
+      "ttft_ms": 205.9,
+      "total_ms": 651.9
+    },
+    {
+      "agent": 7,
+      "instance_id": "matplotlib__matplotlib-18869",
+      "turn": 10,
+      "prompt_tokens": 7153,
+      "completion_tokens": 63,
+      "ttft_ms": 226.1,
+      "total_ms": 1321.7
+    },
+    {
+      "agent": 7,
+      "instance_id": "matplotlib__matplotlib-18869",
+      "turn": 11,
+      "prompt_tokens": 7659,
+      "completion_tokens": 57,
+      "ttft_ms": 254.4,
+      "total_ms": 1163.2
+    },
+    {
+      "agent": 7,
+      "instance_id": "matplotlib__matplotlib-18869",
+      "turn": 12,
+      "prompt_tokens": 9252,
+      "completion_tokens": 60,
+      "ttft_ms": 159.5,
+      "total_ms": 1048.6
+    },
+    {
+      "agent": 7,
+      "instance_id": "matplotlib__matplotlib-18869",
+      "turn": 13,
+      "prompt_tokens": 9594,
+      "completion_tokens": 76,
+      "ttft_ms": 281.4,
+      "total_ms": 1450.3
+    },
+    {
+      "agent": 7,
+      "instance_id": "matplotlib__matplotlib-18869",
+      "turn": 14,
+      "prompt_tokens": 10626,
+      "completion_tokens": 69,
+      "ttft_ms": 249.1,
+      "total_ms": 1244.7
+    },
+    {
+      "agent": 7,
+      "instance_id": "matplotlib__matplotlib-18869",
+      "turn": 15,
+      "prompt_tokens": 10897,
+      "completion_tokens": 71,
+      "ttft_ms": 294.2,
+      "total_ms": 1233.3
+    },
+    {
+      "agent": 8,
+      "instance_id": "django__django-11620",
+      "turn": 0,
+      "prompt_tokens": 567,
+      "completion_tokens": 176,
+      "ttft_ms": 128.2,
+      "total_ms": 2562.6
+    },
+    {
+      "agent": 8,
+      "instance_id": "django__django-11620",
+      "turn": 1,
+      "prompt_tokens": 1469,
+      "completion_tokens": 52,
+      "ttft_ms": 229.9,
+      "total_ms": 1146.8
+    },
+    {
+      "agent": 8,
+      "instance_id": "django__django-11620",
+      "turn": 2,
+      "prompt_tokens": 1893,
+      "completion_tokens": 74,
+      "ttft_ms": 138.4,
+      "total_ms": 1420.3
+    },
+    {
+      "agent": 8,
+      "instance_id": "django__django-11620",
+      "turn": 3,
+      "prompt_tokens": 2410,
+      "completion_tokens": 82,
+      "ttft_ms": 263.3,
+      "total_ms": 1766.7
+    },
+    {
+      "agent": 8,
+      "instance_id": "django__django-11620",
+      "turn": 4,
+      "prompt_tokens": 4028,
+      "completion_tokens": 91,
+      "ttft_ms": 201.1,
+      "total_ms": 1868.6
+    },
+    {
+      "agent": 8,
+      "instance_id": "django__django-11620",
+      "turn": 5,
+      "prompt_tokens": 4401,
+      "completion_tokens": 73,
+      "ttft_ms": 231.3,
+      "total_ms": 1477.7
+    },
+    {
+      "agent": 8,
+      "instance_id": "django__django-11620",
+      "turn": 6,
+      "prompt_tokens": 5430,
+      "completion_tokens": 57,
+      "ttft_ms": 161.5,
+      "total_ms": 1258.0
+    },
+    {
+      "agent": 8,
+      "instance_id": "django__django-11620",
+      "turn": 7,
+      "prompt_tokens": 5689,
+      "completion_tokens": 54,
+      "ttft_ms": 147.0,
+      "total_ms": 863.6
+    },
+    {
+      "agent": 8,
+      "instance_id": "django__django-11620",
+      "turn": 8,
+      "prompt_tokens": 5999,
+      "completion_tokens": 48,
+      "ttft_ms": 140.1,
+      "total_ms": 1124.4
+    },
+    {
+      "agent": 8,
+      "instance_id": "django__django-11620",
+      "turn": 9,
+      "prompt_tokens": 6773,
+      "completion_tokens": 56,
+      "ttft_ms": 174.9,
+      "total_ms": 1023.0
+    },
+    {
+      "agent": 8,
+      "instance_id": "django__django-11620",
+      "turn": 10,
+      "prompt_tokens": 7201,
+      "completion_tokens": 77,
+      "ttft_ms": 121.5,
+      "total_ms": 1127.6
+    },
+    {
+      "agent": 8,
+      "instance_id": "django__django-11620",
+      "turn": 11,
+      "prompt_tokens": 7721,
+      "completion_tokens": 60,
+      "ttft_ms": 221.3,
+      "total_ms": 891.4
+    },
+    {
+      "agent": 8,
+      "instance_id": "django__django-11620",
+      "turn": 12,
+      "prompt_tokens": 9317,
+      "completion_tokens": 84,
+      "ttft_ms": 176.6,
+      "total_ms": 1421.0
+    },
+    {
+      "agent": 8,
+      "instance_id": "django__django-11620",
+      "turn": 13,
+      "prompt_tokens": 9683,
+      "completion_tokens": 45,
+      "ttft_ms": 198.7,
+      "total_ms": 822.3
+    },
+    {
+      "agent": 8,
+      "instance_id": "django__django-11620",
+      "turn": 14,
+      "prompt_tokens": 10684,
+      "completion_tokens": 67,
+      "ttft_ms": 188.3,
+      "total_ms": 754.6
+    },
+    {
+      "agent": 8,
+      "instance_id": "django__django-11620",
+      "turn": 15,
+      "prompt_tokens": 10953,
+      "completion_tokens": 38,
+      "ttft_ms": 129.0,
+      "total_ms": 447.0
+    },
+    {
+      "agent": 9,
+      "instance_id": "sympy__sympy-11897",
+      "turn": 0,
+      "prompt_tokens": 608,
+      "completion_tokens": 115,
+      "ttft_ms": 156.4,
+      "total_ms": 1489.7
+    },
+    {
+      "agent": 9,
+      "instance_id": "sympy__sympy-11897",
+      "turn": 1,
+      "prompt_tokens": 1449,
+      "completion_tokens": 65,
+      "ttft_ms": 210.1,
+      "total_ms": 1326.1
+    },
+    {
+      "agent": 9,
+      "instance_id": "sympy__sympy-11897",
+      "turn": 2,
+      "prompt_tokens": 1886,
+      "completion_tokens": 59,
+      "ttft_ms": 183.0,
+      "total_ms": 1181.0
+    },
+    {
+      "agent": 9,
+      "instance_id": "sympy__sympy-11897",
+      "turn": 3,
+      "prompt_tokens": 2388,
+      "completion_tokens": 64,
+      "ttft_ms": 201.5,
+      "total_ms": 1264.9
+    },
+    {
+      "agent": 9,
+      "instance_id": "sympy__sympy-11897",
+      "turn": 4,
+      "prompt_tokens": 3988,
+      "completion_tokens": 59,
+      "ttft_ms": 162.3,
+      "total_ms": 1301.0
+    },
+    {
+      "agent": 9,
+      "instance_id": "sympy__sympy-11897",
+      "turn": 5,
+      "prompt_tokens": 4329,
+      "completion_tokens": 59,
+      "ttft_ms": 240.1,
+      "total_ms": 1283.0
+    },
+    {
+      "agent": 9,
+      "instance_id": "sympy__sympy-11897",
+      "turn": 6,
+      "prompt_tokens": 5344,
+      "completion_tokens": 59,
+      "ttft_ms": 126.4,
+      "total_ms": 1128.1
+    },
+    {
+      "agent": 9,
+      "instance_id": "sympy__sympy-11897",
+      "turn": 7,
+      "prompt_tokens": 5605,
+      "completion_tokens": 59,
+      "ttft_ms": 149.1,
+      "total_ms": 1253.9
+    },
+    {
+      "agent": 9,
+      "instance_id": "sympy__sympy-11897",
+      "turn": 8,
+      "prompt_tokens": 5920,
+      "completion_tokens": 59,
+      "ttft_ms": 104.8,
+      "total_ms": 1180.0
+    },
+    {
+      "agent": 9,
+      "instance_id": "sympy__sympy-11897",
+      "turn": 9,
+      "prompt_tokens": 6705,
+      "completion_tokens": 59,
+      "ttft_ms": 265.8,
+      "total_ms": 1050.1
+    },
+    {
+      "agent": 9,
+      "instance_id": "sympy__sympy-11897",
+      "turn": 10,
+      "prompt_tokens": 7136,
+      "completion_tokens": 59,
+      "ttft_ms": 198.1,
+      "total_ms": 1287.8
+    },
+    {
+      "agent": 9,
+      "instance_id": "sympy__sympy-11897",
+      "turn": 11,
+      "prompt_tokens": 7638,
+      "completion_tokens": 59,
+      "ttft_ms": 218.9,
+      "total_ms": 898.2
+    },
+    {
+      "agent": 9,
+      "instance_id": "sympy__sympy-11897",
+      "turn": 12,
+      "prompt_tokens": 9233,
+      "completion_tokens": 59,
+      "ttft_ms": 250.2,
+      "total_ms": 986.3
+    },
+    {
+      "agent": 9,
+      "instance_id": "sympy__sympy-11897",
+      "turn": 13,
+      "prompt_tokens": 9574,
+      "completion_tokens": 59,
+      "ttft_ms": 309.4,
+      "total_ms": 1131.5
+    },
+    {
+      "agent": 9,
+      "instance_id": "sympy__sympy-11897",
+      "turn": 14,
+      "prompt_tokens": 10589,
+      "completion_tokens": 59,
+      "ttft_ms": 141.4,
+      "total_ms": 908.1
+    },
+    {
+      "agent": 9,
+      "instance_id": "sympy__sympy-11897",
+      "turn": 15,
+      "prompt_tokens": 10850,
+      "completion_tokens": 59,
+      "ttft_ms": 236.5,
+      "total_ms": 1008.1
+    },
+    {
+      "agent": 10,
+      "instance_id": "django__django-11848",
+      "turn": 0,
+      "prompt_tokens": 553,
+      "completion_tokens": 155,
+      "ttft_ms": 73.1,
+      "total_ms": 2495.7
+    },
+    {
+      "agent": 10,
+      "instance_id": "django__django-11848",
+      "turn": 1,
+      "prompt_tokens": 1434,
+      "completion_tokens": 48,
+      "ttft_ms": 146.9,
+      "total_ms": 938.9
+    },
+    {
+      "agent": 10,
+      "instance_id": "django__django-11848",
+      "turn": 2,
+      "prompt_tokens": 1854,
+      "completion_tokens": 64,
+      "ttft_ms": 160.1,
+      "total_ms": 1126.5
+    },
+    {
+      "agent": 10,
+      "instance_id": "django__django-11848",
+      "turn": 3,
+      "prompt_tokens": 2361,
+      "completion_tokens": 57,
+      "ttft_ms": 232.3,
+      "total_ms": 1389.5
+    },
+    {
+      "agent": 10,
+      "instance_id": "django__django-11848",
+      "turn": 4,
+      "prompt_tokens": 3954,
+      "completion_tokens": 89,
+      "ttft_ms": 164.9,
+      "total_ms": 1650.5
+    },
+    {
+      "agent": 10,
+      "instance_id": "django__django-11848",
+      "turn": 5,
+      "prompt_tokens": 4325,
+      "completion_tokens": 44,
+      "ttft_ms": 192.4,
+      "total_ms": 855.4
+    },
+    {
+      "agent": 10,
+      "instance_id": "django__django-11848",
+      "turn": 6,
+      "prompt_tokens": 5325,
+      "completion_tokens": 44,
+      "ttft_ms": 168.7,
+      "total_ms": 682.9
+    },
+    {
+      "agent": 10,
+      "instance_id": "django__django-11848",
+      "turn": 7,
+      "prompt_tokens": 5571,
+      "completion_tokens": 101,
+      "ttft_ms": 215.5,
+      "total_ms": 2004.9
+    },
+    {
+      "agent": 10,
+      "instance_id": "django__django-11848",
+      "turn": 8,
+      "prompt_tokens": 5928,
+      "completion_tokens": 60,
+      "ttft_ms": 231.0,
+      "total_ms": 1028.8
+    },
+    {
+      "agent": 10,
+      "instance_id": "django__django-11848",
+      "turn": 9,
+      "prompt_tokens": 6714,
+      "completion_tokens": 54,
+      "ttft_ms": 320.3,
+      "total_ms": 1203.8
+    },
+    {
+      "agent": 10,
+      "instance_id": "django__django-11848",
+      "turn": 10,
+      "prompt_tokens": 7140,
+      "completion_tokens": 49,
+      "ttft_ms": 177.4,
+      "total_ms": 738.4
+    },
+    {
+      "agent": 10,
+      "instance_id": "django__django-11848",
+      "turn": 11,
+      "prompt_tokens": 7632,
+      "completion_tokens": 57,
+      "ttft_ms": 190.4,
+      "total_ms": 917.5
+    },
+    {
+      "agent": 10,
+      "instance_id": "django__django-11848",
+      "turn": 12,
+      "prompt_tokens": 9225,
+      "completion_tokens": 65,
+      "ttft_ms": 234.8,
+      "total_ms": 937.8
+    },
+    {
+      "agent": 10,
+      "instance_id": "django__django-11848",
+      "turn": 13,
+      "prompt_tokens": 9572,
+      "completion_tokens": 46,
+      "ttft_ms": 242.9,
+      "total_ms": 909.5
+    },
+    {
+      "agent": 10,
+      "instance_id": "django__django-11848",
+      "turn": 14,
+      "prompt_tokens": 10574,
+      "completion_tokens": 60,
+      "ttft_ms": 141.9,
+      "total_ms": 953.5
+    },
+    {
+      "agent": 10,
+      "instance_id": "django__django-11848",
+      "turn": 15,
+      "prompt_tokens": 10836,
+      "completion_tokens": 63,
+      "ttft_ms": 125.3,
+      "total_ms": 803.8
+    },
+    {
+      "agent": 11,
+      "instance_id": "sympy__sympy-24066",
+      "turn": 0,
+      "prompt_tokens": 527,
+      "completion_tokens": 103,
+      "ttft_ms": 185.3,
+      "total_ms": 1656.5
+    },
+    {
+      "agent": 11,
+      "instance_id": "sympy__sympy-24066",
+      "turn": 1,
+      "prompt_tokens": 1356,
+      "completion_tokens": 26,
+      "ttft_ms": 127.5,
+      "total_ms": 743.9
+    },
+    {
+      "agent": 11,
+      "instance_id": "sympy__sympy-24066",
+      "turn": 2,
+      "prompt_tokens": 1754,
+      "completion_tokens": 31,
+      "ttft_ms": 90.9,
+      "total_ms": 673.4
+    },
+    {
+      "agent": 11,
+      "instance_id": "sympy__sympy-24066",
+      "turn": 3,
+      "prompt_tokens": 2228,
+      "completion_tokens": 35,
+      "ttft_ms": 163.7,
+      "total_ms": 614.2
+    },
+    {
+      "agent": 11,
+      "instance_id": "sympy__sympy-24066",
+      "turn": 4,
+      "prompt_tokens": 3799,
+      "completion_tokens": 34,
+      "ttft_ms": 209.6,
+      "total_ms": 808.6
+    },
+    {
+      "agent": 11,
+      "instance_id": "sympy__sympy-24066",
+      "turn": 5,
+      "prompt_tokens": 4115,
+      "completion_tokens": 36,
+      "ttft_ms": 108.8,
+      "total_ms": 975.8
+    },
+    {
+      "agent": 11,
+      "instance_id": "sympy__sympy-24066",
+      "turn": 6,
+      "prompt_tokens": 5107,
+      "completion_tokens": 40,
+      "ttft_ms": 174.5,
+      "total_ms": 852.1
+    },
+    {
+      "agent": 11,
+      "instance_id": "sympy__sympy-24066",
+      "turn": 7,
+      "prompt_tokens": 5349,
+      "completion_tokens": 33,
+      "ttft_ms": 126.5,
+      "total_ms": 578.5
+    },
+    {
+      "agent": 11,
+      "instance_id": "sympy__sympy-24066",
+      "turn": 8,
+      "prompt_tokens": 5638,
+      "completion_tokens": 23,
+      "ttft_ms": 218.8,
+      "total_ms": 613.3
+    },
+    {
+      "agent": 11,
+      "instance_id": "sympy__sympy-24066",
+      "turn": 9,
+      "prompt_tokens": 6387,
+      "completion_tokens": 36,
+      "ttft_ms": 229.5,
+      "total_ms": 839.4
+    },
+    {
+      "agent": 11,
+      "instance_id": "sympy__sympy-24066",
+      "turn": 10,
+      "prompt_tokens": 6795,
+      "completion_tokens": 36,
+      "ttft_ms": 166.7,
+      "total_ms": 801.8
+    },
+    {
+      "agent": 11,
+      "instance_id": "sympy__sympy-24066",
+      "turn": 11,
+      "prompt_tokens": 7274,
+      "completion_tokens": 36,
+      "ttft_ms": 160.7,
+      "total_ms": 793.4
+    },
+    {
+      "agent": 11,
+      "instance_id": "sympy__sympy-24066",
+      "turn": 12,
+      "prompt_tokens": 8846,
+      "completion_tokens": 36,
+      "ttft_ms": 184.4,
+      "total_ms": 872.6
+    },
+    {
+      "agent": 11,
+      "instance_id": "sympy__sympy-24066",
+      "turn": 13,
+      "prompt_tokens": 9164,
+      "completion_tokens": 36,
+      "ttft_ms": 248.4,
+      "total_ms": 672.7
+    },
+    {
+      "agent": 11,
+      "instance_id": "sympy__sympy-24066",
+      "turn": 14,
+      "prompt_tokens": 10156,
+      "completion_tokens": 36,
+      "ttft_ms": 234.3,
+      "total_ms": 810.8
+    },
+    {
+      "agent": 11,
+      "instance_id": "sympy__sympy-24066",
+      "turn": 15,
+      "prompt_tokens": 10394,
+      "completion_tokens": 36,
+      "ttft_ms": 243.8,
+      "total_ms": 793.0
+    },
+    {
+      "agent": 12,
+      "instance_id": "django__django-15996",
+      "turn": 0,
+      "prompt_tokens": 516,
+      "completion_tokens": 94,
+      "ttft_ms": 75.3,
+      "total_ms": 1543.0
+    },
+    {
+      "agent": 12,
+      "instance_id": "django__django-15996",
+      "turn": 1,
+      "prompt_tokens": 1336,
+      "completion_tokens": 43,
+      "ttft_ms": 155.0,
+      "total_ms": 831.6
+    },
+    {
+      "agent": 12,
+      "instance_id": "django__django-15996",
+      "turn": 2,
+      "prompt_tokens": 1751,
+      "completion_tokens": 52,
+      "ttft_ms": 117.0,
+      "total_ms": 968.2
+    },
+    {
+      "agent": 12,
+      "instance_id": "django__django-15996",
+      "turn": 3,
+      "prompt_tokens": 2246,
+      "completion_tokens": 51,
+      "ttft_ms": 149.6,
+      "total_ms": 1083.9
+    },
+    {
+      "agent": 12,
+      "instance_id": "django__django-15996",
+      "turn": 4,
+      "prompt_tokens": 3833,
+      "completion_tokens": 67,
+      "ttft_ms": 201.8,
+      "total_ms": 1304.5
+    },
+    {
+      "agent": 12,
+      "instance_id": "django__django-15996",
+      "turn": 5,
+      "prompt_tokens": 4182,
+      "completion_tokens": 43,
+      "ttft_ms": 228.8,
+      "total_ms": 842.2
+    },
+    {
+      "agent": 12,
+      "instance_id": "django__django-15996",
+      "turn": 6,
+      "prompt_tokens": 5181,
+      "completion_tokens": 39,
+      "ttft_ms": 252.5,
+      "total_ms": 991.6
+    },
+    {
+      "agent": 12,
+      "instance_id": "django__django-15996",
+      "turn": 7,
+      "prompt_tokens": 5422,
+      "completion_tokens": 61,
+      "ttft_ms": 239.2,
+      "total_ms": 1243.9
+    },
+    {
+      "agent": 12,
+      "instance_id": "django__django-15996",
+      "turn": 8,
+      "prompt_tokens": 5739,
+      "completion_tokens": 44,
+      "ttft_ms": 167.6,
+      "total_ms": 892.6
+    },
+    {
+      "agent": 12,
+      "instance_id": "django__django-15996",
+      "turn": 9,
+      "prompt_tokens": 6509,
+      "completion_tokens": 40,
+      "ttft_ms": 242.8,
+      "total_ms": 867.3
+    },
+    {
+      "agent": 12,
+      "instance_id": "django__django-15996",
+      "turn": 10,
+      "prompt_tokens": 6921,
+      "completion_tokens": 46,
+      "ttft_ms": 266.7,
+      "total_ms": 813.4
+    },
+    {
+      "agent": 12,
+      "instance_id": "django__django-15996",
+      "turn": 11,
+      "prompt_tokens": 7410,
+      "completion_tokens": 70,
+      "ttft_ms": 122.2,
+      "total_ms": 1329.4
+    },
+    {
+      "agent": 12,
+      "instance_id": "django__django-15996",
+      "turn": 12,
+      "prompt_tokens": 9016,
+      "completion_tokens": 62,
+      "ttft_ms": 190.3,
+      "total_ms": 1024.5
+    },
+    {
+      "agent": 12,
+      "instance_id": "django__django-15996",
+      "turn": 13,
+      "prompt_tokens": 9360,
+      "completion_tokens": 52,
+      "ttft_ms": 205.1,
+      "total_ms": 939.7
+    },
+    {
+      "agent": 12,
+      "instance_id": "django__django-15996",
+      "turn": 14,
+      "prompt_tokens": 10368,
+      "completion_tokens": 46,
+      "ttft_ms": 229.1,
+      "total_ms": 730.8
+    },
+    {
+      "agent": 12,
+      "instance_id": "django__django-15996",
+      "turn": 15,
+      "prompt_tokens": 10616,
+      "completion_tokens": 65,
+      "ttft_ms": 224.6,
+      "total_ms": 1203.2
+    },
+    {
+      "agent": 13,
+      "instance_id": "sphinx-doc__sphinx-8713",
+      "turn": 0,
+      "prompt_tokens": 776,
+      "completion_tokens": 120,
+      "ttft_ms": 73.1,
+      "total_ms": 2238.9
+    },
+    {
+      "agent": 13,
+      "instance_id": "sphinx-doc__sphinx-8713",
+      "turn": 1,
+      "prompt_tokens": 1622,
+      "completion_tokens": 56,
+      "ttft_ms": 233.0,
+      "total_ms": 1102.5
+    },
+    {
+      "agent": 13,
+      "instance_id": "sphinx-doc__sphinx-8713",
+      "turn": 2,
+      "prompt_tokens": 2050,
+      "completion_tokens": 53,
+      "ttft_ms": 136.0,
+      "total_ms": 1167.6
+    },
+    {
+      "agent": 13,
+      "instance_id": "sphinx-doc__sphinx-8713",
+      "turn": 3,
+      "prompt_tokens": 2546,
+      "completion_tokens": 65,
+      "ttft_ms": 212.4,
+      "total_ms": 1351.5
+    },
+    {
+      "agent": 13,
+      "instance_id": "sphinx-doc__sphinx-8713",
+      "turn": 4,
+      "prompt_tokens": 4147,
+      "completion_tokens": 70,
+      "ttft_ms": 153.0,
+      "total_ms": 1437.3
+    },
+    {
+      "agent": 13,
+      "instance_id": "sphinx-doc__sphinx-8713",
+      "turn": 5,
+      "prompt_tokens": 4499,
+      "completion_tokens": 39,
+      "ttft_ms": 204.6,
+      "total_ms": 861.5
+    },
+    {
+      "agent": 13,
+      "instance_id": "sphinx-doc__sphinx-8713",
+      "turn": 6,
+      "prompt_tokens": 5494,
+      "completion_tokens": 62,
+      "ttft_ms": 293.9,
+      "total_ms": 1325.7
+    },
+    {
+      "agent": 13,
+      "instance_id": "sphinx-doc__sphinx-8713",
+      "turn": 7,
+      "prompt_tokens": 5758,
+      "completion_tokens": 37,
+      "ttft_ms": 208.3,
+      "total_ms": 766.9
+    },
+    {
+      "agent": 13,
+      "instance_id": "sphinx-doc__sphinx-8713",
+      "turn": 8,
+      "prompt_tokens": 6051,
+      "completion_tokens": 54,
+      "ttft_ms": 279.9,
+      "total_ms": 977.9
+    },
+    {
+      "agent": 13,
+      "instance_id": "sphinx-doc__sphinx-8713",
+      "turn": 9,
+      "prompt_tokens": 6831,
+      "completion_tokens": 43,
+      "ttft_ms": 176.8,
+      "total_ms": 1054.9
+    },
+    {
+      "agent": 13,
+      "instance_id": "sphinx-doc__sphinx-8713",
+      "turn": 10,
+      "prompt_tokens": 7246,
+      "completion_tokens": 65,
+      "ttft_ms": 123.4,
+      "total_ms": 1127.9
+    },
+    {
+      "agent": 13,
+      "instance_id": "sphinx-doc__sphinx-8713",
+      "turn": 11,
+      "prompt_tokens": 7754,
+      "completion_tokens": 59,
+      "ttft_ms": 179.7,
+      "total_ms": 1007.0
+    },
+    {
+      "agent": 13,
+      "instance_id": "sphinx-doc__sphinx-8713",
+      "turn": 12,
+      "prompt_tokens": 9349,
+      "completion_tokens": 70,
+      "ttft_ms": 320.9,
+      "total_ms": 1212.3
+    },
+    {
+      "agent": 13,
+      "instance_id": "sphinx-doc__sphinx-8713",
+      "turn": 13,
+      "prompt_tokens": 9701,
+      "completion_tokens": 69,
+      "ttft_ms": 226.9,
+      "total_ms": 903.4
+    },
+    {
+      "agent": 13,
+      "instance_id": "sphinx-doc__sphinx-8713",
+      "turn": 14,
+      "prompt_tokens": 10726,
+      "completion_tokens": 57,
+      "ttft_ms": 278.2,
+      "total_ms": 932.0
+    },
+    {
+      "agent": 13,
+      "instance_id": "sphinx-doc__sphinx-8713",
+      "turn": 15,
+      "prompt_tokens": 10985,
+      "completion_tokens": 29,
+      "ttft_ms": 153.1,
+      "total_ms": 303.2
+    },
+    {
+      "agent": 14,
+      "instance_id": "scikit-learn__scikit-learn-25638",
+      "turn": 0,
+      "prompt_tokens": 836,
+      "completion_tokens": 101,
+      "ttft_ms": 149.6,
+      "total_ms": 1903.9
+    },
+    {
+      "agent": 14,
+      "instance_id": "scikit-learn__scikit-learn-25638",
+      "turn": 1,
+      "prompt_tokens": 1662,
+      "completion_tokens": 47,
+      "ttft_ms": 146.3,
+      "total_ms": 878.3
+    },
+    {
+      "agent": 14,
+      "instance_id": "scikit-learn__scikit-learn-25638",
+      "turn": 2,
+      "prompt_tokens": 2081,
+      "completion_tokens": 52,
+      "ttft_ms": 164.6,
+      "total_ms": 1145.2
+    },
+    {
+      "agent": 14,
+      "instance_id": "scikit-learn__scikit-learn-25638",
+      "turn": 3,
+      "prompt_tokens": 2576,
+      "completion_tokens": 46,
+      "ttft_ms": 197.6,
+      "total_ms": 888.8
+    },
+    {
+      "agent": 14,
+      "instance_id": "scikit-learn__scikit-learn-25638",
+      "turn": 4,
+      "prompt_tokens": 4158,
+      "completion_tokens": 67,
+      "ttft_ms": 209.9,
+      "total_ms": 1174.8
+    },
+    {
+      "agent": 14,
+      "instance_id": "scikit-learn__scikit-learn-25638",
+      "turn": 5,
+      "prompt_tokens": 4507,
+      "completion_tokens": 60,
+      "ttft_ms": 280.3,
+      "total_ms": 1217.7
+    },
+    {
+      "agent": 14,
+      "instance_id": "scikit-learn__scikit-learn-25638",
+      "turn": 6,
+      "prompt_tokens": 5523,
+      "completion_tokens": 71,
+      "ttft_ms": 216.1,
+      "total_ms": 1273.4
+    },
+    {
+      "agent": 14,
+      "instance_id": "scikit-learn__scikit-learn-25638",
+      "turn": 7,
+      "prompt_tokens": 5796,
+      "completion_tokens": 76,
+      "ttft_ms": 177.0,
+      "total_ms": 1491.5
+    },
+    {
+      "agent": 14,
+      "instance_id": "scikit-learn__scikit-learn-25638",
+      "turn": 8,
+      "prompt_tokens": 6128,
+      "completion_tokens": 63,
+      "ttft_ms": 260.0,
+      "total_ms": 1026.5
+    },
+    {
+      "agent": 14,
+      "instance_id": "scikit-learn__scikit-learn-25638",
+      "turn": 9,
+      "prompt_tokens": 6917,
+      "completion_tokens": 80,
+      "ttft_ms": 294.9,
+      "total_ms": 1597.5
+    },
+    {
+      "agent": 14,
+      "instance_id": "scikit-learn__scikit-learn-25638",
+      "turn": 10,
+      "prompt_tokens": 7369,
+      "completion_tokens": 74,
+      "ttft_ms": 116.9,
+      "total_ms": 1183.4
+    },
+    {
+      "agent": 14,
+      "instance_id": "scikit-learn__scikit-learn-25638",
+      "turn": 11,
+      "prompt_tokens": 7886,
+      "completion_tokens": 78,
+      "ttft_ms": 166.3,
+      "total_ms": 1250.3
+    },
+    {
+      "agent": 14,
+      "instance_id": "scikit-learn__scikit-learn-25638",
+      "turn": 12,
+      "prompt_tokens": 9500,
+      "completion_tokens": 51,
+      "ttft_ms": 179.5,
+      "total_ms": 715.7
+    },
+    {
+      "agent": 14,
+      "instance_id": "scikit-learn__scikit-learn-25638",
+      "turn": 13,
+      "prompt_tokens": 9833,
+      "completion_tokens": 65,
+      "ttft_ms": 228.2,
+      "total_ms": 1025.2
+    },
+    {
+      "agent": 14,
+      "instance_id": "scikit-learn__scikit-learn-25638",
+      "turn": 14,
+      "prompt_tokens": 10854,
+      "completion_tokens": 64,
+      "ttft_ms": 175.9,
+      "total_ms": 795.5
+    },
+    {
+      "agent": 14,
+      "instance_id": "scikit-learn__scikit-learn-25638",
+      "turn": 15,
+      "prompt_tokens": 11120,
+      "completion_tokens": 79,
+      "ttft_ms": 126.1,
+      "total_ms": 692.7
+    },
+    {
+      "agent": 15,
+      "instance_id": "sympy__sympy-24152",
+      "turn": 0,
+      "prompt_tokens": 930,
+      "completion_tokens": 96,
+      "ttft_ms": 145.9,
+      "total_ms": 1873.2
+    },
+    {
+      "agent": 15,
+      "instance_id": "sympy__sympy-24152",
+      "turn": 1,
+      "prompt_tokens": 1752,
+      "completion_tokens": 59,
+      "ttft_ms": 168.2,
+      "total_ms": 1147.9
+    },
+    {
+      "agent": 15,
+      "instance_id": "sympy__sympy-24152",
+      "turn": 2,
+      "prompt_tokens": 2183,
+      "completion_tokens": 47,
+      "ttft_ms": 274.4,
+      "total_ms": 1258.7
+    },
+    {
+      "agent": 15,
+      "instance_id": "sympy__sympy-24152",
+      "turn": 3,
+      "prompt_tokens": 2673,
+      "completion_tokens": 62,
+      "ttft_ms": 109.9,
+      "total_ms": 1081.2
+    },
+    {
+      "agent": 15,
+      "instance_id": "sympy__sympy-24152",
+      "turn": 4,
+      "prompt_tokens": 4271,
+      "completion_tokens": 65,
+      "ttft_ms": 126.7,
+      "total_ms": 1323.7
+    },
+    {
+      "agent": 15,
+      "instance_id": "sympy__sympy-24152",
+      "turn": 5,
+      "prompt_tokens": 4618,
+      "completion_tokens": 56,
+      "ttft_ms": 163.2,
+      "total_ms": 1170.7
+    },
+    {
+      "agent": 15,
+      "instance_id": "sympy__sympy-24152",
+      "turn": 6,
+      "prompt_tokens": 5630,
+      "completion_tokens": 67,
+      "ttft_ms": 156.2,
+      "total_ms": 1440.5
+    },
+    {
+      "agent": 15,
+      "instance_id": "sympy__sympy-24152",
+      "turn": 7,
+      "prompt_tokens": 5899,
+      "completion_tokens": 65,
+      "ttft_ms": 154.2,
+      "total_ms": 1030.8
+    },
+    {
+      "agent": 15,
+      "instance_id": "sympy__sympy-24152",
+      "turn": 8,
+      "prompt_tokens": 6220,
+      "completion_tokens": 50,
+      "ttft_ms": 150.3,
+      "total_ms": 1091.5
+    },
+    {
+      "agent": 15,
+      "instance_id": "sympy__sympy-24152",
+      "turn": 9,
+      "prompt_tokens": 6996,
+      "completion_tokens": 146,
+      "ttft_ms": 249.3,
+      "total_ms": 2387.4
+    },
+    {
+      "agent": 15,
+      "instance_id": "sympy__sympy-24152",
+      "turn": 10,
+      "prompt_tokens": 7514,
+      "completion_tokens": 66,
+      "ttft_ms": 330.2,
+      "total_ms": 1200.6
+    },
+    {
+      "agent": 15,
+      "instance_id": "sympy__sympy-24152",
+      "turn": 11,
+      "prompt_tokens": 8023,
+      "completion_tokens": 79,
+      "ttft_ms": 195.8,
+      "total_ms": 1214.3
+    },
+    {
+      "agent": 15,
+      "instance_id": "sympy__sympy-24152",
+      "turn": 12,
+      "prompt_tokens": 9638,
+      "completion_tokens": 66,
+      "ttft_ms": 170.3,
+      "total_ms": 903.2
+    },
+    {
+      "agent": 15,
+      "instance_id": "sympy__sympy-24152",
+      "turn": 13,
+      "prompt_tokens": 9986,
+      "completion_tokens": 41,
+      "ttft_ms": 121.6,
+      "total_ms": 363.1
+    },
+    {
+      "agent": 15,
+      "instance_id": "sympy__sympy-24152",
+      "turn": 14,
+      "prompt_tokens": 10983,
+      "completion_tokens": 56,
+      "ttft_ms": 180.6,
+      "total_ms": 495.3
+    },
+    {
+      "agent": 15,
+      "instance_id": "sympy__sympy-24152",
+      "turn": 15,
+      "prompt_tokens": 11241,
+      "completion_tokens": 90,
+      "ttft_ms": 124.7,
+      "total_ms": 532.4
+    }
+  ]
+}
