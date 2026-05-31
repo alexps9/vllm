@@ -1,0 +1,13 @@
+[pathA] lru t1 START 06:22:15
+[pathA] lru t1 END rc=0 06:28:31
+[pathA] lru t2 START 06:28:31
+[pathA] lru t2 END rc=0 06:35:02
+[pathA] lru t3 START 06:35:02
+[pathA] lru t3 END rc=0 06:41:18
+[pathA] l1_only t1 START 06:41:18
+[pathA] l1_only t1 END rc=0 06:47:41
+[pathA] l1_only t2 START 06:47:41
+[pathA] l1_only t2 END rc=0 06:54:01
+[pathA] l1_only t3 START 06:54:01
+[pathA] l1_only t3 END rc=0 07:00:20
+[pathA] ALL DONE 07:00:20

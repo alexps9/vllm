@@ -63,7 +63,7 @@ run_cell() {
 
   if ! wait_for_health "$PORT" "$log"; then
     echo "[verify/9] $tag: server never became healthy — skipping cell" >&2
-    fuser -k -TERM "${PORT}/tcp" 2>/dev/null || true
+    fuser -k -KILL "${PORT}/tcp" 2>/dev/null || true; pkill -9 -f "vllm serve.*--port ${PORT}" 2>/dev/null || true
     sleep 3
     return 1
   fi
@@ -82,7 +82,7 @@ run_cell() {
     > "$odir/client.out" 2>&1
   echo "[verify/9] $tag: client done rc=$?"
 
-  fuser -k -TERM "${PORT}/tcp" 2>/dev/null || true
+  fuser -k -KILL "${PORT}/tcp" 2>/dev/null || true; pkill -9 -f "vllm serve.*--port ${PORT}" 2>/dev/null || true
   sleep 5
 }
 

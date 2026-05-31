@@ -16,6 +16,7 @@ Shared harness lives in `runs/scripts/` (server) and `dev/intralayer/`
 | 7 | [lpb_worst_case](7_lpb_worst_case/) | LPB under heavy decoy pressure (scale≥20) | ✅ **no failure mode**: bit-identical win at scale 10/20/40; scale is the wrong lever | `run.sh` |
 | 8 | [post_l2_removal_smoke](8_post_l2_removal_smoke/) | confirm L1 intact after L2 deletion | ✅ bit-identical to prior l1_only (hit% 88.87, anchor 126720) | `run.sh` |
 | 9 | [swebench_w2_real](9_swebench_w2_real/) | **Songyang's real SWE-bench scenario** (W2, SWE-Bench-Lite agents) | 🔄 running — does L1 help on real agent traffic? | `run.sh` |
+| 10 | [recency_fix_reverify](10_recency_fix_reverify/) | e2e re-verify of the recency-aware LPB fix | ✅ Path A win preserved (−10.8%, n=3); W2 inversion eliminated (protected-evict 37%→~4%, L1 ≈ LRU) | `README` |
 | — | [repro_post_cleanup_2026-05-26](repro_post_cleanup_2026-05-26/) | post-cleanup PathA re-verification | ✅ no regression from cleanup commits | `run.sh` |
 
 Archived (removed features, kept for reference): [`dev/archive/L2/`](../../archive/L2/)

@@ -30,9 +30,12 @@ cd "$REPO"
 source .venv/bin/activate
 
 EXTRA_ENV=()
-# Extended LPB window is shared across all HiMA modes.
+# LPB hit-count decay window. The recency-aware queue (2026-05) uses this as
+# a real decay lever: stale hits demote to LRU order once they age out. A long
+# window keeps a synthetic anchor pinned (Path A); a short one lets real agent
+# traffic decay (W2). Override via VLLM_HIMA_HPB_WINDOW_S; default 3600.
 HIMA_COMMON=(
-  "VLLM_HIMA_HPB_WINDOW_S=3600"
+  "VLLM_HIMA_HPB_WINDOW_S=${VLLM_HIMA_HPB_WINDOW_S:-3600}"
 )
 case "$MODE" in
   baseline) ;;
