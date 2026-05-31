@@ -20,6 +20,7 @@ REPO="/data/yuzhou/projects/vllm-songyang"
 OUT="$REPO/dev/intralayer/verify/9_swebench_w2_real/runs"
 mkdir -p "$OUT"
 
+export REPO="$REPO"  # start_server.sh mis-derives this from its own path
 export MODEL="${MODEL:-Qwen/Qwen3.5-35B-A3B}"
 export VLLM_TP="${VLLM_TP:-2}"
 export VLLM_UTIL="${VLLM_UTIL:-0.85}"
