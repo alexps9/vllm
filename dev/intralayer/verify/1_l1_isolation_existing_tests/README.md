@@ -103,7 +103,7 @@ window**; see [`pressure_curve_result.md`](pressure_curve_result.md). Path B
 ### About the baseline
 
 The numbers below are from the **fresh n=3 same-environment sweep** in
-[`verify/6_lpb_heap_perf/runs/fresh_n3/`](../6_lpb_heap_perf/runs/fresh_n3/)
+`verify/6_lpb_heap_perf/runs/fresh_n3/` (verify/6, removed 2026-05-31; see git history)
 (LRU, L1-only, full HiMA all re-measured back-to-back on the same GPU
 pair). The previously published table — which reported L1-only as
 **+20.1 %** Phase H TTFT regression vs LRU — compared current-code
@@ -111,9 +111,9 @@ L1-only against an archived LRU baseline (`dev/intralayer/runs/vllm/`,
 captured at ~00:18 on 2026-05-26, on a different GPU pair and under
 different system load). The whole environment was faster at that time,
 so the gap was artefactual. See
-[`verify/6_lpb_heap_perf/journal/07_phantom_regression.md`](../6_lpb_heap_perf/journal/07_phantom_regression.md)
+`verify/6_lpb_heap_perf/journal/07_phantom_regression.md` (verify/6, removed 2026-05-31; see git history)
 for the discovery and
-[`verify/6_lpb_heap_perf/journal/08_fresh_n3_final.md`](../6_lpb_heap_perf/journal/08_fresh_n3_final.md)
+`verify/6_lpb_heap_perf/journal/08_fresh_n3_final.md` (verify/6, removed 2026-05-31; see git history)
 for the authoritative replacement.
 
 Phase H (post-pressure concurrent swarm) on Qwen3.5-35B-A3B, util=0.9, TP=2:
@@ -187,10 +187,10 @@ Under fresh same-environment measurement, **L1 alone beats LRU on
 Phase H at util=0.9 (−8.8 %) and at util=0.35 (−5 %)**. The win is
 real at production utilisation and not just an artefact of tight-pool
 regimes. The earlier "L1 loses at util=0.9" story was a stale-baseline
-artefact (see [journal/07](../6_lpb_heap_perf/journal/07_phantom_regression.md))
+artefact (see journal/07 (verify/6, removed 2026-05-31; see git history))
 combined with pre-rewrite LPB heap overhead (the verify/6 campaign
 brought LPB per-op down from 16.2× LRU to 2.8× LRU; see
-[journal/08](../6_lpb_heap_perf/journal/08_fresh_n3_final.md)). LPB's
+journal/08 (verify/6, removed 2026-05-31; see git history)). LPB's
 anchor-protection benefit still scales with KV pressure (+3 pp hit-rate
 under both regimes is consistent), while its per-allocation overhead
 is now small enough that the +3 pp net positive at e2e level surfaces
@@ -211,4 +211,4 @@ remains, but as conversation grows enough blocks accumulate that LRU
 crosses the cliff and L1 (with admitter helping) preserves the prefix.
 The W1 hypothesis space now shifts to admitter behaviour rather than
 LPB queue overhead (see
-[journal/08, "Implications for sibling verify scenarios"](../6_lpb_heap_perf/journal/08_fresh_n3_final.md)).
+journal/08, "Implications for sibling verify scenarios" (verify/6, removed 2026-05-31; see git history)).

@@ -12,7 +12,6 @@ Shared harness lives in `runs/scripts/` (server) and `dev/intralayer/`
 | 1 | [l1_isolation_existing_tests](1_l1_isolation_existing_tests/) | L1 (LPB) vs LRU on PathA/B + pressure curve | ✅ **L1 wins**: 35B −8.8…−10.7%, 122B −12.2% PhaseH TTFT; anchor survives 2× the cold-burst pressure | `run.sh` |
 | 4 | [lpb_scoring_variants](4_lpb_scoring_variants/) | discriminate 2 suspected LPB scoring bugs (`VLLM_HIMA_LPB_SCORING`) | ⚪ **no-op**: lazy=eager=depth_tokens bit-identical; keep `lazy` | `run.sh` |
 | 5 | [window_sensitivity](5_window_sensitivity/) | `VLLM_HIMA_HPB_WINDOW_S` sweep | ✅ done: decay hypothesis directionally right but small (cliff K≈20→25 across 60s→600s); pin win=3600 | `run.sh` |
-| 6 | [lpb_heap_perf](6_lpb_heap_perf/) | drive LPB queue per-op to ≤3× LRU | ✅ done: rotate 5065→913 ns/op (2.8× LRU); e2e L1-only −8.8% PhaseH | (profile scripts) |
 | 7 | [lpb_worst_case](7_lpb_worst_case/) | LPB under heavy decoy pressure (scale≥20) | ✅ **no failure mode**: bit-identical win at scale 10/20/40; scale is the wrong lever | `run.sh` |
 | 8 | [post_l2_removal_smoke](8_post_l2_removal_smoke/) | confirm L1 intact after L2 deletion | ✅ bit-identical to prior l1_only (hit% 88.87, anchor 126720) | `run.sh` |
 | 9 | [swebench_w2_real](9_swebench_w2_real/) | **Songyang's real SWE-bench scenario** (W2, SWE-Bench-Lite agents) | 🔄 running — does L1 help on real agent traffic? | `run.sh` |

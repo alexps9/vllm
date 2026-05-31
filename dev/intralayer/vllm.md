@@ -12,7 +12,7 @@ sglang side ([`sglang.md`](sglang.md)).
 
 | component | verdict | evidence |
 |---|---|---|
-| **L1 — LPB free-block queue** | ✅ **win**: −8.8…−10.7 % Phase H TTFT, +~3 pp hit vs LRU (fresh same-env n=3) | [`verify/1`](verify/1_l1_isolation_existing_tests/README.md), [`verify/6`](verify/6_lpb_heap_perf/) |
+| **L1 — LPB free-block queue** | ✅ **win**: −8.8…−10.7 % Phase H TTFT, +~3 pp hit vs LRU (fresh same-env n=3) | [`verify/1`](verify/1_l1_isolation_existing_tests/README.md) |
 | L1 scoring (`VLLM_HIMA_LPB_SCORING`) | **no-op**: lazy = eager = depth_tokens, bit-identical; keep `lazy` | [`verify/4`](verify/4_lpb_scoring_variants/RESULTS.md) |
 | **L1 on real agent traffic (W2)** | **no win on SWE-Bench**: no cross-session shared anchor + (pre-fix) recency-blind eviction *lost* hits under pressure → drove the recency-aware rewrite below | [`verify/9`](verify/9_swebench_w2_real/RESULTS.md) |
 | **L1 recency-aware scoring** | ✅ **ideal-design fix** (2026-05-31): three-tier `(priority, recency)` + window decay. Per-op ~3.9× LRU (= old two-tier). **Path A win preserved** (−10.8% PhaseH, clean n=3, long window). **W2 inversion eliminated** (short window: protected-evict 37%→~4%, L1 now ≈ LRU within noise vs −2.1pp before) | `tests/v1/core/test_hima_lpb_recency.py`, [`verify/10`](verify/10_recency_fix_reverify/RESULTS.md) |
@@ -58,7 +58,7 @@ block whose hits have aged out of the window into the evict-first tier — so
 it is dropped *before* the fresh tails (which sit at the cold-FIFO tail),
 exactly like LRU, while a live re-hit block stays in the hot heap. Keeping
 the O(1) cold FIFO for the common case holds per-op cost at **~3.9× LRU**
-(846 ns vs 217 ns, verify/6 microbench) — same as the old two-tier; a naive
+(846 ns vs 217 ns, microbench) — same as the old two-tier; a naive
 single all-blocks heap was 8.1×.
 
 **Why recency is first-class.** The prior design was a two-tier
@@ -149,11 +149,9 @@ failure mode, and that hasn't been done.
 #### About the baseline
 
 The headline below has two sources. Path A has been re-measured under
-a **fresh n=3 same-environment sweep** (LRU + full HiMA back-to-back
-on the same GPU pair); that data is authoritative and lives in
-[`verify/6_lpb_heap_perf/runs/fresh_n3/`](verify/6_lpb_heap_perf/runs/fresh_n3/),
-documented in
-[`verify/6_lpb_heap_perf/journal/08_fresh_n3_final.md`](verify/6_lpb_heap_perf/journal/08_fresh_n3_final.md).
+a **fresh n=3 same-environment sweep** (LRU + L1 back-to-back on the same
+GPU pair); that data is authoritative (its raw runs + journal lived in
+verify/6, removed 2026-05-31 — see git history).
 Path B has **not** been re-measured on a fresh same-environment
 baseline — its numbers below remain from the legacy archive at
 `dev/intralayer/runs/vllm/compare_{lru,lpb}_pathB_t*.jsonl`. The
@@ -162,9 +160,8 @@ were under noticeably lighter load; absolute TTFT levels on that
 archive run ~80–110 ms lower than under the fresh measurement
 environment, so Path B's −17.7 % is a same-epoch comparison within
 the archive but its absolute ms numbers are not comparable to Path A
-below. See
-[`verify/6_lpb_heap_perf/journal/07_phantom_regression.md`](verify/6_lpb_heap_perf/journal/07_phantom_regression.md)
-for the discovery.
+below. See git history (verify/6 journal/07, removed 2026-05-31) for the
+discovery.
 
 | sweep | source | LRU batch TTFT (ms) | LPB batch TTFT (ms) | Δ | LRU req/s | LPB req/s | total wall Δ |
 |---|---|---:|---:|---:|---:|---:|---:|
@@ -180,7 +177,7 @@ for the discovery.
 - **Path B remains archive-only**: −17.7 % is reported against an
   archive LRU captured in the same epoch as the archive LPB, so the
   *delta* is internally consistent, but Path B has not been re-run on
-  the verify/6 GPU pair. Treat its magnitude as archive-confidence.
+  the fresh-baseline GPU pair. Treat its magnitude as archive-confidence.
 - **Hit rate is binary, stddev = 0**: LRU 85.91 % (29/30 hit, 1
   request pays the anchor prefill, the other 29 share via vLLM's
   prefix-cache merge) vs LPB 88.87 % (30/30 hit, anchor still
