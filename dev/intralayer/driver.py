@@ -10,8 +10,8 @@ config matrix:
 
     --config lru          # no HiMA
     --config l1_only      # VLLM_HIMA_L1_ENABLE=1
-    --config l2_only      # VLLM_HIMA_L2_ENABLE=1
-    --config full         # L1 + L2
+
+(L2 removed 2026-05; the l2_only/full configs are gone. See dev/archive/L2/.)
 
 Window pinned to `VLLM_HIMA_HPB_WINDOW_S=3600` per verify/5 finding.
 
@@ -54,15 +54,12 @@ _HYBRID_MODEL_PREFIXES = ("Qwen/Qwen3.5-",)
 _CONFIG_ENV = {
     "lru": {},
     "l1_only": {"VLLM_HIMA_L1_ENABLE": "1"},
-    "l2_only": {"VLLM_HIMA_L2_ENABLE": "1"},
-    "full": {"VLLM_HIMA_L1_ENABLE": "1", "VLLM_HIMA_L2_ENABLE": "1"},
 }
 
 
 def apply_env(config: str) -> None:
     """Apply config-specific env vars before vLLM import."""
-    for k in ("VLLM_HIMA_L1_ENABLE", "VLLM_HIMA_L2_ENABLE"):
-        os.environ.pop(k, None)
+    os.environ.pop("VLLM_HIMA_L1_ENABLE", None)
     for k, v in _CONFIG_ENV[config].items():
         os.environ[k] = v
 
@@ -171,7 +168,7 @@ def main() -> int:
         "window_s": int(os.environ.get("VLLM_HIMA_HPB_WINDOW_S", "0")),
         "tool_result_tokens": TOOL_RESULT_TOKENS,
         "env": {k: os.environ.get(k, "") for k in (
-            "VLLM_HIMA_L1_ENABLE", "VLLM_HIMA_L2_ENABLE",
+            "VLLM_HIMA_L1_ENABLE",
             "VLLM_HIMA_HPB_WINDOW_S",
         )},
     }) + "\n")

@@ -246,75 +246,6 @@ def reset_cost_curves() -> None:
     _warned_legacy = False
 
 
-class RuntimeActuatorCost:
-    """EWMA of per-chunk actuator wall-time (µs).
-
-    Conservative cold-start default suppresses early speculative remaps.
-    """
-
-    def __init__(self, initial_us: float = 10000.0, alpha: float = 0.3):
-        if initial_us <= 0:
-            raise ValueError(f"initial_us must be > 0, got {initial_us}")
-        if not 0.0 < alpha <= 1.0:
-            raise ValueError(f"alpha must be in (0, 1], got {alpha}")
-        self._initial = float(initial_us)
-        self._current = float(initial_us)
-        self._alpha = float(alpha)
-        self._n_observations = 0
-        self._last_observed_us: float | None = None
-
-    @property
-    def current_us(self) -> float:
-        return self._current
-
-    @property
-    def n_observations(self) -> int:
-        return self._n_observations
-
-    @property
-    def is_calibrated(self) -> bool:
-        return self._n_observations >= 3
-
-    def update(self, total_us: float, n_chunks: int) -> None:
-        if n_chunks <= 0 or total_us <= 0:
-            return
-        per_chunk = float(total_us) / float(n_chunks)
-        if self._n_observations == 0:
-            self._current = per_chunk
-        else:
-            self._current = (
-                self._alpha * per_chunk + (1.0 - self._alpha) * self._current
-            )
-        self._last_observed_us = per_chunk
-        self._n_observations += 1
-
-    def reset(self) -> None:
-        self._current = self._initial
-        self._n_observations = 0
-        self._last_observed_us = None
-
-
-_runtime_actuator: RuntimeActuatorCost | None = None
-
-
-def get_runtime_actuator_cost() -> RuntimeActuatorCost:
-    """Process-wide singleton (env: VLLM_HIMA_NB_CHUNK_COST_INIT_US / EWMA_ALPHA)."""
-
-    global _runtime_actuator
-    if _runtime_actuator is None:
-        initial = float(os.environ.get("VLLM_HIMA_NB_CHUNK_COST_INIT_US", "10000"))
-        alpha = float(os.environ.get("VLLM_HIMA_NB_CHUNK_COST_EWMA_ALPHA", "0.3"))
-        _runtime_actuator = RuntimeActuatorCost(initial_us=initial, alpha=alpha)
-    return _runtime_actuator
-
-
-def reset_runtime_actuator_cost() -> None:
-    """Test hook."""
-
-    global _runtime_actuator
-    _runtime_actuator = None
-
-
 __all__ = [
     "CostCurve",
     "CostCurveCalibrator",
@@ -323,9 +254,6 @@ __all__ = [
     "LEGACY_DEFAULT",
     "LinearCostCurve",
     "QuadraticCostCurve",
-    "RuntimeActuatorCost",
     "get_cost_curves",
-    "get_runtime_actuator_cost",
     "reset_cost_curves",
-    "reset_runtime_actuator_cost",
 ]

@@ -134,49 +134,16 @@ class EngineCore:
             from vllm.v1.core.hima.integration import (  # noqa: PLC0415
                 enable_runtime as _hima_enable_runtime,
             )
-            from vllm.v1.kv_cache_interface import MambaSpec  # noqa: PLC0415
 
             # cache_config's post-validator reconciles env vars and CLI
-            # flags into hima_l{1,2}_enabled. Read them directly — no
-            # getattr default — so a stale or mocked config without the
-            # fields raises instead of silently flipping a layer on. The
-            # master ``hima_enabled`` is derived in HiMAConfig.__post_init__.
+            # flags into hima_l1_enabled. The master ``hima_enabled`` is
+            # derived in HiMAConfig.__post_init__. (L2 removed 2026-05.)
             _hima_cfg = dataclasses.replace(
                 HiMAConfig.from_env(),
                 hima_l1_enabled=vllm_config.cache_config.hima_l1_enabled,
-                hima_l2_enabled=vllm_config.cache_config.hima_l2_enabled,
-                hima_page_size_bytes=vllm_config.cache_config.hima_page_size_bytes,
             )
-
-            # Derive per-pool slot budgets from the KV cache config.
-            _n_total = kv_cache_config.num_blocks
-            _n_rec = sum(
-                1
-                for g in kv_cache_config.kv_cache_groups
-                if isinstance(g.kv_cache_spec, MambaSpec)
-            )
-            # _n_rec counts mamba *groups*, use it as a weight; proportional split.
-            _n_groups = max(len(kv_cache_config.kv_cache_groups), 1)
-            _rec_slots = max(1, _n_total * _n_rec // _n_groups)
-            _kv_slots = max(1, _n_total - _rec_slots)
-
-            _hima_enable_runtime(
-                config=_hima_cfg,
-                n_pages=_kv_slots + _rec_slots,
-                kv_slots=_kv_slots,
-                rec_slots=_rec_slots,
-            )
-            _page_kib = (
-                (_hima_cfg.hima_page_size_bytes // 1024)
-                if _hima_cfg.hima_page_size_bytes is not None
-                else -1
-            )
-            logger.info(
-                "HiMA enabled (page=%d KiB, kv_slots=%d, rec_slots=%d).",
-                _page_kib,
-                _kv_slots,
-                _rec_slots,
-            )
+            _hima_enable_runtime(config=_hima_cfg)
+            logger.info("HiMA L1 enabled (LPB free-block queue).")
         self.structured_output_manager = StructuredOutputManager(vllm_config)
 
         # Setup scheduler.
@@ -269,13 +236,6 @@ class EngineCore:
         self.aborts_queue = queue.Queue[list[str]]()
 
         self._idle_state_callbacks: list[Callable] = []
-
-        from vllm.v1.core.hima.budgeter_task import (  # noqa: PLC0415
-            start_if_enabled as _hima_start_budgeter,
-        )
-        from vllm.v1.core.hima.integration import get_runtime  # noqa: PLC0415
-
-        self._hima_budgeter = _hima_start_budgeter(get_runtime())
 
         # Mark the startup heap as static so that it's ignored by GC.
         # Reduces pause times of oldest generation collections.
@@ -651,13 +611,6 @@ class EngineCore:
 
     def shutdown(self):
         self.structured_output_manager.clear_backend()
-        import contextlib  # noqa: PLC0415
-
-        _hima_budgeter = getattr(self, "_hima_budgeter", None)
-        if _hima_budgeter is not None:
-            with contextlib.suppress(Exception):
-                _hima_budgeter.stop(timeout=2.0)
-            self._hima_budgeter = None
         if self.model_executor:
             self.model_executor.shutdown()
         if self.scheduler:

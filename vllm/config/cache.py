@@ -119,20 +119,13 @@ class CacheConfig:
     """ Optional override for mamba page size; used by hybrid mamba/attention
     models to ensure exact alignment with attention page size."""
     hima_enabled: bool = False
-    """**Derived.** Equal to ``hima_l1_enabled or hima_l2_enabled``.
+    """**Derived.** Equal to ``hima_l1_enabled`` (L2 removed 2026-05).
     Maintained by the post-validator; do not set on the constructor.
     Used by the engine bootstrap gate to decide whether to construct
     the HiMA runtime at all."""
     hima_l1_enabled: bool = False
     """**Experimental.** Enable HiMA L1 (LPB intra-pool eviction +
-    path counter). Independent of L2."""
-    hima_l2_enabled: bool = False
-    """**Experimental.** Enable HiMA L2 (admitter + bisection budgeter
-    + cross-pool planner). Independent of L1."""
-    hima_page_size_bytes: int = 2 * 1024 * 1024
-    """HiMA actuator page granularity. Must match the GPU's VMM allocation
-    granularity (2 MiB on H200 / RTX PRO 6000 Blackwell). Ignored when
-    ``hima_enabled`` is False."""
+    path counter)."""
     hima_csigma_json: str | None = None
     """Optional path to a JSON file produced by
     ``benchmarks/hima_cost_curve.py`` carrying calibrated KV / mamba
@@ -254,20 +247,16 @@ class CacheConfig:
             object.__setattr__(self, "user_specified_block_size", True)
         if self.mamba_block_size is not None:
             object.__setattr__(self, "user_specified_mamba_block_size", True)
-        # Honour VLLM_HIMA_{L1,L2}_ENABLE env overrides when --hima-l{1,2}-
-        # enabled CLI flags aren't exposed. Truth semantics match
-        # HiMAConfig._env_bool ({"1","true","yes","on"} case-insensitive).
+        # Honour VLLM_HIMA_L1_ENABLE env override when the --hima-l1-enabled
+        # CLI flag isn't exposed. Truth semantics match HiMAConfig._env_bool
+        # ({"1","true","yes","on"} case-insensitive). (L2 removed 2026-05.)
         def _truthy(v: str) -> bool:
             return v.strip().lower() in ("1", "true", "yes", "on")
         if _truthy(os.environ.get("VLLM_HIMA_L1_ENABLE", "")):
             object.__setattr__(self, "hima_l1_enabled", True)
-        if _truthy(os.environ.get("VLLM_HIMA_L2_ENABLE", "")):
-            object.__setattr__(self, "hima_l2_enabled", True)
         # hima_enabled is derived; overwrite any user value to maintain
-        # invariant (master = L1 OR L2).
-        object.__setattr__(
-            self, "hima_enabled", self.hima_l1_enabled or self.hima_l2_enabled
-        )
+        # invariant (master == L1).
+        object.__setattr__(self, "hima_enabled", self.hima_l1_enabled)
         return self
 
     @field_validator("calculate_kv_scales", mode="after")

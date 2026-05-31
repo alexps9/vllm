@@ -41,7 +41,7 @@ and validate (or invalidate) external regression reports.
 | # | scenario | status (2026-05-26 end-of-day) |
 |---|---|---|
 | 1 | [L1 isolation of existing intralayer tests](verify/1_l1_isolation_existing_tests/README.md) — rerun `compare_lru_lpb` + `e2e_l1_pressure_curve` under L1-only | **done (fresh n=3)** — L1 wins at both util=0.9 (−8.8 % PhaseH) and util=0.35 (−5 %). |
-| 3 | [L2 isolation of existing intralayer tests](verify/3_l2_isolation_existing_tests/README.md) — mirror of (1) under L2-only | **done (fresh n=3)** — L2-only ≈ LRU (−1.3 %, within noise). The old +26.6 % was a stale-baseline phantom. L2 is neutral on these workloads. |
+| 3 | L2 isolation — mirror of (1) under L2-only | **done → L2 removed.** Fresh n=3 showed L2-only ≈ LRU (−1.3 %; the old +26.6 % was a stale-baseline phantom). L2 measured neutral and was deleted 2026-05; results + repro archived in [`dev/archive/L2/`](../archive/L2/). |
 | 4 | [LPB scoring variants](verify/4_lpb_scoring_variants/README.md) — discriminate two suspected LPB bugs | **done** — `VLLM_HIMA_LPB_SCORING` knob added; lazy/eager/depth_tokens are bit-identical (no-op). Both suspected bugs are real-in-principle but benign; keep `lazy`. |
 | 5 | [Path-counter window sensitivity](verify/5_window_sensitivity/README.md) — `VLLM_HIMA_HPB_WINDOW_S` sweep | **done (5/5)** — Songyang's "decay" hypothesis directionally right but quantitatively small (cliff K=20→K=25 between 60s and 600s windows). |
 | 6 | [LPB heap perf engineering](verify/6_lpb_heap_perf/README.md) — drive LPB queue to within 3× LRU per-op | **done (T1/T2/T3/T4 all met)** — LPB rotate 5065 → 913 ns/op (16.2× → 2.8× LRU); fresh-baseline e2e L1-only PhaseH −8.8 % vs LRU. |

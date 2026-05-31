@@ -14,14 +14,15 @@ sglang side ([`sglang.md`](sglang.md)).
 |---|---|---|
 | **L1 — LPB free-block queue** | ✅ **win**: −8.8…−10.7 % Phase H TTFT, +~3 pp hit vs LRU (fresh same-env n=3) | [`verify/1`](verify/1_l1_isolation_existing_tests/README.md), [`verify/6`](verify/6_lpb_heap_perf/) |
 | L1 scoring (`VLLM_HIMA_LPB_SCORING`) | **no-op**: lazy = eager = depth_tokens, bit-identical; keep `lazy` | [`verify/4`](verify/4_lpb_scoring_variants/results.md) |
-| **L2 — admitter / budgeter / planner** | **neutral**: ≈ LRU (−1.3 %, within noise) on fresh same-env n=3 | [`verify/3`](verify/3_l2_isolation_existing_tests/fresh_n3_result.md) |
+| **L2 — admitter / budgeter / planner** | **removed** (2026-05): measured neutral (≈ LRU, −1.3 %); code deleted, slated for from-scratch redesign | [`dev/archive/L2/`](../archive/L2/) |
 | interlayer partial-cache (pcache) | ❌ **removed**: no value on hybrid (mamba block-granular state caps the resume point) | git history (`M2_per_group_lift` journals) |
 
 Both earlier "regressions" — L1 **+20.1 %** (verify/1) and L2 **+26.6 %**
 (verify/3) — were **stale-baseline phantoms**: they compared current-code
 against an LRU archive captured on a different GPU pair / system load. Fresh
 same-environment n=3 debunked both. Net: **HiMA's value is L1 (LPB anchor
-protection); L2 is neutral on these workloads; pcache is gone.**
+protection). L2 measured neutral and was removed (archived for redesign);
+pcache is gone.**
 
 ## Implementation
 

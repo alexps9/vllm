@@ -10,11 +10,8 @@ from vllm.v1.core.hima.intra_pool.cost_curve import (
     CostCurves,
     LinearCostCurve,
     QuadraticCostCurve,
-    RuntimeActuatorCost,
     get_cost_curves,
-    get_runtime_actuator_cost,
     reset_cost_curves,
-    reset_runtime_actuator_cost,
 )
 from vllm.v1.core.hima.intra_pool.lpb_queue import LPBPriorityQueue
 from vllm.v1.core.hima.intra_pool.path_count import (
@@ -69,11 +66,8 @@ __all__ = [
     "LinearCostCurve",
     "PathCountedHitCounter",
     "QuadraticCostCurve",
-    "RuntimeActuatorCost",
     "get_cost_curves",
-    "get_runtime_actuator_cost",
     "hits_per_byte_score",
     "lpb_score",
     "reset_cost_curves",
-    "reset_runtime_actuator_cost",
 ]

@@ -680,7 +680,6 @@ class EngineArgs:
     # bootstraps the HiMA runtime when either is true. There is no master
     # toggle — callers must choose explicitly.
     hima_l1_enabled: bool = CacheConfig.hima_l1_enabled
-    hima_l2_enabled: bool = CacheConfig.hima_l2_enabled
 
     mamba_backend: MambaBackendEnum = MambaBackendEnum.TRITON
     enable_mamba_cache_stochastic_rounding: bool = (
@@ -1775,7 +1774,6 @@ class EngineArgs:
             mamba_block_size=self.mamba_block_size,
             mamba_cache_mode=self.mamba_cache_mode,
             hima_l1_enabled=self.hima_l1_enabled,
-            hima_l2_enabled=self.hima_l2_enabled,
             kv_offloading_size=self.kv_offloading_size,
             kv_offloading_backend=self.kv_offloading_backend,
         )

@@ -440,41 +440,7 @@ class Scheduler(SchedulerInterface):
 
             # Schedule newly needed KV blocks for the request.
             with record_function_or_nullcontext("schedule: allocate_slots"):
-                _hima_admit_done = False
                 while True:
-                    # HiMA: consult admitter once per allocation attempt.
-                    # Two-tier short-circuit so the cost is one attribute
-                    # access (``runtime.admitter``) when L2 is off — no
-                    # function call, no AdmissionDecision allocation,
-                    # no contextlib.suppress frame setup.
-                    if not _hima_admit_done:
-                        _hima_admit_done = True
-                        from vllm.v1.core.hima.integration import (  # noqa: PLC0415
-                            get_runtime,
-                        )
-
-                        _hima_pre = get_runtime()
-                        if _hima_pre is not None and _hima_pre.admitter is not None:
-                            import contextlib  # noqa: PLC0415
-
-                            from vllm.v1.core.hima.config import (  # noqa: PLC0415
-                                PoolKind,
-                            )
-                            from vllm.v1.core.hima.inter_pool.admitter import (  # noqa: PLC0415
-                                AdmissionAction,
-                            )
-
-                            with contextlib.suppress(Exception):
-                                _dec = _hima_pre.decide_admission(PoolKind.KV, 1)
-                                if _dec.action == AdmissionAction.DEFER:
-                                    new_blocks = None
-                                    break
-                                if _dec.needs_remap and _dec.source_pool is not None:
-                                    with contextlib.suppress(Exception):
-                                        _hima_pre.actuator.remap(
-                                            1, _dec.source_pool, _dec.target_pool
-                                        )
-
                     new_blocks = self.kv_cache_manager.allocate_slots(
                         request,
                         num_new_tokens,
@@ -953,30 +919,6 @@ class Scheduler(SchedulerInterface):
 
         with record_function_or_nullcontext("schedule: update_after_schedule"):
             self._update_after_schedule(scheduler_output)
-        # Feed per-step signals into the HiMA telemetry (no-op when disabled).
-        from vllm.v1.core.hima.integration import get_runtime  # noqa: PLC0415
-
-        _hima_runtime = get_runtime()
-        if _hima_runtime is not None:
-            import contextlib  # noqa: PLC0415
-
-            from vllm.v1.core.hima.config import PoolKind  # noqa: PLC0415
-
-            with contextlib.suppress(Exception):
-                _bp = self.kv_cache_manager.block_pool
-                _n_free = _bp.get_num_free_blocks()
-                _n_total = _bp.num_gpu_blocks
-                _usage = 1.0 - _n_free / max(_n_total, 1)
-                _hima_runtime.telemetry.observe(
-                    {
-                        "num_preempted_recent": len(preempted_reqs),
-                        "num_queue_reqs": len(self.waiting),
-                        "usage_kv": _usage,
-                        "usage_rec": _usage,
-                    }
-                )
-                _hima_runtime.telemetry.observe_pool(PoolKind.KV, free_pages=_n_free)
-                _hima_runtime.telemetry.observe_pool(PoolKind.REC, free_pages=_n_free)
         return scheduler_output
 
     def _build_kv_connector_meta(
