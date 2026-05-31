@@ -17,11 +17,11 @@ rewrite **does not regress** the synthetic anchor win (prior was −8.8%;
 −10.8% is within run-to-run variation). As designed, with the long window the
 decay stays inert, so behaviour matches the pre-rewrite hot-heap.
 
-## 2. W2 short-window — ✅ inversion ELIMINATED (mechanistic); cached% within noise (host-limited n)
+## 2. W2 short-window — ✅ inversion ELIMINATED (clean n=3 at conc256)
 
 Short window (60 s) so stale hits decay, util=0.30, conc 128/256, GPUs 2,3.
-**The host wedged 3× on 2026-05-31** (CUDA-init), capping completed trials at
-baseline n=2 / l1 n=1 — see README host note.
+(The host wedged 3× mid-day; the clean n=3 below was assembled by clearing
+leaked GPU workers and running the missing cells in small batches.)
 
 ### The decisive, robust signal: decay engages
 
@@ -37,35 +37,34 @@ evictions to come from the protected set; now stale hits decay to the
 evict/cold tiers and are dropped in LRU order, leaving only genuinely-live
 hits (~4%) protected. **This is the fix working exactly as designed.**
 
-### cached% — the systematic inversion is gone
+### cached% — the systematic inversion is gone (n=3)
 
-| | pre-fix (w=3600), n=3 | post-fix (w=60) |
+| | pre-fix (w=3600), n=3 | post-fix (w=60), n=3 |
 |---|---|---|
-| conc256 baseline | 3.55 % | 3.19 % (n=2: 3.65, 2.74) |
-| conc256 **l1_only** | **1.46 %** (−2.1pp, *every* trial lower) | **3.73 %** (n=1; within baseline spread) |
-| conc128 baseline | 6.16 % | 6.17 % (n=2: 6.64, 5.70) |
-| conc128 **l1_only** | 5.99 % | 4.56 % (n=1; within noisy spread) |
+| conc256 baseline | 3.55 % | 3.32 % ±0.41 [3.65, 2.74, 3.58] |
+| conc256 **l1_only** | **1.46 %** (−2.1pp, *every* trial lower) | **3.20 % ±0.54** [3.73, 3.40, 2.46] → **Δ −0.13pp** |
+| conc128 baseline | 6.16 % | 6.03 % ±0.43 [6.64, 5.70, 5.76] |
+| conc128 **l1_only** | 5.99 % | 4.86 % ±1.02 [4.56, 3.78, 6.23] → Δ −1.18pp |
 
-Pre-fix, L1 sat a **systematic −2.1pp below** LRU at conc256 on *every* trial.
-Post-fix, L1's points fall **inside** the (very noisy) baseline spread —
-baseline itself swings ±0.9pp between trials at this degenerate thrash regime
-(1–7 % hit for everyone). So the reproducible deficit is **gone**; L1 is now
-indistinguishable from LRU within noise. L1 does **not win** on W2 (expected —
-no cross-session shared anchor to protect, verify/9), it just no longer
-*loses*.
+**conc256 (the decisive max-pressure case where pre-fix L1 was −2.1pp below
+LRU on *every* trial): the inversion is gone** — Δ = −0.13pp with overlapping
+±0.4–0.5 error bars, i.e. L1 is now statistically indistinguishable from LRU.
 
-### Caveat / what's left
+At conc128 L1 is nominally −1.18pp lower, but with large variance (±1.02; one
+trial 6.23 ≈ baseline) — error bars overlap baseline's, so it is
+noise-dominated, not a clean deficit. This is a degenerate thrash regime
+(1–7 % hit for everyone), inherently high-variance.
 
-cached% here is not a clean n=3 (host instability) and the regime is
-inherently high-variance, so the cached% claim rests on "within noise", not a
-crisp number. The **mechanistic** result (protected-evict 37%→~4%) is the
-decisive, reproducible evidence that the fix engages. A clean W2 n=3 should be
-re-run when the host is stable.
+L1 does **not win** on W2 (expected — no cross-session shared anchor to
+protect, verify/9); it just no longer systematically *loses*. The decisive,
+reproducible evidence is the **mechanistic** protected-evict 37%→~4%: the
+decay engages and stale hits stop pinning the heap.
 
 ## Verdict
 
 - ✅ Path A win preserved (−10.8%, clean n=3) — no regression.
-- ✅ W2 systematic inversion eliminated — decay engages (protected 37%→~4%),
-  L1 now ≈ LRU within noise instead of −2.1pp below.
+- ✅ W2 systematic inversion eliminated — decay engages (protected 37%→~4%);
+  at conc256 (n=3) L1 = LRU within noise (Δ −0.13pp) instead of −2.1pp below
+  on every trial pre-fix.
 - L1's value remains regime-specific: it wins where a shared anchor is under
   pressure (Path A), and now safely matches LRU where there isn't (W2).
