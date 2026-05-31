@@ -119,6 +119,17 @@ class LPBFreeBlockQueue:
         self._c_curve = None  # bound method: c_kv_ms or c_m_ms
         # Memoise ``c_curve(depth)``; depths are small integers (1..~30).
         self._c_cache: dict[int, float] = {}
+        # --- analysis instrumentation (cheap; counts only) -----------------
+        # Whether L1's hot-heap actually *engages*: popleft serves cold
+        # (n_b==0, LRU-order) first and only evicts a hot (hit) block when
+        # cold is exhausted. So ``_ev_hot`` > 0 means real pressure forced
+        # eviction of a hit-bearing block — the regime where LPB ordering
+        # can differ from LRU. ``_ev_hot==0`` for a whole run ⇒ L1 ≡ LRU on
+        # that workload (the hot-heap never mattered). Logged every 2000
+        # evictions at INFO so a run is analyzable post-hoc.
+        self._ev_cold = 0
+        self._ev_hot = 0
+        self._ev_total = 0
 
     # ----------------------- legacy attribute ---------------------------- #
 
@@ -132,12 +143,29 @@ class LPBFreeBlockQueue:
         if self._cold.num_free_blocks > 0:
             b = self._cold.popleft()
             del self._loc[b.block_id]
+            self._note_evict(1, 0)
             return b
         if not self._hot.is_empty():
             block_id, _ = self._hot.popmin()
             del self._loc[block_id]
+            self._note_evict(0, 1)
             return self._blocks_by_id[block_id]
         raise ValueError("No free blocks available")
+
+    def _note_evict(self, n_cold: int, n_hot: int) -> None:
+        """verify/9 analysis: track eviction source (cold FIFO vs hot LPB
+        heap) so we can tell whether L1's hot-heap actually engaged."""
+        self._ev_cold += n_cold
+        self._ev_hot += n_hot
+        self._ev_total += n_cold + n_hot
+        if self._ev_total % 2000 == 0:
+            logger.info(
+                "[hima/lpb] evicts tot=%d cold=%d hot=%d (hot=%.1f%%) | "
+                "free: cold=%d hot=%d",
+                self._ev_total, self._ev_cold, self._ev_hot,
+                100.0 * self._ev_hot / max(self._ev_total, 1),
+                self._cold.num_free_blocks, len(self._hot),
+            )
 
     def popleft_n(self, n: int) -> list[KVCacheBlock]:
         if n == 0:
@@ -152,8 +180,10 @@ class LPBFreeBlockQueue:
             loc = self._loc
             for b in ret:
                 del loc[b.block_id]
+            self._note_evict(n, 0)
             return ret
         # Drain cold first, then take the remainder from hot.
+        self._note_evict(cold_n, n - cold_n)
         ret = self._cold.popleft_n(cold_n)
         loc = self._loc
         for b in ret:
