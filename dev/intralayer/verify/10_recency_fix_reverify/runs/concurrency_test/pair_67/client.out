@@ -1,0 +1,170 @@
+[mini-swe] loaded 256 SWE-Bench-Lite instances
+
+==== [W2] concurrency=256 turns=16 max_tokens=256 ramp/agent=0.03s ====
+{
+  "concurrency": 256,
+  "num_turns": 16,
+  "max_tokens": 256,
+  "n_unique_instances": 256,
+  "runtime_sec": 459.84,
+  "num_requests": 4096,
+  "total_input_tokens": 24919677,
+  "total_output_tokens": 314303,
+  "output_throughput_tok_s": 683.5,
+  "overall_prefix_cache_hit_rate": 0.0015,
+  "overall_prompt_cached_ratio": 0.0132,
+  "overall_prompt_tokens": 24919677.0,
+  "overall_prompt_tokens_cached": 328416.0,
+  "overall_preemptions": 56.0,
+  "final_kv_usage_perc": 0.0,
+  "avg_ttft_ms": 19453.3,
+  "p50_ttft_ms": 19082.1,
+  "p95_ttft_ms": 35556.6,
+  "p99_ttft_ms": 36190.3,
+  "by_turn": [
+    {
+      "turn": 0,
+      "n": 256,
+      "avg_prompt_tokens": 826.2,
+      "avg_completion_tokens": 150.0,
+      "avg_ttft_ms": 4435.8,
+      "p50_ttft_ms": 4198.9,
+      "p95_ttft_ms": 10549.9
+    },
+    {
+      "turn": 1,
+      "n": 256,
+      "avg_prompt_tokens": 1647.6,
+      "avg_completion_tokens": 66.2,
+      "avg_ttft_ms": 9837.2,
+      "p50_ttft_ms": 11305.1,
+      "p95_ttft_ms": 12117.4
+    },
+    {
+      "turn": 2,
+      "n": 256,
+      "avg_prompt_tokens": 2081.8,
+      "avg_completion_tokens": 70.6,
+      "avg_ttft_ms": 10549.3,
+      "p50_ttft_ms": 10375.9,
+      "p95_ttft_ms": 12068.1
+    },
+    {
+      "turn": 3,
+      "n": 256,
+      "avg_prompt_tokens": 2594.4,
+      "avg_completion_tokens": 67.9,
+      "avg_ttft_ms": 11555.5,
+      "p50_ttft_ms": 11603.1,
+      "p95_ttft_ms": 14655.6
+    },
+    {
+      "turn": 4,
+      "n": 256,
+      "avg_prompt_tokens": 4198.4,
+      "avg_completion_tokens": 72.5,
+      "avg_ttft_ms": 13335.5,
+      "p50_ttft_ms": 12907.0,
+      "p95_ttft_ms": 17307.3
+    },
+    {
+      "turn": 5,
+      "n": 256,
+      "avg_prompt_tokens": 4552.9,
+      "avg_completion_tokens": 72.4,
+      "avg_ttft_ms": 15536.3,
+      "p50_ttft_ms": 15915.9,
+      "p95_ttft_ms": 19610.0
+    },
+    {
+      "turn": 6,
+      "n": 256,
+      "avg_prompt_tokens": 5581.4,
+      "avg_completion_tokens": 70.2,
+      "avg_ttft_ms": 17535.4,
+      "p50_ttft_ms": 17367.2,
+      "p95_ttft_ms": 22565.0
+    },
+    {
+      "turn": 7,
+      "n": 256,
+      "avg_prompt_tokens": 5853.6,
+      "avg_completion_tokens": 67.8,
+      "avg_ttft_ms": 19277.2,
+      "p50_ttft_ms": 19062.7,
+      "p95_ttft_ms": 26828.9
+    },
+    {
+      "turn": 8,
+      "n": 256,
+      "avg_prompt_tokens": 6177.5,
+      "avg_completion_tokens": 63.2,
+      "avg_ttft_ms": 20845.4,
+      "p50_ttft_ms": 19831.7,
+      "p95_ttft_ms": 32532.0
+    },
+    {
+      "turn": 9,
+      "n": 256,
+      "avg_prompt_tokens": 6966.7,
+      "avg_completion_tokens": 65.4,
+      "avg_ttft_ms": 22416.9,
+      "p50_ttft_ms": 21556.1,
+      "p95_ttft_ms": 31222.3
+    },
+    {
+      "turn": 10,
+      "n": 256,
+      "avg_prompt_tokens": 7404.1,
+      "avg_completion_tokens": 69.5,
+      "avg_ttft_ms": 23384.8,
+      "p50_ttft_ms": 23842.5,
+      "p95_ttft_ms": 27109.8
+    },
+    {
+      "turn": 11,
+      "n": 256,
+      "avg_prompt_tokens": 7916.6,
+      "avg_completion_tokens": 76.1,
+      "avg_ttft_ms": 25002.5,
+      "p50_ttft_ms": 26089.2,
+      "p95_ttft_ms": 30994.8
+    },
+    {
+      "turn": 12,
+      "n": 256,
+      "avg_prompt_tokens": 9528.7,
+      "avg_completion_tokens": 77.2,
+      "avg_ttft_ms": 28049.2,
+      "p50_ttft_ms": 29575.7,
+      "p95_ttft_ms": 35165.4
+    },
+    {
+      "turn": 13,
+      "n": 256,
+      "avg_prompt_tokens": 9888.0,
+      "avg_completion_tokens": 76.6,
+      "avg_ttft_ms": 31007.9,
+      "p50_ttft_ms": 33221.9,
+      "p95_ttft_ms": 36029.4
+    },
+    {
+      "turn": 14,
+      "n": 256,
+      "avg_prompt_tokens": 10920.7,
+      "avg_completion_tokens": 81.4,
+      "avg_ttft_ms": 31708.3,
+      "p50_ttft_ms": 34973.1,
+      "p95_ttft_ms": 36274.4
+    },
+    {
+      "turn": 15,
+      "n": 256,
+      "avg_prompt_tokens": 11204.1,
+      "avg_completion_tokens": 80.8,
+      "avg_ttft_ms": 26776.1,
+      "p50_ttft_ms": 31569.3,
+      "p95_ttft_ms": 36201.5
+    }
+  ]
+}

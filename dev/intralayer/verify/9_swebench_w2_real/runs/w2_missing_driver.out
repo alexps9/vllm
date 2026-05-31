@@ -1,0 +1,13 @@
+==== baseline_t3 start 19:38:42 ====
+[baseline] vllm serve TP=2 util=0.30 max_len=65536 max_seqs=64
+pid=2058289
+baseline_t3 client rc=0
+ 2058289==== l1_only_t2 start 19:51:31 ====
+[l1_only] vllm serve TP=2 util=0.30 max_len=65536 max_seqs=64
+pid=2189671
+l1_only_t2 client rc=0
+ 2189671==== l1_only_t3 start 20:04:19 ====
+[l1_only] vllm serve TP=2 util=0.30 max_len=65536 max_seqs=64
+pid=2322372
+l1_only_t3 client rc=0
+ 2322372MISSING-CELLS DONE 20:17:00

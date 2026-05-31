@@ -1,0 +1,31 @@
+==== [verify/9] baseline_t1 : starting server (baseline) on GPUs=2,3 ====
+[baseline] vllm serve TP=2 util=0.30 max_len=65536 max_seqs=64
+pid=3753109
+[verify/9] baseline_t1: server healthy, launching W2 client
+[verify/9] baseline_t1: client done rc=0
+ 3753109==== [verify/9] l1_only_t1 : starting server (l1_only) on GPUs=2,3 ====
+[l1_only] vllm serve TP=2 util=0.30 max_len=65536 max_seqs=64
+pid=3884128
+[verify/9] l1_only_t1: server healthy, launching W2 client
+[verify/9] l1_only_t1: client done rc=0
+ 3884128==== [verify/9] baseline_t2 : starting server (baseline) on GPUs=2,3 ====
+[baseline] vllm serve TP=2 util=0.30 max_len=65536 max_seqs=64
+pid=4018057
+[verify/9] baseline_t2: server healthy, launching W2 client
+[verify/9] baseline_t2: client done rc=0
+ 4018057==== [verify/9] l1_only_t2 : starting server (l1_only) on GPUs=2,3 ====
+[l1_only] vllm serve TP=2 util=0.30 max_len=65536 max_seqs=64
+pid=4143230
+[verify/9] server pid died during startup; see /data/yuzhou/projects/vllm-songyang/dev/intralayer/verify/9_swebench_w2_real/runs/pressure_w60/server_l1_only_t2.log
+[verify/9] l1_only_t2: server never became healthy — skipping cell
+==== [verify/9] baseline_t3 : starting server (baseline) on GPUs=2,3 ====
+[baseline] vllm serve TP=2 util=0.30 max_len=65536 max_seqs=64
+pid=4152021
+[verify/9] server pid died during startup; see /data/yuzhou/projects/vllm-songyang/dev/intralayer/verify/9_swebench_w2_real/runs/pressure_w60/server_baseline_t3.log
+[verify/9] baseline_t3: server never became healthy — skipping cell
+==== [verify/9] l1_only_t3 : starting server (l1_only) on GPUs=2,3 ====
+[l1_only] vllm serve TP=2 util=0.30 max_len=65536 max_seqs=64
+pid=4161253
+[verify/9] server pid died during startup; see /data/yuzhou/projects/vllm-songyang/dev/intralayer/verify/9_swebench_w2_real/runs/pressure_w60/server_l1_only_t3.log
+[verify/9] l1_only_t3: server never became healthy — skipping cell
+[verify/9] all cells done
