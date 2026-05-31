@@ -11,6 +11,12 @@ path counter):
   - [`intralayer/sglang.md`](intralayer/sglang.md) — sglang LPB counterpart
   - [`intralayer/scenarios.md`](intralayer/scenarios.md) — shared Phase A→H workload pipeline
   - [`intralayer/verify/INDEX.md`](intralayer/verify/INDEX.md) — per-scenario n=3 verifications
+- **[`dev/interlayer/`](interlayer/)** — the cross-pool / page-size **bubble**
+  in hybrid models (problem-proof stage). Mirrors sglang's `dev/interlayer/`.
+  - [`interlayer/design.md`](interlayer/design.md) — why vLLM's bubble is a
+    *page-size* (internal-frag) bubble, not sglang's fixed-split bubble
+  - [`interlayer/0_page_bubble/`](interlayer/0_page_bubble/) — proof: block_size
+    inflates to 1056 → **42.6%** KV waste on 106 real CC sessions
 
 > **Removed features** (2026-05): **L2** (admitter + budgeter + cross-pool
 > planner) measured neutral (≈ LRU) and was deleted — investigation archived

@@ -1,0 +1,66 @@
+{
+  "16": {
+    "block_size": 16,
+    "workload_weighted_waste_pct": 0.6881617961842927,
+    "total_waste_tokens": 76113,
+    "total_new_tokens": 11060335,
+    "median_session_waste_pct": 0.34404023562474206,
+    "p95_session_waste_pct": 2.0628105676463697
+  },
+  "32": {
+    "block_size": 32,
+    "workload_weighted_waste_pct": 1.3388473314777536,
+    "total_waste_tokens": 148081,
+    "total_new_tokens": 11060335,
+    "median_session_waste_pct": 0.707892771633869,
+    "p95_session_waste_pct": 3.9587391370436036
+  },
+  "64": {
+    "block_size": 64,
+    "workload_weighted_waste_pct": 2.6127327969722436,
+    "total_waste_tokens": 288977,
+    "total_new_tokens": 11060335,
+    "median_session_waste_pct": 1.3716615899311324,
+    "p95_session_waste_pct": 7.663387773312345
+  },
+  "128": {
+    "block_size": 128,
+    "workload_weighted_waste_pct": 5.264659705153596,
+    "total_waste_tokens": 582289,
+    "total_new_tokens": 11060335,
+    "median_session_waste_pct": 2.7070052519988694,
+    "p95_session_waste_pct": 15.382286039931422
+  },
+  "256": {
+    "block_size": 256,
+    "workload_weighted_waste_pct": 10.52337926473294,
+    "total_waste_tokens": 1163921,
+    "total_new_tokens": 11060335,
+    "median_session_waste_pct": 5.127077590733807,
+    "p95_session_waste_pct": 31.34382888840042
+  },
+  "512": {
+    "block_size": 512,
+    "workload_weighted_waste_pct": 20.948235293053962,
+    "total_waste_tokens": 2316945,
+    "total_new_tokens": 11060335,
+    "median_session_waste_pct": 10.71118938131266,
+    "p95_session_waste_pct": 62.81412206579167
+  },
+  "1056": {
+    "block_size": 1056,
+    "workload_weighted_waste_pct": 42.619332958721415,
+    "total_waste_tokens": 4713841,
+    "total_new_tokens": 11060335,
+    "median_session_waste_pct": 20.686801806883974,
+    "p95_session_waste_pct": 129.55945688304482
+  },
+  "2112": {
+    "block_size": 2112,
+    "workload_weighted_waste_pct": 85.09674435720075,
+    "total_waste_tokens": 9411985,
+    "total_new_tokens": 11060335,
+    "median_session_waste_pct": 42.77745228292217,
+    "p95_session_waste_pct": 270.07240761590197
+  }
+}
