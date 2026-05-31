@@ -27,8 +27,12 @@ OUT_TAG=pressure_w60 VLLM_HIMA_HPB_WINDOW_S=60 VLLM_UTIL=0.30 \
   bash dev/intralayer/verify/9_swebench_w2_real/run.sh
 ```
 
-> **Host note:** do **not** run two GPU jobs concurrently on this host — it
-> triggers a CUDA-init wedge (3 times on 2026-05-31). Run sequentially. Wedged
-> `vllm serve` ignore SIGTERM; the W2 harness now SIGKILLs them.
+> **Collect data ISOLATED (one job at a time).** Two reasons, both measured
+> (see RESULTS §3): (1) concurrency inflates measurement variance ~2.5× (Path A
+> PhaseH ±6.8→±16.8 ms across 3 simultaneous identical jobs) — enough to blur a
+> ~10% effect in a single run; (2) the CUDA-init host wedge is intermittent and
+> fired 3× on 2026-05-31. Wedged `vllm serve` ignore SIGTERM; the W2 harness now
+> SIGKILLs them. Concurrency does NOT introduce a fixed per-pair bias (an
+> apparent NUMA gradient did not replicate).
 
 ## Results → [`RESULTS.md`](RESULTS.md)

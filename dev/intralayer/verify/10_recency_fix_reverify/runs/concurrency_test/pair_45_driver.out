@@ -1,0 +1,5 @@
+[4,5:8022] start 20:41:18
+[l1_only] vllm serve TP=2 util=0.30 max_len=65536 max_seqs=64
+pid=2685075
+[4,5:8022] client rc=0 20:50:06
+ 2685075
