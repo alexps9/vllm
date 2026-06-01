@@ -102,6 +102,12 @@ class LPBPriorityQueue(Generic[K]):
         """Remove ``key``; idempotent for already-removed keys."""
         if self._current_seq.pop(key, None) is not None:
             self._score.pop(key, None)
+            # remove() shrinks the logical set without touching ``_heap`` —
+            # a remove-dominated drain (e.g. an allocation burst re-acquiring
+            # many free hot blocks) would otherwise leave the heap fully stale
+            # and re-create the #99 O(stale) popmin spike. Compact here too;
+            # the ``max(8, …)`` floor keeps it from thrashing on small queues.
+            self._maybe_compact()
 
     def peek(self) -> tuple[K, float]:
         """Return ``(key, score)`` of the lowest-scoring entry."""
