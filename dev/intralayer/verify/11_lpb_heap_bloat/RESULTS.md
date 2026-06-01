@@ -67,6 +67,19 @@ decisions are unchanged; amortized O(1) per op; bounds `_heap` to `8× logical`.
 > audit also confirmed (differential test, 200 trials × 400 mixed ops) the
 > compaction is behaviour-equivalent and the heap invariant holds.
 
+> **Final safety audit (agent `ab253da7`) — CLEAN, no code change needed.**
+> Confirmed the all-three-paths compaction is behaviour-equivalent (differential
+> test 40 seeds × 4000 mixed ops incl. 7 remove-triggered compactions — every
+> observable agrees; the live `LPBFreeBlockQueue` produced a **byte-identical
+> `popleft` eviction order** with vs without compaction). No thrash: amortized
+> **O(1)** even on the remove path (min 449 ops between compactions; 5
+> compactions / 100k ops = 1.14 rebuild-units/op). Goal delivered: the
+> remove-drain worst case popmin = **18 µs vs 171 ms** without (≈9,400×). Only
+> residual = a benign ~25–30% raw ns/op cost on a *pure remove-only-no-pop*
+> drain — which merely does steadily what the leaky version defers into the
+> 171 ms spike; net neutral-to-faster on any traffic that eventually pops. Not a
+> regression.
+
 ## Regression coverage (`tests/v1/core/test_hima_lpb_recency.py`)
 - `test_lpb_pq_add_remove_churn_bounded_and_correct` — 5000×256 cycles, **non-
   uniform changing scores**, asserts an **absolute** mid-loop heap bound (not
