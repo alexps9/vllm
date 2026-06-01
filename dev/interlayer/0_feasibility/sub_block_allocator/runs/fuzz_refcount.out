@@ -1,0 +1,9 @@
+every-op check (K=33): {"n_pages": 200, "K": 33, "n_ops": 20000, "seed": 0, "check_every": 1, "max_ref_cnt_seen": 0, "max_ref_cnt_during": 71, "shared_touch_ops": 5039, "evicts": 21101, "mamba_starve": 3291, "leak_free": true}
+K=33 seed=0: {"n_pages": 400, "K": 33, "n_ops": 150000, "seed": 0, "check_every": 500, "max_ref_cnt_seen": 0, "max_ref_cnt_during": 297, "shared_touch_ops": 37665, "evicts": 64755, "mamba_starve": 26320, "leak_free": true}
+K=33 seed=1: {"n_pages": 400, "K": 33, "n_ops": 150000, "seed": 1, "check_every": 500, "max_ref_cnt_seen": 0, "max_ref_cnt_during": 270, "shared_touch_ops": 37509, "evicts": 66347, "mamba_starve": 26647, "leak_free": true}
+K=33 seed=2: {"n_pages": 400, "K": 33, "n_ops": 150000, "seed": 2, "check_every": 500, "max_ref_cnt_seen": 0, "max_ref_cnt_during": 278, "shared_touch_ops": 37580, "evicts": 66917, "mamba_starve": 26578, "leak_free": true}
+K=66 seed=0: {"n_pages": 400, "K": 66, "n_ops": 150000, "seed": 0, "check_every": 500, "max_ref_cnt_seen": 0, "max_ref_cnt_during": 284, "shared_touch_ops": 37664, "evicts": 130328, "mamba_starve": 26388, "leak_free": true}
+K=66 seed=1: {"n_pages": 400, "K": 66, "n_ops": 150000, "seed": 1, "check_every": 500, "max_ref_cnt_seen": 0, "max_ref_cnt_during": 249, "shared_touch_ops": 37586, "evicts": 131716, "mamba_starve": 26482, "leak_free": true}
+K=66 seed=2: {"n_pages": 400, "K": 66, "n_ops": 150000, "seed": 2, "check_every": 500, "max_ref_cnt_seen": 0, "max_ref_cnt_during": 248, "shared_touch_ops": 37617, "evicts": 137244, "mamba_starve": 26671, "leak_free": true}
+
+ALL PASS — zero violations; ref_cnt>1 sharing + cached eviction + leak check exercised

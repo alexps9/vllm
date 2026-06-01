@@ -1,50 +1,58 @@
 # sub_block_allocator — RESULTS
 
-**PASS (memory-safety).** A prototype two-level allocator (physical page ↔ K
-sub-blocks; per-sub-block ownership; mamba↔attention↔free page-flip; packing
-bias) survives **3 seeds × 1e6 randomized ops + a genuine adversarial
-max-scatter phase with ZERO invariant violations.** `fuzz_allocator.py` →
-`runs/fuzz.out`.
+**PASS (memory-safety, ref-counted).** The two-level allocator stays
+memory-safe — including the design's *named net-new structures*
+(per-sub-block ref-counting under prefix sharing, the cached-block eviction
+lifecycle, append-only ids) — under heavy randomized fuzz with **zero
+invariant violations**.
 
-## Invariants checked (every op O(1) + full sweep periodically)
+> **Audit correction.** The first model (`fuzz_allocator.py`) was
+> **single-owner only** (`occ[slot]=req`) and so never tested ref_cnt>1,
+> decrement-to-zero, premature-free of a shared block, leak, or the
+> cached-but-unreferenced lifecycle — exactly the design's hard net-new parts
+> (`design.md` net-new structures; gate requires "ref-counts exact"). Its
+> "memory-safe" was therefore only earned for the slab/packing bookkeeping.
+> `fuzz_refcount.py` models the real semantics and is the verification of
+> record.
 
-- no sub-block aliased by two live owners; alloc never returns an occupied slot
-- no use-after-free / wrong-owner free (attention slots and mamba pages)
-- page mode ⇔ occupancy (FREE empty; ATTN 1..K held; MAMBA whole-page, no attn)
-- a page is in `free_pages` **iff** fully empty (the mamba-usable flip)
-- conservation: handle count = occupied sub-blocks; FREE+ATTN+MAMBA = n_pages;
-  free/mamba index sizes match page modes
+## Faithful model (`fuzz_refcount.py`, mirrors `block_pool.py`)
 
-Result across all seeds: **`invariant_violations: 0`** (violations raise, so a
-clean run is a proof for that trace). The random phase exercised heavy
-saturation — ~246k mamba-starve and ~344k attention-OOM events — and every
-one stayed memory-safe.
+- sub-block id = `page*K + slot` — **stable / append-only** (reclaim by
+  eviction, never relocation; `block_pool.py:48-52`).
+- `ref_cnt[id]` = #live requests referencing it; `touch` (prefix-cache hit by
+  another req) → `ref_cnt++`; `free` → `ref_cnt--`; at 0 the block becomes
+  **cached** (kept for reuse, evictable).
+- a page is mamba-usable **iff all K sub-blocks have ref_cnt==0** (cached ones
+  on it are evicted as part of the take).
+- packing bias: fill partially-used attn pages before opening an all-free one.
 
-## Adversarial max-scatter (the genuine test)
+## Results (zero violations everywhere)
 
-Fresh allocator; fill every page with K size-1 reqs, then free all-but-one per
-page → **every page has exactly 1/K slot used, none fully free**:
+every-op check (K=33, 20k ops, `check()` after **every** op): 0 violations.
 
-| check | result | meaning |
-|---|---|---|
-| `adv_starve_when_full` | True | mamba can't get a page when pool full |
-| `adv_starve_max_scatter` | **True** | 1/K used everywhere → mamba **starves** despite (K−1)·n_pages free sub-blocks |
-| `adv_mamba_recovered_after_freeing_one_page` | True | free one page's last slot → it flips FREE → mamba gets it |
+3 seeds × 150k ops, K∈{33,66}, `check()` every 500 ops + drain + leak check:
 
-Invariants held through all of it.
+| K | max ref_cnt during | shared touches | cached evicts | mamba starve | leak | violations |
+|---|---:|---:|---:|---:|---|---:|
+| 33 | 270–297 | ~37.6k | 65k–67k | ~26.5k | clean | **0** |
+| 66 | 248–284 | ~37.6k | 130k–137k | ~26.5k | clean | **0** |
 
-## What this does and does NOT establish
+Invariants enforced (raise on breach): `ref_cnt ≥ 0`; `ref_cnt == #live
+owners`; no NEW-alloc of a `ref_cnt>0` block; no decrement-below-zero; no
+free-of-unowned; mamba page has no live attn refs; mamba pages distinct;
+**leak check** (after draining all requests, every sub-block `ref_cnt==0` and
+every page returned).
 
-- ✅ The two-level allocator **structure is memory-safe** and the page-flip
-  works — the data-structure foundation of the fix is sound.
-- ⚠️ It **reproduces the P1 risk**: genuine max-scatter starves mamba even
-  with abundant free sub-block space. This is **expected** — phase 2 owns
-  *safety*, not *policy*. Whether the packing bias + cost-model reclaim keep
-  this starvation bounded under realistic (not pathological) load is exactly
-  `cost_reclaim/` (phase 3, the make-or-break). The prototype here is the
-  thing phase 3 will drive.
+## What this establishes / scope
 
-Note: this is a standalone prototype, not the vLLM `BlockPool` integration
-(that's implementation, post-gate). It proves the design's allocator *can* be
-safe; the real integration must preserve these invariants under vLLM's
-append-only block-id constraint.
+- ✅ The allocator is **memory-safe under ref-counted prefix sharing**
+  (ref_cnt reached ~290), the **cached eviction lifecycle**, decrement-to-zero
+  with **no premature free and no leak**, and the **mamba↔attention page-flip**
+  — at K∈{33,66}, checked every op on a short trace.
+- ⚠️ Still reproduces the **P1 starvation** (mamba_starve ~26k): under heavy
+  attention pressure mamba can't always get a whole page. Phase 2 owns
+  *safety*; bounding starvation under *realistic* load via cost-model reclaim
+  is `cost_reclaim/` (phase 3).
+- Scope: a standalone prototype, not the vLLM `BlockPool` integration. It
+  proves the design's allocator *can* be safe with the real semantics; the
+  integration must preserve these invariants + the append-only constraint.
