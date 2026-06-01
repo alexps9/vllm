@@ -1,4 +1,4 @@
-# 0_page_bubble — prove the page-size bubble exists in vLLM
+# page_bubble — prove the page-size bubble exists in vLLM
 
 ## Claim
 
@@ -34,15 +34,15 @@ function of block_size:
 ```bash
 # D — offline, no GPU (re-validated 2026-05-31, byte-identical to the
 # original commit 438ad0397):
-.venv/bin/python dev/interlayer/0_page_bubble/counterfactual_block_size.py
-.venv/bin/python dev/interlayer/0_page_bubble/real_session_waste.py
+.venv/bin/python dev/interlayer/0_feasibility/page_bubble/counterfactual_block_size.py
+.venv/bin/python dev/interlayer/0_feasibility/page_bubble/real_session_waste.py
 
 # A — offline size arithmetic:
-.venv/bin/python dev/interlayer/0_page_bubble/inspect_sizes.py
+.venv/bin/python dev/interlayer/0_feasibility/page_bubble/inspect_sizes.py
 
 # A/B/C — need a live hybrid engine on Qwen3.5-35B-A3B (GPU):
-.venv/bin/python dev/interlayer/0_page_bubble/hit_rate_microbench.py
-.venv/bin/python dev/interlayer/0_page_bubble/multi_turn_waste.py
+.venv/bin/python dev/interlayer/0_feasibility/page_bubble/hit_rate_microbench.py
+.venv/bin/python dev/interlayer/0_feasibility/page_bubble/multi_turn_waste.py
 ```
 
 Trace dataset: `dev/intralayer/cc_long_traces.jsonl` (106 real CC sessions).
@@ -55,4 +55,4 @@ for why the prior pcache fix could not address this on hybrid.
 Restored from commit `438ad0397` ("empirical study of vLLM hybrid-model
 BlockPool inflate"), which was deleted with the pcache tree (`7d974f6f6`)
 when pcache (the *wrong* fix) was removed. The bubble proof is sound and
-motivates the interlayer effort (see [`../design.md`](../design.md)).
+motivates the interlayer effort (see [`../../design.md`](../../design.md)).

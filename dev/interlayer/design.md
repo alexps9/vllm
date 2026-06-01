@@ -21,7 +21,7 @@ Qwen3.5-35B-A3B that is **1056 tokens**. Attention KV is then *allocated* in
 1056-token blocks that real requests fill only fractionally → blocks all
 allocated, most of their slots empty. Measured: **42.6% workload-weighted KV
 waste on 106 real CC sessions** (vs 0.69% at the natural granularity); worst
-on small-increment multi-turn agent traffic. Proof: [`0_page_bubble/`](0_page_bubble/).
+on small-increment multi-turn agent traffic. Proof: [`0_feasibility/page_bubble/`](0_feasibility/page_bubble/).
 
 ## The enabling fact (and its precise limit)
 
@@ -141,8 +141,11 @@ verify/6's ≤~3× LRU target).
 
 ## Verification gate
 
-Numbered subdirs, sglang-style. Each phase has a **falsifiable pass bar set
-at the ideal level** (strictly-better-or-equal; zero violations; waste → the
+All pre-implementation **verification**, living as subfolders under
+[`0_feasibility/`](0_feasibility/) (we are not implementing yet; top-level
+`1_…`/`2_…` dirs are reserved for implementation components and stay empty
+until this gate passes). Each check has a **falsifiable pass bar set at the
+ideal level** (strictly-better-or-equal; zero violations; waste → the
 counterfactual floor). Bars tagged *(calibrate)* are first-run-tunable; the
 rest are hard lines. **Implementation starts only if all of 1–7 pass.**
 

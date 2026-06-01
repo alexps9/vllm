@@ -1,4 +1,4 @@
-# 0_page_bubble — RESULTS
+# page_bubble — RESULTS
 
 **Verdict: the page-size bubble is real and large.** On Qwen3.5-35B-A3B the
 forced uniform page inflates attention block_size to 1056 tokens, producing
@@ -69,4 +69,4 @@ targeted the *compute* cost (recomputing the ragged tail) and failed on
 hybrid because mamba is block-granular (can't resume mid-block;
 [`08_hybrid_architectural_blocker.md`](08_hybrid_architectural_blocker.md)).
 The memory bubble is what the interlayer effort should target — by breaking
-the uniform-page constraint (see [`../design.md`](../design.md) "The lever").
+the uniform-page constraint (see [`../../design.md`](../../design.md) "The lever").

@@ -154,7 +154,7 @@ def main() -> None:
         print(f"  p95 session waste %     = {results[B]['p95_session_waste_pct']:>5.1f}%")
 
     # Save raw results
-    out_path = Path("dev/interlayer/0_page_bubble/runs/counterfactual_block_size.json")
+    out_path = Path("dev/interlayer/0_feasibility/page_bubble/runs/counterfactual_block_size.json")
     out_path.write_text(json.dumps(results, indent=2))
     print(f"\nWrote {out_path}")
 
