@@ -1,5 +1,7 @@
 # sub_block_allocator — RESULTS
 
+> ℹ️ **interlayer CLOSED — not pursued.** This check passed (feasibility was never the blocker); the effort was dropped for *value* reasons. See [`../../POSTMORTEM.md`](../../POSTMORTEM.md).
+
 **PASS (memory-safety, ref-counted).** The two-level allocator stays
 memory-safe — including the design's *named net-new structures*
 (per-sub-block ref-counting under prefix sharing, the cached-block eviction

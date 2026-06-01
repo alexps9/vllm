@@ -1,5 +1,7 @@
 # cuda_graph — RESULTS
 
+> ℹ️ **interlayer CLOSED — not pursued.** This check passed (feasibility was never the blocker); the effort was dropped for *value* reasons. See [`../../POSTMORTEM.md`](../../POSTMORTEM.md).
+
 **PASS.** A **scattered** (arbitrary, non-contiguous) sub-block block-table is
 safe under CUDA-graph capture/replay on the real flash-attn kernel: **zero
 replay faults, no recapture**, and scattered output is **bit-identical** to the

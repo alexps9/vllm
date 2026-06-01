@@ -1,5 +1,7 @@
 # decision_cost — RESULTS
 
+> ℹ️ **interlayer CLOSED — not pursued.** This check passed (feasibility was never the blocker); the effort was dropped for *value* reasons. See [`../../POSTMORTEM.md`](../../POSTMORTEM.md).
+
 **PASS (audited ×4). Chosen structure: `IndexedHeap` (eager-delete).** On a
 realistic correlated workload, the per-step "cheapest page to vacate for mamba"
 decision is **incremental** (query **O(1) peek, ~140 ns**, flat across 256× pool

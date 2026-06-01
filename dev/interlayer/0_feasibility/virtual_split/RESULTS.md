@@ -1,5 +1,7 @@
 # virtual_split — RESULTS
 
+> ℹ️ **interlayer CLOSED — not pursued.** This check passed (feasibility was never the blocker); the effort was dropped for *value* reasons. See [`../../POSTMORTEM.md`](../../POSTMORTEM.md).
+
 **Verdict: the kernel runs correctly at sub-page granularity with no kernel
 change (premise holds). It is NOT bit-identical across block sizes — and that
 bar was misconceived: block size inherently changes floating-point reduction
