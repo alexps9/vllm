@@ -20,9 +20,11 @@ pass:
 | [`0_page_bubble/`](0_page_bubble/) | the bubble exists (42.6% on 106 CC sessions) | ✅ done |
 | `1_virtual_split` | attention kernel byte-exact at `kernel_block_size` ≪ page | planned |
 | `2_sub_block_allocator` | two-level allocator: no overlap / no UAF on page flip | planned |
-| `3_mamba_availability` | **make-or-break** — attention scatter doesn't starve mamba of whole pages | planned |
-| `4_prefix_cache` | mixed-granularity prefix cache correct + finer reuse | planned |
-| `5_cuda_graph` | sub-block block-table safe under captured graph | planned |
-| `6_the_win` | waste → `kernel_block_size` counterfactual, no throughput regression | planned |
+| `3_cost_reclaim` | **make-or-break (perf)** — cost-model page reclaim keeps recompute amplification / tail latency / attention starvation bounded | planned |
+| `4_decision_cost` | per-step decision cheap (incremental, ≤~3× LRU); steady-state async | planned |
+| `5_prefix_cache` | mixed-granularity prefix cache correct + finer reuse | planned |
+| `6_cuda_graph` | sub-block block-table safe under captured graph | planned |
+| `7_the_win` | waste → `kernel_block_size` counterfactual, no throughput regression | planned |
 
-Implementation starts only if **all** of 1–6 pass.
+Implementation starts only if **all** of 1–7 pass. **interlayer depends on
+the L2 cost model** (removed/redesigning) — the two efforts are coupled.

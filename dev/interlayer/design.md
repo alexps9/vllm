@@ -99,22 +99,45 @@ Net: the fix applies **unchanged** in `align`, and by freeing whole pages it
 *helps* mamba claim its rolling/snapshot pages. (Replace "indivisible big
 page" everywhere with "whole single page".)
 
-## The one hard property
+## Mamba page availability — a cost decision
 
-**Mamba whole-page availability.** A page held even partially by live
-attention sub-blocks cannot serve a (whole-page) mamba allocation. Under
-attention-heavy or adversarial interleaving, scattered attention sub-blocks
-could starve mamba of whole pages while sub-block space is plentiful.
+When mamba needs a whole page and none is fully free, this is **not a "ran
+out" failure — it is a cost decision**, the same one L1 (recompute cost) and
+L2 (admitter) already model: free the **cheapest** page — evict the attention
+sub-blocks whose prefixes are cheapest to recompute — or, if everything is too
+expensive, preempt/defer via vLLM's existing mechanism (preempting a running
+request frees both its attention and its mamba, so no deadlock). The
+**asymmetry makes this self-correcting**: mamba state is expensive to lose
+(recompute = the whole sequence), attention prefixes are cheap (per-prefix),
+so the cost model naturally protects mamba and evicts attention — with no
+special rule. (`block_pool.py:48-52` keeps block ids immutable / append-only,
+so relocation/compaction is not an option — reclaim is by eviction, not
+movement. Packing bias — fill partially-used attention pages before opening
+fresh ones — keeps fully-free pages plentiful and makes each eviction a clean
+coherent page; it is an optimization for the cost decision.)
 
-The obvious mitigation — **compaction (relocate attention sub-blocks to
-consolidate free pages) — is BLOCKED**: vLLM deliberately keeps block ids
-immutable so block tables stay append-only (`block_pool.py:48-52`); moving a
-sub-block would change its id and break that invariant across the scheduler.
-So the bound must come from **placement, not relocation**: a packing bias
-(fill partially-used attention pages before opening fresh ones, keeping whole
-pages free for mamba) and/or a soft mamba reservation floor. Proving such a
-placement policy bounds mamba starvation under realistic + adversarial load is
-the make-or-break property.
+This makes **interlayer a consumer of the same cost model as L2** (the
+admitter / recompute-cost layer removed in 2026-05 and slated for redesign):
+**an accurate cost model is a prerequisite — the two efforts are coupled.**
+
+The make-or-break is therefore **performance, not correctness**: under
+KV-bound real + adversarial load, does cost-model-driven page reclaim keep
+**recompute amplification, tail latency, and attention-side starvation
+bounded**?
+
+## Cost-model decision-layer performance
+
+The per-step decision (cost-rank the cheapest page to free) sits on the
+scheduler hot path because it gates admission. The async/overlap lever here is
+**different from sglang's**: sglang ran the actuator on a worker thread to hide
+`cuMem` *syscall* latency from the decode stream. vLLM's page reclaim is
+**metadata only (free block ids) — no syscall to hide**, and the recompute
+price is paid later on the normal prefill path (a throughput cost the model
+already counts, not a stall). So the lever is **cheap, incremental decisions,
+not stream overlap**: maintain the "cheapest page to free" incrementally (like
+L1's LPB heap) rather than re-walking structures each time; only steady-state
+rebalance may run async. This per-decision cost must be bounded (echoing
+verify/6's ≤~3× LRU target).
 
 ## Verification gate
 
@@ -126,9 +149,10 @@ begins. (Numbered subdirs, sglang-style.)
 | [`0_page_bubble/`](0_page_bubble/) | the bubble exists (42.6%) | ✅ done |
 | `1_virtual_split` | attention kernel is byte-exact at `kernel_block_size` ≪ page (pin the live value) | GPU correctness probe |
 | `2_sub_block_allocator` | two-level allocator: attention sub-block alloc/free + page mamba↔attention flip, **no byte overlap, no use-after-free**, under concurrent alloc/free | CPU unit tests + invariants |
-| `3_mamba_availability` | **the hard one** — attention sub-block scatter does not starve mamba of whole pages beyond an acceptable bound; compaction/reservation holds under realistic + adversarial load | simulation + e2e stress |
-| `4_prefix_cache` | mixed-granularity prefix cache is correct and reuses finer (32 vs 1056) | unit + e2e hit comparison |
-| `5_cuda_graph` | sub-block block-table shape change is safe under captured-graph replay | captured-graph replay |
-| `6_the_win` | bubble waste drops to the `kernel_block_size` counterfactual with **no throughput regression** | n=3 e2e |
+| `3_cost_reclaim` | **the make-or-break (performance)** — cost-model-driven page reclaim keeps **recompute amplification, tail latency, and attention starvation bounded** under KV-bound real + adversarial load (depends on an accurate cost model) | simulation + e2e stress |
+| `4_decision_cost` | per-step decision is cheap — incremental "cheapest page to free" structure, **bounded hot-path cost** (≤~3× LRU, verify/6-style); steady-state rebalance async | microbench |
+| `5_prefix_cache` | mixed-granularity prefix cache is correct and reuses finer (≈`ksize` vs 1056) | unit + e2e hit comparison |
+| `6_cuda_graph` | sub-block block-table shape change is safe under captured-graph replay | captured-graph replay |
+| `7_the_win` | bubble waste drops to the `kernel_block_size` counterfactual with **no throughput regression** | n=3 e2e |
 
-Implementation starts only if **all** of 1–6 pass.
+Implementation starts only if **all** of 1–7 pass.
