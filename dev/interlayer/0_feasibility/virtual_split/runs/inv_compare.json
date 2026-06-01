@@ -1,0 +1,33 @@
+{
+  "kernel_block_size_invariant_16_vs_32": false,
+  "per_prompt": [
+    {
+      "prompt": 0,
+      "n16": 55,
+      "n32": 55,
+      "tokens_bit_identical": true,
+      "first_logprob_equal": false
+    },
+    {
+      "prompt": 1,
+      "n16": 128,
+      "n32": 128,
+      "tokens_bit_identical": true,
+      "first_logprob_equal": false
+    },
+    {
+      "prompt": 2,
+      "n16": 128,
+      "n32": 128,
+      "tokens_bit_identical": false,
+      "first_logprob_equal": false
+    },
+    {
+      "prompt": 3,
+      "n16": 128,
+      "n32": 128,
+      "tokens_bit_identical": true,
+      "first_logprob_equal": false
+    }
+  ]
+}

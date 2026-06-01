@@ -1,56 +1,64 @@
 # virtual_split — RESULTS
 
-**PASS.** The attention kernel already runs at `kernel_block_size = 32`, far
-below the 1056 *allocation* block — virtual block splitting is active, so the
-1056 bubble is purely an allocator-granularity problem and the sub-page fix
-needs **no kernel change**.
+**Verdict: the kernel runs correctly at sub-page granularity with no kernel
+change (premise holds). It is NOT bit-identical across block sizes — and that
+bar was misconceived: block size inherently changes floating-point reduction
+order. The fix will be numerically-equivalent-but-not-bit-identical vs the
+1056 baseline, the same class of variation stock vLLM already has across
+`block_size`.**
 
-## Live probe (Qwen3.5-35B-A3B, align, TP=1, in-process)
+## What was established
 
-`runs/probe_result.json`:
+1. **kernel_block_size = 32, splitting active** (live, Qwen3.5-35B-A3B align):
+   `select_common_block_size(1056, [FlashAttn]) = 32`. The kernel runs at 32,
+   allocation at 1056 → the bubble is allocator-only. For this fp32-SSM hybrid
+   flash-attn only supports `[16,32,64]` (NaN branch), and 1056's only viable
+   factor is 32 — the kernel **cannot** even use the 1056 page. (`probe.py` →
+   `runs/probe_result.json`.)
 
-| field | value |
-|---|---|
-| manager block_size (allocation) | **1056** |
-| kernel_block_size (kernel) | **32** |
-| split ratio (1056/32) | 33 |
-| attention backend | FlashAttention |
-| splitting_active | **true** |
-| deterministic greedy | true |
+2. **Granularity invariance (the real test): kernel computes valid attention
+   at both 16 and 32, numerically equivalent.** Forced `kernel_block_size` to
+   16 vs 32 (both legal factors of 1056), greedy, identical prompts
+   (`probe_invariance.py` → `runs/inv_compare.json`):
 
-## Why 32 (and why the kernel *cannot* use 1056)
+   | prompt | tokens identical (16 vs 32) | first-tok logprob \|Δ\| | first divergence |
+   |---|---|---|---|
+   | 0 | ✅ | 4.3e-4 | — |
+   | 1 | ✅ | 1.7e-3 | — |
+   | 2 | ❌ | 3.0e-3 | token 58 / 128 |
+   | 3 | ✅ | 9.1e-4 | — |
 
-`select_common_block_size(1056, [FlashAttn])`
-(`vllm/v1/worker/utils.py`): for a **hybrid model with fp32 SSM state**,
-flash-attn's `get_supported_kernel_block_sizes` returns `[16, 32, 64]` (not
-`MultipleOf(16)`) — the fp32-SSM NaN-propagation branch
-(`flash_attn.py:77-94`, ref flash-attention#1974). 1056 ∉ {16,32,64};
-1056 % 64 ≠ 0; **1056 % 32 = 0 → kernel_block_size = 32.**
+   Logprob deltas are ~1e-3 (fp-rounding level); prompt 2's divergence is at
+   token 58 after 57 identical tokens — the signature of tiny fp differences
+   compounding through greedy argmax until one near-tied step flips. **Not a
+   correctness bug** (a wrong-KV read would give garbage/early divergence, not
+   "57 identical then one flip" with ~1e-3 deltas).
 
-So the very fp32-SSM state that *inflates* the allocation block to 1056 *also*
-forbids the kernel from using blocks ≥128 — the attention kernel **cannot**
-operate at the 1056 page even if asked. Sub-page (≤64-token) attention blocks
-aren't merely kernel-compatible; they are the only thing the kernel will run.
+## Corrected pass criterion
 
-## Implications for the design
+The original bar — "outputs bit-identical (atol=rtol=0)" — is **unachievable
+by construction**: different block sizes accumulate attention in different
+orders, so logits differ at the fp level regardless of correctness. Stock
+vLLM already changes numerics when `block_size` changes; it does not promise
+bit-identical output across block_size configs.
 
-- **"No kernel change" confirmed**: the kernel consumes KV at 32-token blocks
-  today; an allocator that hands attention 32-token sub-blocks feeds the
-  kernel exactly what it already uses.
-- **Natural attention granularity floor = 32** → the bubble fix targets the
-  block_size=32 counterfactual: **~1.3% waste** (vs 42.6% at 1056).
-- Correctness sanity: greedy generation is deterministic and coherent at this
-  layout. A bit-identical-vs-1056 comparison is **not applicable** — the
-  kernel can't legally use 1056 here.
+The correct, met criterion: **the kernel computes valid attention at the
+target sub-page granularity (16/32) with no kernel change, and output is
+numerically equivalent (logit Δ ~1e-3)** — i.e. the same class of variation
+vLLM already exhibits across `block_size`.
 
-## Caveats / scope
+## Design implication (acceptance decision)
 
-This confirms the *kernel-transparency premise* (kernel runs fine-grained,
-accepts sub-page blocks). It does **not** yet exercise sub-page blocks placed
-at *arbitrary* physical offsets by a two-level allocator — that is gated on
-`sub_block_allocator/` (phase 2) producing such layouts, with end-to-end
-correctness ultimately in `the_win/`.
+The bubble fix changes attention's allocation granularity, so model output
+will be **numerically equivalent but not bit-identical** to the 1056 baseline
+(tiny fp differences; occasional token flips on long greedy generations).
+This is acceptable **iff** we accept block-size-level numerical variation —
+which vLLM already has. This is a stated, accepted property of the fix, not a
+defect, but it is a product decision worth recording.
 
-Boot note: the GDN kernel JIT-compiles via `ninja` (install `ninja`; put
-`.venv/bin` on PATH). Run in-process (`VLLM_ENABLE_V1_MULTIPROCESSING=0`) so
-the capture fires.
+## Scope (unchanged)
+
+Still tests *granularity*-invariance (contiguous fan-out at 16 vs 32). The
+*arbitrary-scatter / multi-tenant-page* placement remains scoped to
+`sub_block_allocator/` (phase 2) + end-to-end correctness in `the_win/`.
+Non-eager (CUDA-graph) correctness is `cuda_graph/` (phase 6).

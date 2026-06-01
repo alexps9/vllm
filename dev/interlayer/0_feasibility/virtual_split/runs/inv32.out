@@ -1,0 +1,73 @@
+INFO 06-01 05:18:52 [utils.py:278] non-default args: {'trust_remote_code': True, 'max_model_len': 8192, 'enable_prefix_caching': True, 'gpu_memory_utilization': 0.85, 'disable_log_stats': True, 'enforce_eager': True, 'model': 'Qwen/Qwen3.5-35B-A3B'}
+WARNING 06-01 05:18:52 [arg_utils.py:1557] The global random seed is set to 0. Since VLLM_ENABLE_V1_MULTIPROCESSING is set to False, this may affect the random state of the Python process that launched vLLM.
+INFO 06-01 05:18:52 [model.py:617] Resolved architecture: Qwen3_5MoeForConditionalGeneration
+INFO 06-01 05:18:52 [model.py:1752] Using max model len 8192
+INFO 06-01 05:18:52 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=16384.
+WARNING 06-01 05:18:52 [config.py:355] Mamba cache mode is set to 'align' for Qwen3_5MoeForConditionalGeneration by default when prefix caching is enabled
+INFO 06-01 05:18:52 [config.py:375] Warning: Prefix caching in Mamba cache 'align' mode is currently enabled. Its support for Mamba layers is experimental. Please report any issues you may observe.
+INFO 06-01 05:18:52 [vllm.py:977] Asynchronous scheduling is enabled.
+WARNING 06-01 05:18:52 [vllm.py:1033] Enforce eager set, disabling torch.compile and CUDAGraphs. This is equivalent to setting -cc.mode=none -cc.cudagraph_mode=none
+WARNING 06-01 05:18:52 [vllm.py:1058] Inductor compilation was disabled by user settings, optimizations settings that are only active during inductor compilation will be ignored.
+INFO 06-01 05:18:52 [kernel.py:270] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['vllm_c', 'native'], fused_add_rms_norm=['vllm_c', 'native'])
+INFO 06-01 05:18:52 [vllm.py:1234] Cudagraph is disabled under eager mode
+INFO 06-01 05:18:52 [compilation.py:312] Enabled custom fusions: norm_quant, act_quant
+[transformers] `Qwen2VLImageProcessorFast` is deprecated. The `Fast` suffix for image processors has been removed; use `Qwen2VLImageProcessor` instead.
+[transformers] The `use_fast` parameter is deprecated and will be removed in a future version. Use `backend="torchvision"` instead of `use_fast=True`, or `backend="pil"` instead of `use_fast=False`.
+INFO 06-01 05:19:09 [core.py:109] Initializing a V1 LLM engine (v0.1.dev16524+g861c81270) with config: model='Qwen/Qwen3.5-35B-A3B', speculative_config=None, tokenizer='Qwen/Qwen3.5-35B-A3B', skip_tokenizer_init=False, tokenizer_mode=auto, revision=None, tokenizer_revision=None, trust_remote_code=True, dtype=torch.bfloat16, max_seq_len=8192, download_dir=None, load_format=auto, tensor_parallel_size=1, pipeline_parallel_size=1, data_parallel_size=1, decode_context_parallel_size=1, dcp_comm_backend=ag_rs, disable_custom_all_reduce=False, quantization=None, quantization_config=None, enforce_eager=True, enable_return_routed_experts=False, kv_cache_dtype=auto, device_config=cuda, structured_outputs_config=StructuredOutputsConfig(backend='auto', disable_any_whitespace=False, disable_additional_properties=False, reasoning_parser='', reasoning_parser_plugin='', enable_in_reasoning=False), observability_config=ObservabilityConfig(show_hidden_metrics_for_version=None, otlp_traces_endpoint=None, collect_detailed_traces=None, kv_cache_metrics=False, kv_cache_metrics_sample=0.01, cudagraph_metrics=False, enable_layerwise_nvtx_tracing=False, enable_mfu_metrics=False, enable_mm_processor_stats=False, enable_logging_iteration_details=False), seed=0, served_model_name=Qwen/Qwen3.5-35B-A3B, enable_prefix_caching=True, enable_chunked_prefill=True, pooler_config=None, compilation_config={'mode': <CompilationMode.NONE: 0>, 'debug_dump_path': None, 'cache_dir': '', 'compile_cache_save_format': 'binary', 'backend': 'inductor', 'custom_ops': ['all'], 'ir_enable_torch_wrap': False, 'splitting_ops': [], 'compile_mm_encoder': False, 'cudagraph_mm_encoder': False, 'encoder_cudagraph_token_budgets': [], 'encoder_cudagraph_max_vision_items_per_batch': 0, 'encoder_cudagraph_max_frames_per_batch': None, 'compile_sizes': [], 'compile_ranges_endpoints': [16384], 'inductor_compile_config': {'enable_auto_functionalized_v2': False, 'size_asserts': False, 'alignment_asserts': False, 'scalar_asserts': False, 'combo_kernels': True, 'benchmark_combo_kernel': True}, 'inductor_passes': {}, 'cudagraph_mode': <CUDAGraphMode.NONE: 0>, 'cudagraph_num_of_warmups': 0, 'cudagraph_capture_sizes': [], 'cudagraph_copy_inputs': False, 'cudagraph_specialize_lora': True, 'use_inductor_graph_partition': False, 'pass_config': {'fuse_norm_quant': True, 'fuse_act_quant': True, 'fuse_attn_quant': False, 'enable_sp': False, 'fuse_gemm_comms': False, 'fuse_allreduce_rms': False, 'fuse_rope_kvcache_cat_mla': False, 'fuse_act_padding': False}, 'max_cudagraph_capture_size': 0, 'dynamic_shapes_config': {'type': <DynamicShapesType.BACKED: 'backed'>, 'evaluate_guards': False, 'assume_32_bit_indexing': False}, 'local_cache_dir': None, 'fast_moe_cold_start': False, 'static_all_moe_layers': []}, kernel_config=KernelConfig(ir_op_priority=IrOpPriorityConfig(rms_norm=['vllm_c', 'native'], fused_add_rms_norm=['vllm_c', 'native']), enable_flashinfer_autotune=True, moe_backend='auto', linear_backend='auto')
+INFO 06-01 05:19:09 [parallel_state.py:1422] world_size=1 rank=0 local_rank=0 distributed_init_method=tcp://154.54.101.14:53727 backend=nccl
+INFO 06-01 05:19:10 [parallel_state.py:1735] rank 0 in world size 1 is assigned as DP rank 0, PP rank 0, PCP rank 0, TP rank 0, EP rank 0, EPLB rank N/A
+INFO 06-01 05:19:11 [topk_topp_sampler.py:45] Using FlashInfer for top-p & top-k sampling.
+INFO 06-01 05:19:11 [gpu_model_runner.py:5037] Starting to load model Qwen/Qwen3.5-35B-A3B...
+INFO 06-01 05:19:11 [cuda.py:433] Using backend AttentionBackendEnum.FLASH_ATTN for vit attention
+INFO 06-01 05:19:11 [mm_encoder_attention.py:372] Using AttentionBackendEnum.FLASH_ATTN for MMEncoderAttention.
+INFO 06-01 05:19:11 [qwen_gdn_linear_attn.py:194] Using FlashInfer GDN prefill kernel (requested=auto, head_k_dim=128).
+WARNING 06-01 05:19:11 [qwen_gdn_linear_attn.py:202] FlashInfer GDN prefill is JIT-compiled; first run may take a while. Set --gdn-prefill-backend triton to skip JIT.
+INFO 06-01 05:19:11 [unquantized.py:285] Using FlashInfer CUTLASS Unquantized MoE backend out of potential backends: ['FlashInfer TRTLLM', 'FlashInfer CUTLASS', 'TRITON', 'BATCHED_TRITON'].
+INFO 06-01 05:19:11 [cuda.py:378] Using FLASH_ATTN attention backend out of potential backends: ['FLASH_ATTN', 'FLASHINFER', 'TRITON_ATTN', 'FLEX_ATTENTION'].
+INFO 06-01 05:19:11 [flash_attn.py:636] Using FlashAttention version 3
+INFO 06-01 05:19:12 [weight_utils.py:922] Filesystem type for checkpoints: EXT4. Checkpoint size: 66.97 GiB. Available RAM: 2192.47 GiB.
+INFO 06-01 05:19:12 [weight_utils.py:945] Auto-prefetch is disabled because the filesystem (EXT4) is not a recognized network FS (NFS/Lustre). If you want to force prefetching, start vLLM with --safetensors-load-strategy=prefetch.
+Loading safetensors checkpoint shards:   0% Completed | 0/14 [00:00<?, ?it/s]
+Loading safetensors checkpoint shards:   7% Completed | 1/14 [00:01<00:24,  1.85s/it]
+Loading safetensors checkpoint shards:  14% Completed | 2/14 [00:03<00:22,  1.91s/it]
+Loading safetensors checkpoint shards:  21% Completed | 3/14 [00:05<00:21,  1.92s/it]
+Loading safetensors checkpoint shards:  29% Completed | 4/14 [00:07<00:19,  1.93s/it]
+Loading safetensors checkpoint shards:  36% Completed | 5/14 [00:09<00:17,  1.93s/it]
+Loading safetensors checkpoint shards:  43% Completed | 6/14 [00:11<00:15,  1.93s/it]
+Loading safetensors checkpoint shards:  50% Completed | 7/14 [00:13<00:13,  1.93s/it]
+Loading safetensors checkpoint shards:  57% Completed | 8/14 [00:15<00:11,  1.93s/it]
+Loading safetensors checkpoint shards:  64% Completed | 9/14 [00:17<00:09,  1.89s/it]
+Loading safetensors checkpoint shards:  71% Completed | 10/14 [00:19<00:07,  1.89s/it]
+Loading safetensors checkpoint shards:  79% Completed | 11/14 [00:21<00:05,  1.90s/it]
+Loading safetensors checkpoint shards:  86% Completed | 12/14 [00:22<00:03,  1.90s/it]
+Loading safetensors checkpoint shards:  93% Completed | 13/14 [00:24<00:01,  1.88s/it]
+Loading safetensors checkpoint shards: 100% Completed | 14/14 [00:25<00:00,  1.43s/it]
+Loading safetensors checkpoint shards: 100% Completed | 14/14 [00:25<00:00,  1.80s/it]
+
+INFO 06-01 05:19:37 [default_loader.py:397] Loading weights took 25.17 seconds
+INFO 06-01 05:19:37 [unquantized.py:341] Using MoEPrepareAndFinalizeNoDPEPModular
+INFO 06-01 05:19:38 [gpu_model_runner.py:5132] Model loading took 65.53 GiB memory and 25.597100 seconds
+INFO 06-01 05:19:38 [interface.py:649] Setting attention block size to 1056 tokens to ensure that attention page size is >= mamba page size.
+INFO 06-01 05:19:38 [interface.py:673] Padding mamba page size by 0.76% to ensure that mamba page size and attention page size are exactly equal.
+INFO 06-01 05:19:38 [gpu_model_runner.py:6136] Encoder cache will be initialized with a budget of 16384 tokens, and profiled with 1 image items of the maximum feature size.
+INFO 06-01 05:19:43 [gpu_worker.py:466] Available KV cache memory: 49.23 GiB
+INFO 06-01 05:19:43 [kv_cache_utils.py:1733] GPU KV cache size: 1,429,504 tokens
+INFO 06-01 05:19:43 [kv_cache_utils.py:1734] Maximum concurrency for 8,192 tokens per request: 174.50x
+2026-06-01 05:19:43,175 - INFO - autotuner.py:457 - flashinfer.jit: [Autotuner]: Autotuning process starts ...
+[AutoTuner]: Tuning trtllm::fused_moe::gemm1:   0%|          | 0/1 [00:00<?, ?profile/s][AutoTuner]: Tuning trtllm::fused_moe::gemm1: 100%|██████████| 1/1 [00:00<00:00, 11.47profile/s]
+[AutoTuner]: Tuning trtllm::fused_moe::gemm2:   0%|          | 0/1 [00:00<?, ?profile/s][AutoTuner]: Tuning trtllm::fused_moe::gemm2: 100%|██████████| 1/1 [00:00<00:00,  7.75profile/s][AutoTuner]: Tuning trtllm::fused_moe::gemm2: 100%|██████████| 1/1 [00:00<00:00,  7.75profile/s]
+2026-06-01 05:19:43,612 - INFO - autotuner.py:466 - flashinfer.jit: [Autotuner]: Autotuning process ends
+INFO 06-01 05:19:43 [jit_monitor.py:54] Kernel JIT monitor activated — Triton JIT compilations during inference will be logged as warnings.
+INFO 06-01 05:19:43 [core.py:324] init engine (profile, create kv cache, warmup model) took 5.33 s
+Rendering prompts:   0%|          | 0/4 [00:00<?, ?it/s]Rendering prompts: 100%|██████████| 4/4 [00:00<00:00, 489.93it/s]
+Processed prompts:   0%|          | 0/4 [00:00<?, ?it/s, est. speed input: 0.00 toks/s, output: 0.00 toks/s]WARNING 06-01 05:19:44 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _zero_kv_blocks_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+WARNING 06-01 05:19:44 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _compute_slot_mapping_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+WARNING 06-01 05:19:44 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _causal_conv1d_fwd_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+WARNING 06-01 05:19:44 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _fused_post_conv_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+WARNING 06-01 05:19:44 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _triton_mrope_forward. This causes a latency spike; consider extending warmup to cover this shape/config.
+WARNING 06-01 05:19:44 [jit_monitor.py:103] Triton kernel JIT compilation during inference: _causal_conv1d_update_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+WARNING 06-01 05:19:44 [jit_monitor.py:103] Triton kernel JIT compilation during inference: fused_recurrent_gated_delta_rule_packed_decode_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+WARNING 06-01 05:19:44 [jit_monitor.py:103] Triton kernel JIT compilation during inference: layer_norm_fwd_kernel. This causes a latency spike; consider extending warmup to cover this shape/config.
+Processed prompts:  25%|██▌       | 1/4 [00:03<00:09,  3.32s/it, est. speed input: 3.32 toks/s, output: 16.59 toks/s]Processed prompts:  50%|█████     | 2/4 [00:06<00:06,  3.45s/it, est. speed input: 2.91 toks/s, output: 26.65 toks/s]Processed prompts: 100%|██████████| 4/4 [00:06<00:00,  3.45s/it, est. speed input: 8.16 toks/s, output: 63.94 toks/s]Processed prompts: 100%|██████████| 4/4 [00:06<00:00,  1.72s/it, est. speed input: 8.16 toks/s, output: 63.94 toks/s]
+wrote dev/interlayer/0_feasibility/virtual_split/runs/inv_32.json  (ksize=32)
+[rank0]:[W601 05:19:51.210558456 ProcessGroupNCCL.cpp:1575] Warning: WARNING: destroy_process_group() was not called before program exit, which can leak resources. For more info, please see https://pytorch.org/docs/stable/distributed.html#shutdown (function operator())
