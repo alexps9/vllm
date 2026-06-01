@@ -1,0 +1,30 @@
+Resolving config for Qwen/Qwen3.5-35B-A3B (TP=2)...
+INFO 05-31 23:55:54 [model.py:617] Resolved architecture: Qwen3_5MoeForConditionalGeneration
+INFO 05-31 23:55:54 [model.py:1752] Using max model len 16384
+INFO 05-31 23:55:54 [scheduler.py:239] Chunked prefill is enabled with max_num_batched_tokens=2048.
+INFO 05-31 23:55:54 [config.py:375] Warning: Prefix caching in Mamba cache 'align' mode is currently enabled. Its support for Mamba layers is experimental. Please report any issues you may observe.
+INFO 05-31 23:55:54 [vllm.py:977] Asynchronous scheduling is enabled.
+INFO 05-31 23:55:54 [kernel.py:270] Final IR op priority after setting platform defaults: IrOpPriorityConfig(rms_norm=['native'], fused_add_rms_norm=['native'])
+INFO 05-31 23:55:58 [compilation.py:312] Enabled custom fusions: allreduce_rms
+[transformers] `Qwen2VLImageProcessorFast` is deprecated. The `Fast` suffix for image processors has been removed; use `Qwen2VLImageProcessor` instead.
+
+--- attn_page_size_1_token ---
+  num_kv_heads (per-worker) = 1
+  head_size                  = 256
+  head_size_v                = 256
+  dtype                      = torch.bfloat16
+  -> attn_page_size_1_token  = 1024 B
+
+--- mamba_page_size ---
+  shapes = ((3, 4096), (16, 128, 128))
+  dtypes = (torch.bfloat16, torch.float32)
+  -> mamba_page_size         = 1073152 B = 1048.00 KiB
+
+--- kernel_block_alignment_size ---
+Traceback (most recent call last):
+  File "/data/yuzhou/projects/vllm-songyang/dev/interlayer/0_page_bubble/trace_inflate.py", line 121, in <module>
+    main()
+  File "/data/yuzhou/projects/vllm-songyang/dev/interlayer/0_page_bubble/trace_inflate.py", line 70, in main
+    from vllm.attention.backends.registry import backend_name_to_enum  # noqa
+    ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ModuleNotFoundError: No module named 'vllm.attention'

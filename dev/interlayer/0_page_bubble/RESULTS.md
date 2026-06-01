@@ -31,23 +31,35 @@ Reading: at the forced 1056 block, for every 100 tokens actually used,
 ~42.6 token-slots of KV are allocated-but-empty (~30% of allocated KV is
 dead). The worst sessions (short, ragged) allocate >2× their real tokens.
 
-## A / B / C — live-engine findings (from commit `438ad0397`; not yet re-run on GPU this session)
+## A / B / C — live-engine findings (RE-CONFIRMED on GPU 2026-06-01, Qwen3.5-35B-A3B, TP=2)
 
-- **A. Inflation = 1056.** Engine prints verbatim: *"Setting attention
-  block size to 1056 tokens to ensure that attention page size is >= mamba
-  page size."* Root cause: SSM temporal state stored in **fp32** (not bf16),
-  making the mamba page large. 66× the vLLM default of 16.
-- **B. Hit length rounds to 1056.** On the running engine, 13/13 prompt
-  lengths (100..10000) matched `floor((L-1)/1056)*1056` exactly — prefix
-  cache only reuses at 1056-token boundaries.
-- **C. Per-turn waste ≈ 528 tokens.** Multi-turn agent partial-block waste
-  averages block_size/2 = 528 tokens/turn, independent of session length
-  (80/80 turns across 50/150/500/3000-tok regimes).
+- **A. Attention page = 1056.** Live engine prints verbatim (both TP
+  workers): *"Setting attention block size to 1056 tokens to ensure that
+  attention page size is >= mamba page size"* + *"Padding mamba page size by
+  0.76% to ensure mamba page size and attention page size are exactly
+  equal."* Root cause: SSM temporal state stored in **fp32** → large mamba
+  page. **Nuance:** `cache_config.block_size` *reports* 16, but the
+  attention kernel page and the prefix-cache reuse granularity are **1056**
+  (the `gcd`/`hash_block_size`); B confirms the waste lives at 1056.
+- **B. Hit length rounds to 1056.** Live `num_cached_tokens` on re-issue
+  matched `floor((L-1)/1056)·1056` exactly — L=1087/1088/1500/2000 all →
+  1056 (4/4). Short prompts (<1056) get **0** cached → 100% recompute.
+- **C. Per-turn waste ≈ block_size/2 = 528 tokens**, independent of turn
+  size (live, 4 regimes × 20 turns):
 
-> Status: **D re-validated offline this session** (the headline). A/B/C were
-> validated on the live engine in the original study; a GPU re-run
-> (`hit_rate_microbench.py`, `multi_turn_waste.py`) is the remaining
-> confirmation — cheap, deferred.
+  | regime (tok/turn) | avg waste/turn | waste / new tokens added |
+  |---|---:|---:|
+  | micro (50)  | 560.5 | **1121%** |
+  | short (150) | 459.9 | 307% |
+  | medium (500)| 552.6 | 110% |
+  | long (3000) | 543.6 | 18% |
+
+  The `waste/new-tokens` column is the agent-traffic killer: small-increment
+  multi-turn (the common agent pattern) wastes >10× the tokens it adds.
+
+> Status: **all four findings re-confirmed** — A/B/C on the live engine
+> (2026-06-01), D offline byte-identical. Raw:
+> `runs/{hit_rate,multi_turn,inspect_sizes}_reconfirm.out`.
 
 ## So what
 

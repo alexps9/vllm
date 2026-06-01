@@ -14,7 +14,6 @@ of slots inside them empty.** That internal fragmentation is the bubble.
 
 | # | finding | how |
 |---|---|---|
-| **A** | block_size inflates to **1056** (engine verbatim: *"Setting attention block size to 1056 tokens to ensure attention page size >= mamba page size"*); root = fp32 SSM state | `inspect_sizes.py` (offline), `trace_inflate.py` (vLLM helpers, no engine), live engine log |
 | **B** | prefix-cache hit length rounds to **1056 multiples** (`floor((L-1)/1056)*1056`) | `hit_rate_microbench.py` (live engine, 13/13 prompt lengths) |
 | **C** | per-turn partial-block waste ≈ **block_size/2 = 528 tokens/turn**, independent of session length | `multi_turn_waste.py` (live engine, 80/80 turns) |
 | **D** | on **106 real Claude-Code sessions**: workload-weighted waste **42.6%**, p95 **>130%** | `real_session_waste.py` / `counterfactual_block_size.py` (offline; tokenizer + traces) |
