@@ -141,13 +141,19 @@ verify/6's ≤~3× LRU target).
 
 ## Verification gate
 
-All pre-implementation **verification**, living as subfolders under
-[`0_feasibility/`](0_feasibility/) (we are not implementing yet; top-level
-`1_…`/`2_…` dirs are reserved for implementation components and stay empty
-until this gate passes). Each check has a **falsifiable pass bar set at the
-ideal level** (strictly-better-or-equal; zero violations; waste → the
-counterfactual floor). Bars tagged *(calibrate)* are first-run-tunable; the
-rest are hard lines. **Implementation starts only if all of 1–7 pass.**
+Two tiers (full roadmap + status in [`PLAN.md`](PLAN.md)):
+
+- **Feasibility gate** — cheap, self-contained pre-implementation checks in
+  [`0_feasibility/`](0_feasibility/). Each has a falsifiable ideal pass bar and
+  is **adversarially audited** before it counts. Must all pass before any vLLM
+  integration.
+- **Implementation phases** — `cost_reclaim` (the make-or-break) and the
+  `e2e_win` are **not** paper-checkable: they depend on the real allocator +
+  cost model + workload dynamics. They moved to the top-level `1_…`/`2_…`
+  implementation phases (see PLAN.md) and are verified on a **minimal real
+  implementation** — a paper sim that re-derives the policy is bug-prone and
+  only proves the model (the deleted cost-reclaim sim had 2 bugs + tested the
+  wrong axis).
 
 **0 · page_bubble** — ✅ done. Bubble = 42.6% workload-weighted KV waste
 (106 real CC sessions).
@@ -174,36 +180,23 @@ sub-page granularity with no kernel change**.
 - *Pass (ideal)*: **zero** invariant violations; every fully-freed page
   returned to the pool.
 
-**3 · cost_reclaim** — *the make-or-break (performance)*. Cost-model-driven
-page reclaim stays bounded.
-- *Test*: KV-bound real load (W2, high conc/util) **+** adversarial
-  (max attention sub-block scatter × mamba-heavy interleaving), vs stock vLLM.
-- *Pass (ideal)*: mamba page starvation = **0** (never stalls); recompute
-  amplification **≤ 0%** vs stock *(calibrate)*; **p99 TTFT ≤ stock**
-  *(calibrate)*; no sustained attention starvation (every request progresses
-  within bounded steps). I.e. **strictly ≥ stock on every axis.**
-
-**4 · decision_cost** — the per-step decision is cheap.
+**decision_cost** — the per-step decision is cheap.
 - *Test*: microbench the incremental "cheapest page to free" structure under
   realistic alloc/free churn (verify/6-style), vs the LRU free-queue.
 - *Pass (ideal)*: **≤ 3× LRU** per-op (verify/6 precedent), amortized O(1);
   steady-state rebalance off the hot path.
 
-**5 · prefix_cache** — mixed-granularity cache is correct and finer.
-- *Test*: hybrid requests sharing prefixes at sub-page boundaries.
-- *Pass (ideal)*: **zero** correctness violations (cached bytes = recompute,
-  no cross-request contamination); hit length rounds to `kernel_block_size`,
-  not 1056 — the 1056 rounding is **eliminated**.
+**prefix_cache** ⚠ — mixed-granularity cache is correct and finer.
+- *Pass (ideal)*: **zero** correctness violations; hit length rounds to
+  `kernel_block_size`, not 1056. ⚠ likely needs the Phase-1 allocator to exist
+  — may reclassify to implementation (see PLAN.md).
 
-**6 · cuda_graph** — the sub-block block-table is safe under capture/replay.
-- *Test*: capture a CUDA graph with the sub-block layout, replay across
-  alloc/free/page-flip events.
-- *Pass (ideal)*: **zero** replay faults; **no recapture** needed.
+**cuda_graph** ⚠ — the sub-block block-table is safe under capture/replay.
+- *Pass (ideal)*: **zero** replay faults; **no recapture**. ⚠ likely needs the
+  real block-table change — may reclassify to implementation.
 
-**7 · the_win** — the bubble is eliminated with no regression.
-- *Test*: KV-bound agent load, n=3, fix vs stock.
-- *Pass (ideal)*: waste → the `kernel_block_size` counterfactual floor (~1%
-  at ksize=32, vs 42.6%); **throughput ≥ stock** with a real gain under KV
-  pressure (target throughput / hit-rate uplift) *(calibrate)*.
-
-interlayer depends on the L2 cost model (removed / redesigning) — coupled.
+**Implementation-phase checks** (top-level `1_…`/`2_…`, on a minimal real
+impl — see [`PLAN.md`](PLAN.md)): **cost_reclaim** (mamba starvation /
+recompute amplification / tail bounded, ≥ stock) and **e2e_win** (waste →
+~1% counterfactual, no throughput regression). Both depend on the **L2 cost
+model** (removed / redesigning) — interlayer ⇄ L2 are coupled.
