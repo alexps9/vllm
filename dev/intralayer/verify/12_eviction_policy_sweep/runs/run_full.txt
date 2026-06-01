@@ -1,0 +1,43 @@
+loaded 106 sessions
+
+### block_size=1056  working_set=8365 distinct blocks  total_turn_block_accesses=452265
+
+  budget=10% of WS => cap=836 blocks
+  policy            hit_rate(mean±sd over seeds)
+  LRU               13.055% ± 0.101%
+  LFU               14.372% ± 0.661%
+  WLFU+LRU(L1)      16.290% ± 0.078%
+  ARC               23.368% ± 0.852%
+  2Q                16.508% ± 0.731%
+  LIRS              13.429% ± 0.183%
+  LRFU              13.064% ± 0.101%
+  ManyReaders       12.932% ± 0.043%
+
+  budget=25% of WS => cap=2091 blocks
+  policy            hit_rate(mean±sd over seeds)
+  LRU               36.100% ± 0.155%
+  LFU               29.007% ± 0.411%
+  WLFU+LRU(L1)      38.295% ± 0.213%
+  ARC               42.048% ± 1.254%
+  2Q                45.143% ± 1.156%
+  LIRS              27.783% ± 0.269%
+  LRFU              36.100% ± 0.155%
+  ManyReaders       36.098% ± 0.180%
+
+  budget=50% of WS => cap=4182 blocks
+  policy            hit_rate(mean±sd over seeds)
+  LRU               95.616% ± 0.126%
+  LFU               47.389% ± 0.404%
+  WLFU+LRU(L1)      96.009% ± 0.120%
+  ARC               96.883% ± 0.229%
+  2Q                96.501% ± 0.028%
+  LIRS              45.050% ± 0.077%
+  LRFU              95.616% ± 0.126%
+  ManyReaders       95.616% ± 0.126%
+
+### block_size=16  working_set=470775 distinct blocks  total_turn_block_accesses=29553335
+
+  budget=10% of WS => cap=47077 blocks
+  policy            hit_rate(mean±sd over seeds)
+  LRU               25.983% ± 0.012%
+  LFU               25.826% ± 0.564%
