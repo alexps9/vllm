@@ -1,0 +1,474 @@
+# SPDX-License-Identifier: Apache-2.0
+"""decision_cost — is the per-step "cheapest page to free" decision cheap?
+
+Design claim (design.md §"Cost-model decision-layer performance"):
+
+    The per-step decision (cost-rank the cheapest page to free) ... maintain
+    the "cheapest page to free" incrementally (like L1's LPB heap) rather than
+    re-walking structures each time ... bounded (echoing verify/6's <=3x LRU).
+
+Pure-CPU feasibility check (no GPU, no vLLM import). v3 — rebuilt after TWO
+adversarial audits. v1 (page-events, per-op timing) and v2 (independent random
+sub-block slots, reclaimable-only heap) both PASSed but the audits found the
+workload didn't match reality. v3 fixes the two structural problems:
+
+  * CORRELATED WORKLOAD (audit-2 [MAJOR fidelity]): a request's attention
+    sub-blocks are allocated together as its sequence grows and freed together
+    when it ends — so a page is ~BIMODAL (all-live or all-free), not the 99.6%
+    "partial pages flickering one slot at a time" that an independent-random-
+    slot model manufactures. v3 reuses the correlated alloc/free/share lifecycle
+    that sub_block_allocator/fuzz_refcount.py already models (and which was
+    wrongly not used in v2): whole-sequence alloc (1..3K blocks, packing bias),
+    shared-prefix touch (ref_cnt>1), whole-sequence free.
+
+  * RANK ALL PAGES BY VACATE-COST (audit-2 [MAJOR relevance]): v2 heaped only
+    currently-reclaimable (all-free) pages — but under KV pressure almost none
+    are (audit measured median 0), so that heap is ~empty and the decision is
+    trivial. The REAL decision (design: "free the cheapest page — evict the
+    attention whose prefixes are cheapest to recompute") ranks EVERY attention
+    page by its vacate-cost: 0 for a free page, Σ recompute for a cached page,
+    + a large preempt penalty for live blocks. That heap holds ~all P pages
+    under pressure, so incremental-vs-rewalk genuinely matters. v3 reports the
+    page-occupancy + reclaimable distribution so the real regime is OWNED.
+
+Claims, each measured on the correlated workload:
+  (1) QUERY IS INCREMENTAL, NOT A RE-WALK — peek() flat in pool size P vs the
+      O(P) ground-truth scan.
+  (2) PER-OP MAINTENANCE <= ~3x LRU (batch-timed replay).
+  (3) CORRECTNESS — peek() == true min-vacate-cost page, every query.
+  (4) HEAP MEMORY — lazy-delete bloat is real (inherited LPBPriorityQueue
+      behavior, task #99); compaction bounds it to <= the factor.
+
+The incremental heap is the exact pattern of vllm's audited LPBPriorityQueue.
+"""
+
+from __future__ import annotations
+
+import argparse
+import heapq
+import itertools
+import json
+import random
+import time
+from collections import OrderedDict
+
+LIVE_PENALTY = 100.0   # cost to vacate a page holding a live (ref>0) sub-block
+                       # (preempt a running request) >> a cached block's recompute
+
+
+# --------------------------------------------------------------------------- #
+# Lazy-delete min-heap — faithful to vllm LPBPriorityQueue, + OPTIONAL compaction.
+# --------------------------------------------------------------------------- #
+class LazyHeap:
+    __slots__ = ("_heap", "_seq", "_counter", "_cf")
+
+    def __init__(self, compact_factor: float = 0.0) -> None:
+        self._heap: list[tuple[float, int, int]] = []
+        self._seq: dict[int, int] = {}
+        self._counter = itertools.count()
+        self._cf = compact_factor
+
+    def __len__(self) -> int:
+        return len(self._seq)
+
+    def add_or_update(self, key: int, score: float) -> None:
+        seq = next(self._counter)
+        self._seq[key] = seq
+        heapq.heappush(self._heap, (score, seq, key))
+        if self._cf and len(self._heap) > self._cf * max(8, len(self._seq)):
+            self._compact()
+
+    def remove(self, key: int) -> None:
+        self._seq.pop(key, None)
+
+    def _compact(self) -> None:
+        seq = self._seq
+        self._heap = [e for e in self._heap if seq.get(e[2]) == e[1]]
+        heapq.heapify(self._heap)
+
+    def _trim(self) -> None:
+        heap, seq = self._heap, self._seq
+        while heap and seq.get(heap[0][2]) != heap[0][1]:
+            heapq.heappop(heap)
+
+    def peek(self):
+        self._trim()
+        if not self._heap:
+            return None
+        score, _s, key = self._heap[0]
+        return key, score
+
+    def heap_len(self) -> int:
+        return len(self._heap)
+
+
+# --------------------------------------------------------------------------- #
+# Correlated workload generator (mirrors fuzz_refcount.py lifecycle) that emits
+# a trace of page vacate-cost events. The decision structures replay the trace.
+#   event ('U', page, cost) : page's vacate-cost changed -> re-key
+#   event ('Q', None, None) : mamba needs a page -> query cheapest-to-vacate
+# --------------------------------------------------------------------------- #
+def gen_trace(n_pages: int, K: int, n_ops: int, seed: int):
+    """Correlated workload with INCREMENTAL page bookkeeping (a real slab
+    allocator's partial/free sets), so alloc is O(blocks) not O(P)."""
+    rng = random.Random(seed)
+    N = n_pages * K
+    ref = [0] * N
+    cached = bytearray(N)
+    scost = [0.0] * N
+    mamba = bytearray(n_pages)
+    vac = [0.0] * n_pages
+    pl = [0] * n_pages                          # live (ref>0) count per page
+    cachecost = [0.0] * n_pages                 # Σ cached recompute cost per page
+    free_slots: list[list[int]] = [list(range(p * K + K - 1, p * K - 1, -1))
+                                   for p in range(n_pages)]  # ref0 slots (stack)
+    partial: set[int] = set()                   # 0<pl<K, not mamba (packing bias)
+    recl: list[int] = list(range(n_pages))      # pl==0, not mamba (free pages)
+    recl_set: set[int] = set(recl)
+    req_blocks: dict[int, list[int]] = {}
+    owners: list[set] = [set() for _ in range(N)]
+    hot_prefix: list[int] = []
+    events: list[tuple] = []
+    occ_free = occ_full = occ_partial = recl_acc = samples = 0
+
+    def a_cost() -> float:
+        return 1.0 + rng.randrange(1, 64) * 0.5
+
+    def update_sets(p: int) -> None:
+        if mamba[p]:
+            partial.discard(p); recl_set.discard(p); return
+        if pl[p] == 0:
+            partial.discard(p)
+            if p not in recl_set:
+                recl_set.add(p); recl.append(p)
+        elif pl[p] == K:
+            partial.discard(p); recl_set.discard(p)
+        else:
+            recl_set.discard(p); partial.add(p)
+
+    def vac_of(p: int) -> float:
+        return pl[p] * LIVE_PENALTY + cachecost[p]
+
+    def emit(p: int) -> None:
+        if mamba[p]:
+            return
+        nc = vac_of(p)
+        if nc != vac[p]:
+            vac[p] = nc
+            events.append(('U', p, nc))
+
+    def take_slot(p: int):
+        sid = free_slots[p].pop()
+        if cached[sid]:
+            cached[sid] = 0; cachecost[p] -= scost[sid]
+        ref[sid] = 1; pl[p] += 1
+        return sid
+
+    nxt = 0
+    live_attn: list[int] = []
+    live_mamba: list[int] = []
+    for i in range(n_ops):
+        op = rng.random()
+        if op < 0.30:                              # attn alloc (correlated burst)
+            nxt += 1
+            need = rng.randint(1, 3 * K)
+            got, touched = 0, set()
+            # packing bias: partial pages first, then free pages
+            cand = list(partial)
+            for p in cand:
+                while got < need and free_slots[p] and pl[p] < K:
+                    sid = take_slot(p); owners[sid].add(nxt)
+                    req_blocks.setdefault(nxt, []).append(sid)
+                    touched.add(p); got += 1
+                update_sets(p)
+                if got >= need:
+                    break
+            while got < need and recl:
+                p = recl.pop()
+                if p not in recl_set or mamba[p]:
+                    continue
+                recl_set.discard(p)
+                while got < need and free_slots[p] and pl[p] < K:
+                    sid = take_slot(p); owners[sid].add(nxt)
+                    req_blocks.setdefault(nxt, []).append(sid)
+                    touched.add(p); got += 1
+                update_sets(p)
+            if got:
+                live_attn.append(nxt)
+                if rng.random() < 0.1:
+                    hot_prefix.extend(req_blocks[nxt][:3])
+                    hot_prefix[:] = hot_prefix[-200:]
+            for p in touched:
+                emit(p)
+        elif op < 0.55 and hot_prefix:             # shared-prefix touch (ref++)
+            nxt += 1
+            k = rng.randint(1, min(8, len(hot_prefix)))
+            touched = set()
+            for sid in rng.sample(hot_prefix, k):
+                if nxt in owners[sid]:
+                    continue
+                p = sid // K
+                if mamba[p]:
+                    continue
+                if ref[sid] == 0:                  # cached->live: pl++, drop cachecost
+                    if cached[sid]:
+                        cached[sid] = 0; cachecost[p] -= scost[sid]
+                    pl[p] += 1
+                    if sid in free_slots[p]:
+                        free_slots[p].remove(sid)
+                    update_sets(p)
+                ref[sid] += 1
+                owners[sid].add(nxt)
+                req_blocks.setdefault(nxt, []).append(sid)
+                touched.add(p)
+            live_attn.append(nxt)
+            for p in touched:
+                emit(p)
+        elif op < 0.72 and live_attn:              # attn free (whole sequence)
+            r = live_attn.pop(rng.randrange(len(live_attn)))
+            touched = set()
+            for sid in req_blocks.pop(r, []):
+                if r not in owners[sid]:
+                    continue
+                owners[sid].discard(r)
+                ref[sid] -= 1
+                p = sid // K
+                if ref[sid] == 0:                  # live->cached
+                    cached[sid] = 1; scost[sid] = a_cost()
+                    cachecost[p] += scost[sid]
+                    pl[p] -= 1
+                    free_slots[p].append(sid)
+                    update_sets(p)
+                touched.add(p)
+            for p in touched:
+                emit(p)
+        elif op < 0.86:                            # mamba demand -> QUERY
+            events.append(('Q', None, None))
+        elif op < 0.93 and recl:                   # mamba alloc (take a free page)
+            p = None
+            while recl:
+                cand = recl.pop()
+                if cand in recl_set and not mamba[cand] and pl[cand] == 0:
+                    p = cand; break
+            if p is not None:
+                recl_set.discard(p)
+                base = p * K
+                for s in range(base, base + K):
+                    if cached[s]:
+                        cached[s] = 0
+                cachecost[p] = 0.0
+                mamba[p] = 1; vac[p] = 0.0
+                live_mamba.append(p)
+                events.append(('T', p, None))
+        elif live_mamba:                           # mamba free -> page returns
+            p = live_mamba.pop(rng.randrange(len(live_mamba)))
+            mamba[p] = 0; vac[p] = 0.0; pl[p] = 0
+            free_slots[p] = list(range(p * K + K - 1, p * K - 1, -1))
+            update_sets(p)
+            events.append(('U', p, 0.0))
+
+        if i % 500 == 0:                           # sample occupancy (O(P), cheap)
+            samples += 1
+            for p in range(n_pages):
+                if mamba[p]:
+                    continue
+                if pl[p] == 0:
+                    occ_free += 1; recl_acc += 1
+                elif pl[p] == K:
+                    occ_full += 1
+                else:
+                    occ_partial += 1
+    recl = recl_acc
+    tot = max(1, occ_free + occ_full + occ_partial)
+    stats = {
+        "n_events": len(events),
+        "frac_free_pages": round(occ_free / tot, 3),
+        "frac_full_pages": round(occ_full / tot, 3),
+        "frac_partial_pages": round(occ_partial / tot, 3),
+        "mean_reclaimable_per_sample": round(recl / max(1, samples), 1),
+    }
+    return events, stats
+
+
+# --------------------------------------------------------------------------- #
+# Decision structures (rank ALL in-pool attention pages by vacate-cost).
+# --------------------------------------------------------------------------- #
+class CostDecision:
+    def __init__(self, n_pages: int, compact_factor: float = 0.0):
+        self.heap = LazyHeap(compact_factor)
+        for p in range(n_pages):        # every page starts free (vacate-cost 0)
+            self.heap.add_or_update(p, 0.0)
+
+    def apply(self, ev) -> None:
+        k, p, c = ev
+        if k == 'U':
+            self.heap.add_or_update(p, c)
+        elif k == 'T':
+            self.heap.remove(p)
+        # 'Q' handled by caller (query)
+
+    def cheapest(self):
+        return self.heap.peek()
+
+
+class LRUDecision:
+    """Recency over in-pool pages; access (U) moves to back, take = front."""
+    def __init__(self, n_pages: int):
+        self.od: OrderedDict[int, None] = OrderedDict((p, None) for p in range(n_pages))
+
+    def apply(self, ev) -> None:
+        k, p, _c = ev
+        if k == 'U':
+            self.od.pop(p, None)
+            self.od[p] = None          # move-to-back (most recently accessed)
+        elif k == 'T':
+            self.od.pop(p, None)
+
+    def cheapest(self):
+        for p in self.od:              # front = least recently used
+            return p, 0.0
+        return None
+
+
+def naive_cheapest(vac, mamba):
+    best_p, best_c = -1, None
+    for p in range(len(vac)):
+        if not mamba[p] and (best_c is None or vac[p] < best_c):
+            best_p, best_c = p, vac[p]
+    return None if best_p < 0 else (best_p, best_c)
+
+
+def replay_time(struct, events) -> float:
+    t0 = time.perf_counter_ns()
+    for ev in events:
+        struct.apply(ev)
+    return time.perf_counter_ns() - t0
+
+
+def query_and_correctness(events, n_pages, K, compact_factor=0.0):
+    """Untimed correctness + realistic query timing: rebuild vac ground truth
+    while replaying, and at each 'Q' time peek() vs the O(P) scan."""
+    inc = CostDecision(n_pages, compact_factor)
+    vac = [0.0] * n_pages
+    mamba = bytearray(n_pages)
+    t_inc = t_naive = 0.0
+    nq = viols = 0
+    for ev in events:
+        k, p, c = ev
+        if k == 'Q':
+            t0 = time.perf_counter_ns(); ans = inc.cheapest(); t_inc += time.perf_counter_ns() - t0
+            t0 = time.perf_counter_ns(); truth = naive_cheapest(vac, mamba); t_naive += time.perf_counter_ns() - t0
+            nq += 1
+            if (ans is None) != (truth is None):
+                viols += 1
+            elif ans is not None:
+                if abs(ans[1] - truth[1]) > 1e-6:
+                    viols += 1
+                if mamba[ans[0]]:           # never return a mamba-owned page
+                    viols += 1
+            continue
+        inc.apply(ev)
+        if k == 'U':
+            vac[p] = c; mamba[p] = 0
+        elif k == 'T':
+            mamba[p] = 1; vac[p] = 0.0
+    return t_inc, t_naive, nq, viols, inc.heap.heap_len(), len(inc.heap)
+
+
+def main() -> None:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--n-ops", type=int, default=200_000)
+    args = ap.parse_args()
+    K = 33
+
+    print("=== decision_cost microbench v3 (correlated workload, all-page vacate-cost heap) ===\n")
+
+    print("--- workload realism: page occupancy + reclaimable distribution ---")
+    for n_pages in (1000, 4000):
+        _, stats = gen_trace(n_pages, K, args.n_ops, 0)
+        print(json.dumps({"n_pages": n_pages, **stats}))
+    print("(bimodal: free+full >> partial; reclaimable pages are RARE under pressure)\n")
+
+    print("--- (2) per-op maintenance: cost-heap vs LRU (batch-timed, 3 seeds, P=4000) ---")
+    ratios = []
+    for seed in range(3):
+        events, _ = gen_trace(4000, K, args.n_ops, seed)
+        n_u = sum(1 for e in events if e[0] in ('U', 'T'))
+        t_inc = replay_time(CostDecision(4000), events)
+        t_lru = replay_time(LRUDecision(4000), events)
+        ratios.append(round(t_inc / t_lru, 2))
+        print(json.dumps({"seed": seed, "maintenance_events": n_u,
+                          "inc_ns_per_ev": round(t_inc / max(1, n_u), 1),
+                          "lru_ns_per_ev": round(t_lru / max(1, n_u), 1),
+                          "ratio_inc_over_lru": round(t_inc / t_lru, 2)}))
+    print(f"per-op ratio inc/LRU (batch-timed): {ratios}  (target <= ~3x)\n")
+
+    print("--- (1)+(3) query cost vs P + correctness ---")
+    print("  incremental query WITHOUT vs WITH compaction (cf=8) vs naive O(P):")
+    prev = {0.0: None, 8.0: None}
+    for n_pages in (1000, 4000, 16000):   # <=~20k = realistic single-engine pages
+        events, _ = gen_trace(n_pages, K, 150_000, 0)
+        row = {"n_pages": n_pages}
+        for cf in (0.0, 8.0):
+            t_inc, t_naive, nq, viols, hphys, hlog = query_and_correctness(
+                events, n_pages, K, compact_factor=cf)
+            qi = t_inc / nq if nq else 0
+            tag = "nocompact" if cf == 0.0 else "compact8"
+            row[f"q_{tag}_ns"] = round(qi, 1)
+            row[f"grow_{tag}"] = round(qi / prev[cf], 2) if prev[cf] else None
+            row[f"viol_{tag}"] = viols
+            prev[cf] = qi
+            if cf == 8.0:
+                row["query_naive_ns"] = round(t_naive / nq, 1) if nq else None
+                row["naive_over_compact"] = round(t_naive / t_inc, 1) if t_inc else None
+        print(json.dumps(row))
+    print()
+
+    # Structural complexity of peek, isolated from workload coupling: hold the
+    # update rate (updates between queries) FIXED and vary P. If peek is
+    # O(log P) it stays ~flat; if it's secretly O(P) it grows linearly.
+    print("--- (1b) query STRUCTURAL complexity: fixed churn, vary P (isolates O(log P)) ---")
+    rng = random.Random(0)
+    for n_pages in (1000, 4000, 16000, 64000, 256000):
+        inc = CostDecision(n_pages, compact_factor=8.0)
+        # warm to a realistic mix of distinct positive costs, then drain the
+        # initial stale pile ONCE (untimed) so we measure steady-state peek,
+        # not the one-time O(P) trim of superseded init entries.
+        for p in range(n_pages):
+            inc.apply(('U', p, rng.random() * 100))
+        inc.cheapest()
+        UPD, Q = 4, 4000          # 4 updates then 1 query, fixed regardless of P
+        t = 0.0
+        for _ in range(Q):
+            for _ in range(UPD):
+                inc.apply(('U', rng.randrange(n_pages), rng.random() * 100))
+            t0 = time.perf_counter_ns(); inc.cheapest(); t += time.perf_counter_ns() - t0
+        print(json.dumps({"n_pages": n_pages, "peek_ns_at_fixed_churn": round(t / Q, 1)}))
+    print()
+
+    print("--- (4) heap bloat: direct LazyHeap stress (update-heavy, rare pops) ---")
+    n_keys, rounds = 5000, 1000
+    rng = random.Random(0)
+    stream = [(rng.randrange(n_keys), rng.random() * 100) for _ in range(n_keys * rounds)]
+    for cf in (0.0, 8.0):
+        h = LazyHeap(compact_factor=cf)
+        for k in range(n_keys):
+            h.add_or_update(k, rng.random() * 100)
+        peaks = []
+        for i, (k, sc) in enumerate(stream):
+            h.add_or_update(k, sc)
+            if i % 50 == 0:
+                h.peek()
+            if i % (len(stream) // 10) == 0:
+                peaks.append(h.heap_len())
+        h.peek()
+        tag = "no_compaction(==prod today)" if cf == 0.0 else f"compaction(factor={cf})"
+        print(json.dumps({"mode": tag, "updates": len(stream),
+                          "logical": len(h), "physical_final": h.heap_len(),
+                          "physical_peak": max(peaks),
+                          "steady_bloat_x": round(sum(peaks[3:]) / max(1, len(peaks[3:])) / max(1, len(h)), 1),
+                          "ceiling_bloat_x": round(max(peaks) / max(1, len(h)), 1)}))
+
+
+if __name__ == "__main__":
+    main()

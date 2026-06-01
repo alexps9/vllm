@@ -24,7 +24,7 @@ PLAN.md.
 | [`page_bubble/`](0_feasibility/page_bubble/) | the bubble exists (42.6% on 106 CC sessions) | ✅ done |
 | [`virtual_split/`](0_feasibility/virtual_split/) | kernel runs at `ksize=32 ≪ 1056`, valid at sub-page granularity, no kernel change (numerically-equiv) | ✅ done |
 | [`sub_block_allocator/`](0_feasibility/sub_block_allocator/) | two-level allocator memory-safe **with ref-counting + cached lifecycle** (0 violations) | ✅ done |
-| [`decision_cost/`](0_feasibility/decision_cost/) | per-step decision cheap (incremental, ≤~3× LRU) | ⬜ todo |
+| [`decision_cost/`](0_feasibility/decision_cost/) | "cheapest page to vacate" incremental (O(log P), 71–157× < re-walk), ~2.4× LRU, correct — needs heap compaction (task #99) | ✅ done (audited ×2) |
 | [`prefix_cache/`](0_feasibility/prefix_cache/) ⚠ | mixed-granularity prefix cache correct + finer reuse | ⬜ todo (may need impl) |
 | [`cuda_graph/`](0_feasibility/cuda_graph/) ⚠ | sub-block block-table safe under captured graph | ⬜ todo (may need impl) |
 

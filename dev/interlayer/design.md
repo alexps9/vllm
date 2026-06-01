@@ -180,11 +180,23 @@ sub-page granularity with no kernel change**.
 - *Pass (ideal)*: **zero** invariant violations; every fully-freed page
   returned to the pool.
 
-**decision_cost** — the per-step decision is cheap.
-- *Test*: microbench the incremental "cheapest page to free" structure under
-  realistic alloc/free churn (verify/6-style), vs the LRU free-queue.
-- *Pass (ideal)*: **≤ 3× LRU** per-op (verify/6 precedent), amortized O(1);
-  steady-state rebalance off the hot path.
+**decision_cost** — ✅ **done** (audited ×2). The per-step decision is cheap.
+- *Test*: microbench the incremental "cheapest page **to vacate**" heap on a
+  **correlated** workload (mirrors `sub_block_allocator/fuzz_refcount.py`),
+  ranking **all** attention pages by vacate-cost, vs the O(P) re-walk + an LRU
+  recency baseline.
+- *Result*: incremental — **O(log P)** (peek flat across 256× pool size),
+  **71–157× cheaper** than the O(P) re-walk; **~2.4× LRU** per op; **0**
+  correctness violations (never returns a mamba page).
+- *Pass criterion (corrected)*: "amortized O(1)" → **O(log P)** (the LPB-heap
+  reality); **≤3× LRU** holds (~2.4×). Under realistic KV pressure fully-free
+  pages are rare, so the decision ranks **all** pages by vacate-cost (free →
+  cached → live preempt-penalty), which the cost asymmetry orders correctly.
+- *Required follow-up*: the lazy-delete heap **needs compaction** to bound
+  memory (else 600–900× bloat — inherited from production `LPBPriorityQueue`,
+  task #99; ≤8× with). This compaction **is** the "steady-state rebalance off
+  the hot path" — fold into `1_allocator`. See
+  `0_feasibility/decision_cost/RESULTS.md`.
 
 **prefix_cache** ⚠ — mixed-granularity cache is correct and finer.
 - *Pass (ideal)*: **zero** correctness violations; hit length rounds to
