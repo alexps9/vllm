@@ -105,5 +105,29 @@ def test_unhit_blocks_evict_in_lru_order():
     assert order == [0, 1, 2, 3], order
 
 
+def test_lpb_priority_queue_bounded_under_update_heavy_churn():
+    """Regression for #99 (verify/11): the lazy-delete hot heap must NOT bloat
+    under the multi-turn-agent pattern (hot blocks repeatedly removed +
+    re-added while the tier is never popped). Compaction must keep ``_heap``
+    bounded and the answer correct. Without compaction it grew linearly with
+    churn (501×→4001× at 500→4000 cycles, with ~1s popmin spikes)."""
+    from vllm.v1.core.hima.intra_pool.lpb_queue import LPBPriorityQueue
+
+    h: LPBPriorityQueue[int] = LPBPriorityQueue()
+    n = 256
+    for k in range(n):
+        h.add(k, float(k))
+    for _ in range(5000):                 # 5000 free/re-acquire "turns"
+        for k in range(n):
+            h.remove(k)                   # re-acquire -> stale leaf
+            h.add(k, float(k))            # freed again -> new entry
+    assert len(h) == n                    # logical size stable
+    # physical bounded by compaction (~factor×logical), NOT linear in churn
+    assert len(h._heap) <= 12 * n, f"hot heap bloated: {len(h._heap)} entries"
+    # correctness preserved: the min is still key 0
+    assert h.peek() == (0, 0.0)
+    assert h.popmin() == (0, 0.0)
+
+
 if __name__ == "__main__":
     raise SystemExit(pytest.main([__file__, "-v"]))

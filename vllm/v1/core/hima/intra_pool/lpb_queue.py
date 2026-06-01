@@ -30,6 +30,19 @@ class LPBPriorityQueue(Generic[K]):
 
     __slots__ = ("_heap", "_current_seq", "_score", "_counter")
 
+    # Compaction: ``add``/``update``/``remove`` leave stale leaves in ``_heap``
+    # (lazy deletion); they are otherwise only trimmed from the top by
+    # ``peek``/``popmin``. Under update-heavy / pop-light load (e.g. multi-turn
+    # agents repeatedly freeing+re-acquiring hot prefix blocks while evictions
+    # are served from the cold tier), ``_heap`` would grow linearly with the
+    # number of free/re-acquire cycles — a memory leak, and an O(stale) latency
+    # spike on the first ``popmin`` that finally drains the tier (measured:
+    # ~1s at 4000 turns; see dev/intralayer/verify/11_lpb_heap_bloat/). Rebuild
+    # when physical exceeds this factor × logical. Compaction only drops
+    # entries that are already ignored, so heap order / eviction behaviour is
+    # unchanged; it bounds ``_heap`` to ``_COMPACT_FACTOR × len(self)``.
+    _COMPACT_FACTOR = 8
+
     def __init__(self) -> None:
         # Tuples (score, seq, key); tuple comparison is C-level.
         self._heap: list[tuple[float, int, K]] = []
@@ -61,6 +74,7 @@ class LPBPriorityQueue(Generic[K]):
         self._current_seq[key] = seq
         self._score[key] = score
         heapq.heappush(self._heap, (score, seq, key))
+        self._maybe_compact()
 
     def update(self, key: K, score: float) -> None:
         """Re-score ``key``; the old entry becomes a stale heap leaf."""
@@ -70,6 +84,19 @@ class LPBPriorityQueue(Generic[K]):
         self._current_seq[key] = seq
         self._score[key] = score
         heapq.heappush(self._heap, (score, seq, key))
+        self._maybe_compact()
+
+    def _maybe_compact(self) -> None:
+        """Drop stale leaves (rebuild ``_heap`` from valid entries) when it has
+        grown past ``_COMPACT_FACTOR × len(self)``. Behaviour-preserving: stale
+        entries are already skipped by ``popmin``/``peek``; this only reclaims
+        their memory and caps the worst-case trim cost. Amortized O(1)/push."""
+        heap = self._heap
+        if len(heap) <= self._COMPACT_FACTOR * max(8, len(self._current_seq)):
+            return
+        current = self._current_seq
+        self._heap = [e for e in heap if current.get(e[2]) == e[1]]
+        heapq.heapify(self._heap)
 
     def remove(self, key: K) -> None:
         """Remove ``key``; idempotent for already-removed keys."""

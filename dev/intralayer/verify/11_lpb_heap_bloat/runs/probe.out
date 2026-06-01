@@ -1,0 +1,14 @@
+=== verify/11: L1 LPB hot-heap bloat under real usage ===
+
+--- Regime A: realistic agent (hot blocks churn; hot tier NOT drained) ---
+INFO 06-01 21:28:18 [lpb_free_queue.py:102] [hima] LPB recency-aware scoring (variant=lazy eager=False depth_tokens=False block_size=1)
+{"turns": 500, "hot_heap_physical": 953, "hot_heap_logical": 256, "bloat_x": 3.7, "first_hot_pop_us": 354.0}
+{"turns": 1000, "hot_heap_physical": 1650, "hot_heap_logical": 256, "bloat_x": 6.4, "first_hot_pop_us": 743.8}
+{"turns": 2000, "hot_heap_physical": 1251, "hot_heap_logical": 256, "bloat_x": 4.9, "first_hot_pop_us": 5.6}
+{"turns": 4000, "hot_heap_physical": 453, "hot_heap_logical": 256, "bloat_x": 1.8, "first_hot_pop_us": 4.8}
+  (if physical grows ~linearly with turns while logical stays ~n_hot,
+   the hot heap bloats in real L1 usage -> #99 is real, not latent)
+
+--- Regime B: control (hot tier drained every 50 turns) ---
+{"turns": 4000, "hot_heap_physical": 1280, "hot_heap_logical": 1280, "bloat_x": 1.0, "first_hot_pop_us": 4.2}
+  (periodic hot-tier popmin should keep physical bounded)
