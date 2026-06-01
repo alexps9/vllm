@@ -1,0 +1,22 @@
+{
+  "model": "Qwen/Qwen3.5-35B-A3B",
+  "cache_config.block_size": 1056,
+  "captured_select_common_block_size": [
+    {
+      "manager_block_size": 1056,
+      "kernel_block_size": 32,
+      "ratio": 33,
+      "backends": [
+        "FlashAttentionBackend"
+      ]
+    }
+  ],
+  "deterministic_greedy": true,
+  "kernel_block_sizes_seen": [
+    32
+  ],
+  "manager_block_sizes_seen": [
+    1056
+  ],
+  "splitting_active": true
+}
