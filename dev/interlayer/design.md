@@ -1,77 +1,88 @@
 # interlayer (vLLM) — design
 
-> Cross-pool capacity for vLLM's hybrid models (paged-attention KV +
-> recurrent/mamba state). Counterpart to sglang's `dev/interlayer/`, but
-> vLLM's bubble has a **different shape**, so the fix is different.
-> Kept deliberately small — this is a problem-proof + direction doc, not
-> an implementation spec.
+> Eliminate the **page-size bubble** in vLLM hybrid models (attention KV +
+> mamba recurrent state). This doc states only the *target ideal
+> architecture* and the verification gate it must pass before any
+> implementation. Counterpart to sglang's `dev/interlayer/`, but vLLM's
+> bubble — and its fix — are different.
 
-## The problem — vLLM's bubble is a *page-size* bubble
+## The problem
 
-Hybrid models have two kinds of state with orthogonal demand:
+A hybrid model has two state types with opposite natural shapes:
 
-- **KV** (attention): bytes ∝ total tokens in flight. Natural page small
-  (16 tokens).
-- **Mamba** (recurrent): one fixed, *indivisible* state per request,
-  stored in **fp32**. Natural page large.
+- **Mamba state** — one **big, indivisible, contiguous** blob per request
+  (fp32 SSM). The recurrent kernel reads/writes it whole → must be contiguous.
+- **Attention KV** — **many small** blocks (tokens-grained), one per span.
 
-**sglang** keeps two physically separate pools split at boot
-(`mamba_full_memory_ratio`); its bubble is the *fixed split* — one pool
-idle while the other binds. It fixes that by VMM-remapping physical pages
-between the two pools at runtime.
+vLLM serves both from **one fungible block pool**, which requires every block
+to be the same byte size = `max(attention_page, mamba_page)`. The mamba page
+is larger, so vLLM inflates the **allocation** block_size to match it — on
+Qwen3.5-35B-A3B that is **1056 tokens**. Attention KV is then *allocated* in
+1056-token blocks that real requests fill only fractionally → blocks all
+allocated, most of their slots empty. Measured: **42.6% workload-weighted KV
+waste on 106 real CC sessions** (vs 0.69% at the natural granularity); worst
+on small-increment multi-turn agent traffic. Proof: [`0_page_bubble/`](0_page_bubble/).
 
-**vLLM is different.** It already uses **one fungible block pool** shared
-by both (`kv_cache_utils.py:1290-1315` — groups draw different block-ids
-from the same free list), so it has **no fixed-split bubble**. But the
-price of one shared pool is that **every block must be the same byte
-size** = `max(attention_page, mamba_page)`
-(`unify_kv_cache_spec_page_size`, `kv_cache_utils.py:1012-1049`). The
-mamba page is the larger one, so vLLM **inflates the attention block_size
-to match** — on Qwen3.5-35B-A3B that is **1056 tokens** (66× the default
-16). Engine says so verbatim: *"Setting attention block size to 1056
-tokens to ensure that attention page size is >= mamba page size."*
+## The enabling fact
 
-So vLLM's bubble is **internal fragmentation**: attention KV is allocated
-in 1056-token blocks, but real requests (and every request's ragged tail)
-fill only a fraction. Blocks are all allocated, yet a large share of the
-slots inside them sit empty. Measured on 106 real Claude-Code sessions:
-**42.6% workload-weighted waste, p95 >130%** (vs 0.69% at the natural
-block_size=16). See [`0_page_bubble/`](0_page_bubble/).
+The bubble is **purely an allocator-granularity problem; the kernel is
+already fine-grained.** vLLM has **virtual block splitting**
+(`gpu_model_runner.py` `num_blocks_per_kv_block = block_size //
+kernel_block_size`; `prepare_kernel_block_sizes` / `select_common_block_size`):
+the attention kernel already runs at a small backend-native `kernel_block_size`
+(a factor of 1056, e.g. 16/32), viewing each 1056 page as `1056/ksize` kernel
+blocks. Only the **allocator / manager / prefix-cache** operate at 1056
+(`FullAttentionManager` allocates `cdiv(tokens, 1056)` whole pages). So the fix
+needs **no kernel change** — only the allocation layer.
 
-Two costs of the same root: (1) **memory** — wasted KV capacity → fewer
-concurrent reqs / less prefix cache; (2) **compute** — coarser
-prefix-cache reuse (only at 1056-token boundaries). The earlier pcache
-attempt targeted (2) via partial-block caching and **failed on hybrid**
-(mamba is block-granular, can't resume mid-block — see
-[`0_page_bubble/08_hybrid_architectural_blocker.md`](0_page_bubble/08_hybrid_architectural_blocker.md)).
-This effort targets (1).
+## Ideal architecture
 
-## Why we can't copy sglang
+**Decouple attention's allocation granularity from the mamba page, over one
+shared physical pool, leveraging the existing virtual block splitting.**
 
-- vLLM has **no VMM substrate** (no `cuMemCreate/cuMemMap/cuMemUnmap`,
-  no growable arenas — confirmed absent in `vllm/v1/`). Pool tensors are
-  fixed at boot.
-- And we don't *need* sglang's cross-pool remap: vLLM's pool is already
-  fungible. The bubble isn't "wrong split", it's "page too coarse".
+- **One physical pool**, page = the mamba state size (the indivisible unit).
+- **Mamba** allocates **whole pages** — 1 page = 1 state. Contiguous; mamba
+  spec and kernel unchanged.
+- **Attention** allocates at its natural **`kernel_block_size`** (sub-page)
+  granularity, packing `1056/ksize` sub-blocks into each physical page. The
+  attention kernel already consumes KV at this granularity, so **no kernel
+  change**. The attention block table and prefix cache move to sub-block
+  granularity — which also removes the coarse 1056-token prefix-cache
+  rounding.
+- A physical page becomes **mamba-usable again only when all its attention
+  sub-blocks are free**. The effective KV↔mamba split stays fully dynamic
+  (one pool), with no fixed boot ratio.
 
-## The lever (direction — not yet designed)
+Properties this preserves: **no VMM / page-remapping** (vLLM has none), **no
+fixed split**, **no change to model numerics** (SSM stays fp32), **no kernel
+change**, mamba contiguity intact. The bubble drops from rounding-to-1056 to
+rounding-to-`kernel_block_size` (~`ksize/2` tokens per sequence, e.g. ~8–16
+instead of ~528).
 
-The fix is to **break the uniform-page constraint** so attention can use
-a small page while mamba keeps its big one. Candidate directions (open):
+## The one hard property
 
-- **Per-group page size**: let the block pool hold groups with different
-  `page_size_bytes` instead of forcing one max. Requires reworking the
-  single-pool `num_blocks` accounting.
-- **Sub-block attention allocator**: keep the 1056 physical page but pack
-  multiple short attention sequences / fine-grained spans into one page.
-- **Decouple mamba bytes**: shrink the mamba page (e.g. bf16 SSM where
-  numerically safe) so the forced attention block_size drops.
+**Mamba whole-page availability.** A page held even partially by live
+attention sub-blocks cannot serve a (whole-page) mamba allocation. Under
+attention-heavy or adversarial interleaving, scattered attention sub-blocks
+could starve mamba of whole pages while sub-block space is plentiful. The
+architecture must **bound this** — via a compaction step (relocate attention
+sub-blocks to consolidate free pages) and/or a soft reservation policy — and
+prove the bound holds under realistic and adversarial load. This is the
+make-or-break property.
 
-Each needs its own verify phase. None committed yet.
+## Verification gate
 
-## Status / phases
+Each phase is a property that must **strictly pass** before implementation
+begins. (Numbered subdirs, sglang-style.)
 
-| phase | what | status |
+| phase | property to prove | how |
 |---|---|---|
-| [`0_page_bubble/`](0_page_bubble/) | **prove the bubble exists** (size inflation + realistic-trace waste) | restored from git (commit `438ad0397`, was deleted with pcache); re-validating |
-| (future) | solution direction A/B/C above + verify each | not started |
+| [`0_page_bubble/`](0_page_bubble/) | the bubble exists (42.6%) | ✅ done |
+| `1_virtual_split` | attention kernel is byte-exact at `kernel_block_size` ≪ page (pin the live value) | GPU correctness probe |
+| `2_sub_block_allocator` | two-level allocator: attention sub-block alloc/free + page mamba↔attention flip, **no byte overlap, no use-after-free**, under concurrent alloc/free | CPU unit tests + invariants |
+| `3_mamba_availability` | **the hard one** — attention sub-block scatter does not starve mamba of whole pages beyond an acceptable bound; compaction/reservation holds under realistic + adversarial load | simulation + e2e stress |
+| `4_prefix_cache` | mixed-granularity prefix cache is correct and reuses finer (32 vs 1056) | unit + e2e hit comparison |
+| `5_cuda_graph` | sub-block block-table shape change is safe under captured-graph replay | captured-graph replay |
+| `6_the_win` | bubble waste drops to the `kernel_block_size` counterfactual with **no throughput regression** | n=3 e2e |
+
+Implementation starts only if **all** of 1–6 pass.
