@@ -7,10 +7,16 @@ Design claim (design.md §"Cost-model decision-layer performance"):
     the "cheapest page to free" incrementally (like L1's LPB heap) rather than
     re-walking structures each time ... bounded (echoing verify/6's <=3x LRU).
 
-Pure-CPU feasibility check (no GPU, no vLLM import). v3 — rebuilt after TWO
+Pure-CPU feasibility check (no GPU, no vLLM import). v4 — after THREE
 adversarial audits. v1 (page-events, per-op timing) and v2 (independent random
-sub-block slots, reclaimable-only heap) both PASSed but the audits found the
-workload didn't match reality. v3 fixes the two structural problems:
+slots, reclaimable-only heap) were rebuilt for fidelity; v3 added the correlated
+workload + all-page vacate-cost heap; audit-3 then found the production-style
+lazy-delete heap has UNBOUNDED O(P) peek-trim spikes (up to tens of ms),
+masked by reporting the mean. v4's fix: an **IndexedHeap** (eager delete —
+O(1) peek, O(log n) update, no stale entries) that bounds the worst case and
+eliminates bloat; query latency is reported as p50/p99/MAX, not the mean.
+
+v3 fixed the two structural workload problems (kept in v4):
 
   * CORRELATED WORKLOAD (audit-2 [MAJOR fidelity]): a request's attention
     sub-blocks are allocated together as its sequence grows and freed together
@@ -100,6 +106,89 @@ class LazyHeap:
 
     def heap_len(self) -> int:
         return len(self._heap)
+
+
+# --------------------------------------------------------------------------- #
+# Indexed min-heap with EAGER delete/update (the structurally-correct fix).
+# O(1) peek, O(log n) add/update/delete. No stale entries => no lazy-delete
+# bloat (audit-1) and no unbounded peek-trim O(P) spikes (audit-3): peek is
+# always valid in O(1). Recommended for the update-heavy interlayer decision
+# (and a candidate fix for L1's LPBPriorityQueue, task #99).
+# --------------------------------------------------------------------------- #
+class IndexedHeap:
+    __slots__ = ("_h", "_pos")
+
+    def __init__(self) -> None:
+        self._h: list[tuple[float, int]] = []   # (score, key)
+        self._pos: dict[int, int] = {}          # key -> index in _h
+
+    def __len__(self) -> int:
+        return len(self._h)
+
+    def _swap(self, i: int, j: int) -> None:
+        h = self._h
+        h[i], h[j] = h[j], h[i]
+        self._pos[h[i][1]] = i
+        self._pos[h[j][1]] = j
+
+    def _sift_up(self, i: int) -> None:
+        h = self._h
+        while i > 0:
+            parent = (i - 1) >> 1
+            if h[i][0] < h[parent][0]:
+                self._swap(i, parent); i = parent
+            else:
+                break
+
+    def _sift_down(self, i: int) -> None:
+        h = self._h; n = len(h)
+        while True:
+            l, r, sm = 2 * i + 1, 2 * i + 2, i
+            if l < n and h[l][0] < h[sm][0]:
+                sm = l
+            if r < n and h[r][0] < h[sm][0]:
+                sm = r
+            if sm == i:
+                break
+            self._swap(i, sm); i = sm
+
+    def add_or_update(self, key: int, score: float) -> None:
+        pos = self._pos
+        if key in pos:
+            i = pos[key]
+            old = self._h[i][0]
+            self._h[i] = (score, key)
+            if score < old:
+                self._sift_up(i)
+            elif score > old:
+                self._sift_down(i)
+        else:
+            self._h.append((score, key))
+            i = len(self._h) - 1
+            pos[key] = i
+            self._sift_up(i)
+
+    def remove(self, key: int) -> None:
+        pos = self._pos
+        i = pos.pop(key, None)
+        if i is None:
+            return
+        h = self._h
+        last = h.pop()
+        if i < len(h):
+            h[i] = last
+            pos[last[1]] = i
+            self._sift_up(i)
+            self._sift_down(i)
+
+    def peek(self):
+        if not self._h:
+            return None
+        score, key = self._h[0]
+        return key, score
+
+    def heap_len(self) -> int:
+        return len(self._h)
 
 
 # --------------------------------------------------------------------------- #
@@ -294,8 +383,10 @@ def gen_trace(n_pages: int, K: int, n_ops: int, seed: int):
 # Decision structures (rank ALL in-pool attention pages by vacate-cost).
 # --------------------------------------------------------------------------- #
 class CostDecision:
-    def __init__(self, n_pages: int, compact_factor: float = 0.0):
-        self.heap = LazyHeap(compact_factor)
+    def __init__(self, n_pages: int, heap=None):
+        # heap defaults to the production-style lazy-delete heap; pass an
+        # IndexedHeap (eager delete) for the recommended structure.
+        self.heap = heap if heap is not None else LazyHeap()
         for p in range(n_pages):        # every page starts free (vacate-cost 0)
             self.heap.add_or_update(p, 0.0)
 
@@ -345,18 +436,28 @@ def replay_time(struct, events) -> float:
     return time.perf_counter_ns() - t0
 
 
-def query_and_correctness(events, n_pages, K, compact_factor=0.0):
-    """Untimed correctness + realistic query timing: rebuild vac ground truth
-    while replaying, and at each 'Q' time peek() vs the O(P) scan."""
-    inc = CostDecision(n_pages, compact_factor)
+def _pct(xs, q):
+    if not xs:
+        return None
+    s = sorted(xs)
+    return s[min(len(s) - 1, int(q * len(s)))]
+
+
+def query_and_correctness(events, n_pages, K, heap_factory):
+    """Untimed correctness + realistic query timing. Records EACH query's
+    latency (not just the mean) so we can report p50/p99/max — the mean hides
+    the lazy-delete heap's O(P) peek-trim spikes (audit-3)."""
+    inc = CostDecision(n_pages, heap_factory())
     vac = [0.0] * n_pages
     mamba = bytearray(n_pages)
-    t_inc = t_naive = 0.0
+    q_inc: list[float] = []
+    t_naive = 0.0
     nq = viols = 0
     for ev in events:
         k, p, c = ev
         if k == 'Q':
-            t0 = time.perf_counter_ns(); ans = inc.cheapest(); t_inc += time.perf_counter_ns() - t0
+            t0 = time.perf_counter_ns(); ans = inc.cheapest(); dt = time.perf_counter_ns() - t0
+            q_inc.append(dt)
             t0 = time.perf_counter_ns(); truth = naive_cheapest(vac, mamba); t_naive += time.perf_counter_ns() - t0
             nq += 1
             if (ans is None) != (truth is None):
@@ -372,7 +473,13 @@ def query_and_correctness(events, n_pages, K, compact_factor=0.0):
             vac[p] = c; mamba[p] = 0
         elif k == 'T':
             mamba[p] = 1; vac[p] = 0.0
-    return t_inc, t_naive, nq, viols, inc.heap.heap_len(), len(inc.heap)
+    return {
+        "q_p50": round(_pct(q_inc, 0.50), 1) if q_inc else None,
+        "q_p99": round(_pct(q_inc, 0.99), 1) if q_inc else None,
+        "q_max": round(max(q_inc), 1) if q_inc else None,
+        "naive_mean": round(t_naive / nq, 1) if nq else None,
+        "nq": nq, "viols": viols, "heap_phys": inc.heap.heap_len(),
+    }
 
 
 def main() -> None:
@@ -381,7 +488,7 @@ def main() -> None:
     args = ap.parse_args()
     K = 33
 
-    print("=== decision_cost microbench v3 (correlated workload, all-page vacate-cost heap) ===\n")
+    print("=== decision_cost microbench v4 (correlated workload, IndexedHeap, p50/p99/MAX) ===\n")
 
     print("--- workload realism: page occupancy + reclaimable distribution ---")
     for n_pages in (1000, 4000):
@@ -389,62 +496,68 @@ def main() -> None:
         print(json.dumps({"n_pages": n_pages, **stats}))
     print("(bimodal: free+full >> partial; reclaimable pages are RARE under pressure)\n")
 
-    print("--- (2) per-op maintenance: cost-heap vs LRU (batch-timed, 3 seeds, P=4000) ---")
+    print("--- (2) per-op maintenance: IndexedHeap vs LRU (batch-timed, 3 seeds, P=4000) ---")
     ratios = []
     for seed in range(3):
         events, _ = gen_trace(4000, K, args.n_ops, seed)
         n_u = sum(1 for e in events if e[0] in ('U', 'T'))
-        t_inc = replay_time(CostDecision(4000), events)
+        t_inc = replay_time(CostDecision(4000, IndexedHeap()), events)
         t_lru = replay_time(LRUDecision(4000), events)
         ratios.append(round(t_inc / t_lru, 2))
         print(json.dumps({"seed": seed, "maintenance_events": n_u,
                           "inc_ns_per_ev": round(t_inc / max(1, n_u), 1),
                           "lru_ns_per_ev": round(t_lru / max(1, n_u), 1),
                           "ratio_inc_over_lru": round(t_inc / t_lru, 2)}))
-    print(f"per-op ratio inc/LRU (batch-timed): {ratios}  (target <= ~3x)\n")
+    print(f"per-op ratio Indexed/LRU (batch-timed): {ratios}  (target <= ~3x)")
+    # honest bare-op ratio (no apply() wrapper, no LRU make-work): worst case
+    rng = random.Random(0)
+    ks = [rng.randrange(4000) for _ in range(200_000)]
+    ih = IndexedHeap()
+    for p in range(4000):
+        ih.add_or_update(p, rng.random())
+    t0 = time.perf_counter_ns()
+    for k in ks:
+        ih.add_or_update(k, rng.random() * 100)
+    t_h = time.perf_counter_ns() - t0
+    od = OrderedDict((p, None) for p in range(4000))
+    t0 = time.perf_counter_ns()
+    for k in ks:
+        od.pop(k, None); od[k] = None
+    t_o = time.perf_counter_ns() - t0
+    print(f"bare-op IndexedHeap.update / OrderedDict.move = {t_h / t_o:.2f}x\n")
 
-    print("--- (1)+(3) query cost vs P + correctness ---")
-    print("  incremental query WITHOUT vs WITH compaction (cf=8) vs naive O(P):")
-    prev = {0.0: None, 8.0: None}
+    print("--- (1)+(3) query latency vs P: LazyHeap(prod) vs IndexedHeap(fix) vs naive O(P) ---")
+    print("  reporting p50 / p99 / MAX (the mean hides the lazy-delete O(P) spikes):")
     for n_pages in (1000, 4000, 16000):   # <=~20k = realistic single-engine pages
         events, _ = gen_trace(n_pages, K, 150_000, 0)
-        row = {"n_pages": n_pages}
-        for cf in (0.0, 8.0):
-            t_inc, t_naive, nq, viols, hphys, hlog = query_and_correctness(
-                events, n_pages, K, compact_factor=cf)
-            qi = t_inc / nq if nq else 0
-            tag = "nocompact" if cf == 0.0 else "compact8"
-            row[f"q_{tag}_ns"] = round(qi, 1)
-            row[f"grow_{tag}"] = round(qi / prev[cf], 2) if prev[cf] else None
-            row[f"viol_{tag}"] = viols
-            prev[cf] = qi
-            if cf == 8.0:
-                row["query_naive_ns"] = round(t_naive / nq, 1) if nq else None
-                row["naive_over_compact"] = round(t_naive / t_inc, 1) if t_inc else None
-        print(json.dumps(row))
-    print()
+        lazy = query_and_correctness(events, n_pages, K, lambda: LazyHeap(8.0))
+        idx = query_and_correctness(events, n_pages, K, lambda: IndexedHeap())
+        print(json.dumps({"n_pages": n_pages,
+                          "lazy_p50": lazy["q_p50"], "lazy_p99": lazy["q_p99"], "lazy_MAX": lazy["q_max"],
+                          "idx_p50": idx["q_p50"], "idx_p99": idx["q_p99"], "idx_MAX": idx["q_max"],
+                          "naive_mean": idx["naive_mean"],
+                          "viols_lazy": lazy["viols"], "viols_idx": idx["viols"]}))
+    print("  (LazyHeap MAX = O(P) trim spikes; IndexedHeap MAX stays ~µs => the fix)\n")
 
     # Structural complexity of peek, isolated from workload coupling: hold the
     # update rate (updates between queries) FIXED and vary P. If peek is
     # O(log P) it stays ~flat; if it's secretly O(P) it grows linearly.
-    print("--- (1b) query STRUCTURAL complexity: fixed churn, vary P (isolates O(log P)) ---")
+    print("--- (1b) query STRUCTURAL complexity: fixed churn, vary P (IndexedHeap, isolates O(log P)) ---")
     rng = random.Random(0)
     for n_pages in (1000, 4000, 16000, 64000, 256000):
-        inc = CostDecision(n_pages, compact_factor=8.0)
-        # warm to a realistic mix of distinct positive costs, then drain the
-        # initial stale pile ONCE (untimed) so we measure steady-state peek,
-        # not the one-time O(P) trim of superseded init entries.
+        inc = CostDecision(n_pages, IndexedHeap())
         for p in range(n_pages):
             inc.apply(('U', p, rng.random() * 100))
         inc.cheapest()
         UPD, Q = 4, 4000          # 4 updates then 1 query, fixed regardless of P
-        t = 0.0
+        ts = []
         for _ in range(Q):
             for _ in range(UPD):
                 inc.apply(('U', rng.randrange(n_pages), rng.random() * 100))
-            t0 = time.perf_counter_ns(); inc.cheapest(); t += time.perf_counter_ns() - t0
-        print(json.dumps({"n_pages": n_pages, "peek_ns_at_fixed_churn": round(t / Q, 1)}))
-    print()
+            t0 = time.perf_counter_ns(); inc.cheapest(); ts.append(time.perf_counter_ns() - t0)
+        print(json.dumps({"n_pages": n_pages, "peek_p50_ns": round(_pct(ts, 0.5), 1),
+                          "peek_MAX_ns": round(max(ts), 1)}))
+    print("  (IndexedHeap: p50 AND max flat in P — no O(P) tail, unlike LazyHeap)\n")
 
     print("--- (4) heap bloat: direct LazyHeap stress (update-heavy, rare pops) ---")
     n_keys, rounds = 5000, 1000
@@ -462,12 +575,21 @@ def main() -> None:
             if i % (len(stream) // 10) == 0:
                 peaks.append(h.heap_len())
         h.peek()
-        tag = "no_compaction(==prod today)" if cf == 0.0 else f"compaction(factor={cf})"
+        tag = "lazy_no_compaction(==prod today)" if cf == 0.0 else f"lazy_compaction(factor={cf})"
         print(json.dumps({"mode": tag, "updates": len(stream),
                           "logical": len(h), "physical_final": h.heap_len(),
                           "physical_peak": max(peaks),
                           "steady_bloat_x": round(sum(peaks[3:]) / max(1, len(peaks[3:])) / max(1, len(h)), 1),
                           "ceiling_bloat_x": round(max(peaks) / max(1, len(h)), 1)}))
+    # IndexedHeap: physical == logical by construction (no stale entries ever)
+    ih = IndexedHeap()
+    for k in range(n_keys):
+        ih.add_or_update(k, rng.random() * 100)
+    for k, sc in stream:
+        ih.add_or_update(k, sc)
+    print(json.dumps({"mode": "indexed(eager-delete, the fix)", "updates": len(stream),
+                      "logical": len(ih), "physical_final": ih.heap_len(),
+                      "ceiling_bloat_x": round(ih.heap_len() / max(1, len(ih)), 1)}))
 
 
 if __name__ == "__main__":

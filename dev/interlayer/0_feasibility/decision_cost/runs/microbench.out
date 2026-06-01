@@ -1,29 +1,33 @@
-=== decision_cost microbench v3 (correlated workload, all-page vacate-cost heap) ===
+=== decision_cost microbench v4 (correlated workload, IndexedHeap, p50/p99/MAX) ===
 
 --- workload realism: page occupancy + reclaimable distribution ---
 {"n_pages": 1000, "n_events": 54807, "frac_free_pages": 0.009, "frac_full_pages": 0.991, "frac_partial_pages": 0.0, "mean_reclaimable_per_sample": 9.2}
 {"n_pages": 4000, "n_events": 89488, "frac_free_pages": 0.032, "frac_full_pages": 0.968, "frac_partial_pages": 0.0, "mean_reclaimable_per_sample": 127.9}
 (bimodal: free+full >> partial; reclaimable pages are RARE under pressure)
 
---- (2) per-op maintenance: cost-heap vs LRU (batch-timed, 3 seeds, P=4000) ---
-{"seed": 0, "maintenance_events": 61567, "inc_ns_per_ev": 594.7, "lru_ns_per_ev": 255.3, "ratio_inc_over_lru": 2.33}
-{"seed": 1, "maintenance_events": 62340, "inc_ns_per_ev": 649.9, "lru_ns_per_ev": 286.7, "ratio_inc_over_lru": 2.27}
-{"seed": 2, "maintenance_events": 60756, "inc_ns_per_ev": 680.6, "lru_ns_per_ev": 267.7, "ratio_inc_over_lru": 2.54}
-per-op ratio inc/LRU (batch-timed): [2.33, 2.27, 2.54]  (target <= ~3x)
+--- (2) per-op maintenance: IndexedHeap vs LRU (batch-timed, 3 seeds, P=4000) ---
+{"seed": 0, "maintenance_events": 61567, "inc_ns_per_ev": 1268.6, "lru_ns_per_ev": 342.1, "ratio_inc_over_lru": 3.71}
+{"seed": 1, "maintenance_events": 62340, "inc_ns_per_ev": 1217.4, "lru_ns_per_ev": 323.0, "ratio_inc_over_lru": 3.77}
+{"seed": 2, "maintenance_events": 60756, "inc_ns_per_ev": 1206.5, "lru_ns_per_ev": 271.8, "ratio_inc_over_lru": 4.44}
+per-op ratio Indexed/LRU (batch-timed): [3.71, 3.77, 4.44]  (target <= ~3x)
+bare-op IndexedHeap.update / OrderedDict.move = 4.63x
 
---- (1)+(3) query cost vs P + correctness ---
-  incremental query WITHOUT vs WITH compaction (cf=8) vs naive O(P):
-{"n_pages": 1000, "q_nocompact_ns": 567.2, "grow_nocompact": null, "viol_nocompact": 0, "q_compact8_ns": 549.6, "grow_compact8": null, "viol_compact8": 0, "query_naive_ns": 39146.8, "naive_over_compact": 71.2}
-{"n_pages": 4000, "q_nocompact_ns": 1477.5, "grow_nocompact": 2.6, "viol_nocompact": 0, "q_compact8_ns": 1198.4, "grow_compact8": 2.18, "viol_compact8": 0, "query_naive_ns": 157116.8, "naive_over_compact": 131.1}
-{"n_pages": 16000, "q_nocompact_ns": 4864.8, "grow_nocompact": 3.29, "viol_nocompact": 0, "q_compact8_ns": 4677.2, "grow_compact8": 3.9, "viol_compact8": 0, "query_naive_ns": 733507.6, "naive_over_compact": 156.8}
+--- (1)+(3) query latency vs P: LazyHeap(prod) vs IndexedHeap(fix) vs naive O(P) ---
+  reporting p50 / p99 / MAX (the mean hides the lazy-delete O(P) spikes):
+{"n_pages": 1000, "lazy_p50": 250, "lazy_p99": 3920, "lazy_MAX": 1199561, "idx_p50": 140, "idx_p99": 210, "idx_MAX": 6550, "naive_mean": 38730.3, "viols_lazy": 0, "viols_idx": 0}
+{"n_pages": 4000, "lazy_p50": 290, "lazy_p99": 7010, "lazy_MAX": 6834457, "idx_p50": 150, "idx_p99": 340, "idx_MAX": 7050, "naive_mean": 163977.0, "viols_lazy": 0, "viols_idx": 0}
+{"n_pages": 16000, "lazy_p50": 540, "lazy_p99": 11511, "lazy_MAX": 51935261, "idx_p50": 250, "idx_p99": 540, "idx_MAX": 6580, "naive_mean": 746654.8, "viols_lazy": 0, "viols_idx": 0}
+  (LazyHeap MAX = O(P) trim spikes; IndexedHeap MAX stays ~µs => the fix)
 
---- (1b) query STRUCTURAL complexity: fixed churn, vary P (isolates O(log P)) ---
-{"n_pages": 1000, "peek_ns_at_fixed_churn": 244.5}
-{"n_pages": 4000, "peek_ns_at_fixed_churn": 240.8}
-{"n_pages": 16000, "peek_ns_at_fixed_churn": 239.9}
-{"n_pages": 64000, "peek_ns_at_fixed_churn": 241.1}
-{"n_pages": 256000, "peek_ns_at_fixed_churn": 238.7}
+--- (1b) query STRUCTURAL complexity: fixed churn, vary P (IndexedHeap, isolates O(log P)) ---
+{"n_pages": 1000, "peek_p50_ns": 140, "peek_MAX_ns": 6650}
+{"n_pages": 4000, "peek_p50_ns": 140, "peek_MAX_ns": 6150}
+{"n_pages": 16000, "peek_p50_ns": 140, "peek_MAX_ns": 6040}
+{"n_pages": 64000, "peek_p50_ns": 140, "peek_MAX_ns": 6110}
+{"n_pages": 256000, "peek_p50_ns": 140, "peek_MAX_ns": 820}
+  (IndexedHeap: p50 AND max flat in P — no O(P) tail, unlike LazyHeap)
 
 --- (4) heap bloat: direct LazyHeap stress (update-heavy, rare pops) ---
-{"mode": "no_compaction(==prod today)", "updates": 5000000, "logical": 5000, "physical_final": 4996416, "physical_peak": 4497278, "steady_bloat_x": 600.1, "ceiling_bloat_x": 899.5}
-{"mode": "compaction(factor=8.0)", "updates": 5000000, "logical": 5000, "physical_final": 32240, "physical_peak": 38095, "steady_bloat_x": 4.7, "ceiling_bloat_x": 7.6}
+{"mode": "lazy_no_compaction(==prod today)", "updates": 5000000, "logical": 5000, "physical_final": 4996416, "physical_peak": 4497278, "steady_bloat_x": 600.1, "ceiling_bloat_x": 899.5}
+{"mode": "lazy_compaction(factor=8.0)", "updates": 5000000, "logical": 5000, "physical_final": 32240, "physical_peak": 38095, "steady_bloat_x": 4.7, "ceiling_bloat_x": 7.6}
+{"mode": "indexed(eager-delete, the fix)", "updates": 5000000, "logical": 5000, "physical_final": 5000, "ceiling_bloat_x": 1.0}

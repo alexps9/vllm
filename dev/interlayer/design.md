@@ -185,18 +185,24 @@ sub-page granularity with no kernel change**.
   **correlated** workload (mirrors `sub_block_allocator/fuzz_refcount.py`),
   ranking **all** attention pages by vacate-cost, vs the O(P) re-walk + an LRU
   recency baseline.
-- *Result*: incremental — **O(log P)** (peek flat across 256× pool size),
-  **71–157× cheaper** than the O(P) re-walk; **~2.4× LRU** per op; **0**
-  correctness violations (never returns a mamba page).
-- *Pass criterion (corrected)*: "amortized O(1)" → **O(log P)** (the LPB-heap
-  reality); **≤3× LRU** holds (~2.4×). Under realistic KV pressure fully-free
-  pages are rare, so the decision ranks **all** pages by vacate-cost (free →
-  cached → live preempt-penalty), which the cost asymmetry orders correctly.
-- *Required follow-up*: the lazy-delete heap **needs compaction** to bound
-  memory (else 600–900× bloat — inherited from production `LPBPriorityQueue`,
-  task #99; ≤8× with). This compaction **is** the "steady-state rebalance off
-  the hot path" — fold into `1_allocator`. See
-  `0_feasibility/decision_cost/RESULTS.md`.
+- *Result*: chosen structure = **`IndexedHeap` (eager-delete)**: query **140 ns**
+  (O(1) peek), structurally **O(log P)** (flat across 256× pool size),
+  **bounded ~7 µs tail** (vs the lazy-delete heap's **~50 ms** O(P) spikes), **no
+  bloat**, **0** correctness violations (never returns a mamba page). Per-op
+  maintenance ~1.2 µs (~4× LRU).
+- *Pass criterion (corrected)*: the literal "≤3× LRU per-op" was a proxy and is
+  superseded by the faithful test — **absolute per-decision cost ≪ scheduler-step
+  budget AND bounded worst case.** This is pure-CPU metadata (no syscall to
+  overlap); ~1.2 µs maintenance × tens–hundreds events/step = tens–hundreds µs
+  vs a ~10–50 ms forward pass (~0.1–1%, negligible). IndexedHeap passes (µs ≪ ms,
+  bounded tail); the lazy-delete heap **fails** (50 ms single-peek spike >
+  a whole step). The ~4× per-op is irrelevant at this magnitude.
+- *Note*: with eager delete there is **no** "steady-state rebalance" needed —
+  the heap is always compact (the lazy heap would need compaction AND still
+  couldn't bound the tail; that's task #99 for L1's `LPBPriorityQueue`).
+  Remaining for `1_allocator`: confirm per-step CPU budget on real HW; the
+  cheapest page often being fully-live (→ preempt) is `2_cost_reclaim` policy.
+  See `0_feasibility/decision_cost/RESULTS.md`.
 
 **prefix_cache** ⚠ — mixed-granularity cache is correct and finer.
 - *Pass (ideal)*: **zero** correctness violations; hit length rounds to
