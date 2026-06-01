@@ -141,18 +141,57 @@ verify/6's ≤~3× LRU target).
 
 ## Verification gate
 
-Each phase is a property that must **strictly pass** before implementation
-begins. (Numbered subdirs, sglang-style.)
+Numbered subdirs, sglang-style. Each phase has a **falsifiable pass bar set
+at the ideal level** (strictly-better-or-equal; zero violations; waste → the
+counterfactual floor). Bars tagged *(calibrate)* are first-run-tunable; the
+rest are hard lines. **Implementation starts only if all of 1–7 pass.**
 
-| phase | property to prove | how |
-|---|---|---|
-| [`0_page_bubble/`](0_page_bubble/) | the bubble exists (42.6%) | ✅ done |
-| `1_virtual_split` | attention kernel is byte-exact at `kernel_block_size` ≪ page (pin the live value) | GPU correctness probe |
-| `2_sub_block_allocator` | two-level allocator: attention sub-block alloc/free + page mamba↔attention flip, **no byte overlap, no use-after-free**, under concurrent alloc/free | CPU unit tests + invariants |
-| `3_cost_reclaim` | **the make-or-break (performance)** — cost-model-driven page reclaim keeps **recompute amplification, tail latency, and attention starvation bounded** under KV-bound real + adversarial load (depends on an accurate cost model) | simulation + e2e stress |
-| `4_decision_cost` | per-step decision is cheap — incremental "cheapest page to free" structure, **bounded hot-path cost** (≤~3× LRU, verify/6-style); steady-state rebalance async | microbench |
-| `5_prefix_cache` | mixed-granularity prefix cache is correct and reuses finer (≈`ksize` vs 1056) | unit + e2e hit comparison |
-| `6_cuda_graph` | sub-block block-table shape change is safe under captured-graph replay | captured-graph replay |
-| `7_the_win` | bubble waste drops to the `kernel_block_size` counterfactual with **no throughput regression** | n=3 e2e |
+**0 · page_bubble** — ✅ done. Bubble = 42.6% workload-weighted KV waste
+(106 real CC sessions).
 
-Implementation starts only if **all** of 1–7 pass.
+**1 · virtual_split** — the attention kernel is byte-exact at
+`kernel_block_size` ≪ page.
+- *Test*: Qwen3.5-35B-A3B (align); run attention over the sub-divided
+  1056-page layout vs the reference full-page path, identical inputs.
+- *Pass (ideal)*: outputs **bit-identical** (atol = rtol = 0).
+
+**2 · sub_block_allocator** — the two-level allocator is memory-safe.
+- *Test*: CPU fuzz — ≥10⁶ randomized **and adversarial (max-scatter)**
+  alloc/free/page-flip ops with invariant assertions (no two live ids alias
+  bytes; ref-counts exact; a page is mamba-usable iff all its sub-blocks free).
+- *Pass (ideal)*: **zero** invariant violations; every fully-freed page
+  returned to the pool.
+
+**3 · cost_reclaim** — *the make-or-break (performance)*. Cost-model-driven
+page reclaim stays bounded.
+- *Test*: KV-bound real load (W2, high conc/util) **+** adversarial
+  (max attention sub-block scatter × mamba-heavy interleaving), vs stock vLLM.
+- *Pass (ideal)*: mamba page starvation = **0** (never stalls); recompute
+  amplification **≤ 0%** vs stock *(calibrate)*; **p99 TTFT ≤ stock**
+  *(calibrate)*; no sustained attention starvation (every request progresses
+  within bounded steps). I.e. **strictly ≥ stock on every axis.**
+
+**4 · decision_cost** — the per-step decision is cheap.
+- *Test*: microbench the incremental "cheapest page to free" structure under
+  realistic alloc/free churn (verify/6-style), vs the LRU free-queue.
+- *Pass (ideal)*: **≤ 3× LRU** per-op (verify/6 precedent), amortized O(1);
+  steady-state rebalance off the hot path.
+
+**5 · prefix_cache** — mixed-granularity cache is correct and finer.
+- *Test*: hybrid requests sharing prefixes at sub-page boundaries.
+- *Pass (ideal)*: **zero** correctness violations (cached bytes = recompute,
+  no cross-request contamination); hit length rounds to `kernel_block_size`,
+  not 1056 — the 1056 rounding is **eliminated**.
+
+**6 · cuda_graph** — the sub-block block-table is safe under capture/replay.
+- *Test*: capture a CUDA graph with the sub-block layout, replay across
+  alloc/free/page-flip events.
+- *Pass (ideal)*: **zero** replay faults; **no recapture** needed.
+
+**7 · the_win** — the bubble is eliminated with no regression.
+- *Test*: KV-bound agent load, n=3, fix vs stock.
+- *Pass (ideal)*: waste → the `kernel_block_size` counterfactual floor (~1%
+  at ksize=32, vs 42.6%); **throughput ≥ stock** with a real gain under KV
+  pressure (target throughput / hit-rate uplift) *(calibrate)*.
+
+interlayer depends on the L2 cost model (removed / redesigning) — coupled.
