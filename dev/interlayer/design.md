@@ -204,14 +204,25 @@ sub-page granularity with no kernel change**.
   cheapest page often being fully-live (→ preempt) is `2_cost_reclaim` policy.
   See `0_feasibility/decision_cost/RESULTS.md`.
 
-**prefix_cache** ⚠ — mixed-granularity cache is correct and finer.
-- *Pass (ideal)*: **zero** correctness violations; hit length rounds to
-  `kernel_block_size`, not 1056. ⚠ likely needs the Phase-1 allocator to exist
-  — may reclassify to implementation (see PLAN.md).
+**prefix_cache** — **reclassified → `1_allocator` (#94).** No faithful pre-impl
+check: "hit rounds to `kernel_block_size` not 1056" is trivially true by setting
+the hash chunk/alignment to `ksize` (`kv_cache_utils.py:645-688`,
+`single_type_kv_cache_manager.py:483-528`); the real risk (collision handling,
+ref-counting of shared sub-blocks on a co-owned page, eviction lifecycle) is the
+cache machinery × the two-level allocator — verify on the real impl. *Pass
+(ideal, on impl)*: zero correctness violations; hit length rounds to `ksize`.
 
-**cuda_graph** ⚠ — the sub-block block-table is safe under capture/replay.
-- *Pass (ideal)*: **zero** replay faults; **no recapture**. ⚠ likely needs the
-  real block-table change — may reclassify to implementation.
+**cuda_graph** — the **scattered** sub-block block-table is safe under
+capture/replay. Code read: the block-table is a per-step-written *persistent
+input* tensor (same address across replays, `block_table.py:140-145`), read
+data-driven by the kernel (no fixed `N*ratio` contiguity assumption,
+`block_table.py:226-288`), and virtual-splitting already fans out to `ksize`
+blocks under graphs — so scattered ids are "just different data."
+- *Test*: hand-build a **scattered** block-table (non-contiguous sub-block ids)
+  vs a contiguous reference holding the same logical KV; run the real flash-attn
+  kernel under CUDA-graph **capture then replay with changed values**.
+- *Pass (ideal)*: **zero** replay faults; **no recapture**; scattered output
+  numerically matches the contiguous reference.
 
 **Implementation-phase checks** (top-level `1_…`/`2_…`, on a minimal real
 impl — see [`PLAN.md`](PLAN.md)): **cost_reclaim** (mamba starvation /

@@ -27,16 +27,21 @@ before writing any vLLM integration. Each is a subfolder; each gets audited.
 | [`virtual_split`](0_feasibility/virtual_split/) | ✅ done | kernel runs at `ksize=32 ≪ 1056`, valid attention at sub-page granularity, no kernel change | kernel pinned to 1056 / wrong output at 16-vs-32 (it's numerically equivalent; bit-identical was retired as fp-impossible) |
 | [`sub_block_allocator`](0_feasibility/sub_block_allocator/) | ✅ done | two-level allocator is memory-safe **with ref-counting + cached lifecycle + sharing** | any invariant violation / leak (0 over 3 seeds × 150k ops + adversarial; ref_cnt→290) |
 | [`decision_cost`](0_feasibility/decision_cost/) | ✅ done (audited ×4) | "cheapest page to vacate" incremental & correct; **structure chosen = `IndexedHeap` (eager-delete)**: O(1) query, bounded ~7µs tail, no bloat, ~4× LRU per-op (µs ≪ ms step → fine) | query O(P)/unbounded tail (lazy heap: 50ms — that's why eager-delete) / wrong page (0 viol). Lazy `LPBPriorityQueue` carries the defect → task #99 |
-| [`prefix_cache`](0_feasibility/prefix_cache/) | ⬜ todo (#94) ⚠ | mixed-granularity prefix cache correct + finer reuse | correctness violation / hit doesn't round to ksize. **⚠ may need minimal impl — revisit (see below).** |
-| [`cuda_graph`](0_feasibility/cuda_graph/) | ⬜ todo (#95) ⚠ | sub-block block-table safe under captured-graph replay | replay fault / recapture. **⚠ may need minimal impl — revisit.** |
+| [`cuda_graph`](0_feasibility/cuda_graph/) | 🔄 probe (#95) | scattered sub-block block-table safe under captured-graph replay | replay fault / recapture / scattered ids ≠ contiguous reference |
+| ~~prefix_cache~~ | → impl (#94) | reclassified to `1_allocator` | — |
 
-**Gate**: all six pass (audited). `decision_cost` ✅ done (self-contained;
-structure chosen = eager-delete `IndexedHeap`; real-engine profiling of its
-maintenance cost → task #100; the prod lazy `LPBPriorityQueue` defect → #99).
-`prefix_cache` and `cuda_graph` test properties of the *real* block-table /
-prefix-cache changes, so they likely need the Phase-1 allocator to exist —
-flagged for reclassification to implementation if a faithful pre-impl check
-isn't possible.
+**Gate**: page_bubble / virtual_split / sub_block_allocator / decision_cost ✅
+done (audited). **`prefix_cache` reclassified → `1_allocator` (#94)**: its only
+paper-checkable part ("hit rounds to ksize") is trivially true by a parameter
+(hash chunk size); the real risk (collision / shared-sub-block ref-count /
+eviction) is the cache machinery × the allocator — model≠integration, needs the
+real impl. **`cuda_graph` (#95)** is the last gate item: a code read shows the
+block-table is a per-step-written *persistent input* tensor (same address across
+CUDA-graph replays, `block_table.py:140-145`) read data-driven by the kernel
+(no fixed `N*ratio` assumption), and virtual-splitting already fans out to
+`ksize` blocks under graphs — so scattered sub-block ids are "just different
+data." A minimal-GPU probe confirms the one residual (no downstream contiguity
+assumption) before building.
 
 **Audit note (decision_cost):** took FOUR audits. v1 timer-inflated + dismissed
 bloat; v2 unrealistic independent-slot workload + reclaimable-only heap; v3
