@@ -25,35 +25,44 @@ assumption, `block_table.py:226-288`). This probe confirms it on the real GPU.
 
 ## Method (`probe.py`)
 
-One GQA sequence (8 q-heads / 2 kv-heads / head_dim 128), `ksize=32`, paged KV
-cache of 512 physical blocks. Several **disjoint** physical block-sets are
-pre-filled with the **same logical KV** (1 contiguous + 5 random scatterings).
+GQA (8 q-heads / 2 kv-heads / head_dim 128), `ksize=32`, paged KV cache of 2048
+physical blocks. For each case, several **disjoint** physical block-sets are
+pre-filled with the **same logical KV** per sequence (1 contiguous + 5 random
+scatterings). The kernel is called with the **production CUDA-graph config** the
+vLLM backend passes (`flash_attn.py:796-818`): **FA3** (`get_flash_attn_version`),
+**`num_splits=32`** (`flash_attn_max_num_splits_for_cuda_graph`), and the FA3
+**`scheduler_metadata`** AOT schedule.
 
 1. Eager reference = `flash_attn_varlen_func` with the contiguous block-table.
-2. **Capture a CUDA graph ONCE** wrapping the kernel, reading a *persistent*
-   block-table tensor.
+2. **Capture a CUDA graph ONCE** (counter-verified) wrapping the kernel, reading
+   a *persistent* block-table tensor.
 3. **Replay** while overwriting that tensor with each scattering (no recapture).
-4. **Control:** one replay with the block-table pointing at **different** KV —
-   its output **must differ** from the reference, else "match" would be
-   trivially true (this rules out "the kernel ignores the block-table").
+4. **Control:** one replay with a row pointing at **different** KV — its output
+   **must differ**, else "match" would be trivially true (rules out "the kernel
+   ignores the block-table").
 
-Run for **prefill** (S_q=S_kv=200, causal) and **decode** (S_q=1, S_kv=200).
+Cases: **prefill** (1×200), **decode** (1×1 over 200), **mixed batch**
+(prefill + 2 decodes, **per-row** scatter), **long-context decode** (1 over 4096
+→ split-KV genuinely partitions the sequence across many scattered blocks).
 
 ## Results
 
-| mode | scatter replays vs ref | control diff (≠ref) | replay fault | recapture |
+| case | scatter replays vs ref | control diff (≠ref) | fault | captures |
 |---|---|---|---|---|
-| prefill | 5/5 **0.0** (bit-identical) | 4.09 ✅ differs | none | none (captured once) |
-| decode  | 5/5 **0.0** (bit-identical) | 0.57 ✅ differs | none | none (captured once) |
+| prefill (1×200) | 5/5 **0.0** | 4.09 ✅ | none | 1 |
+| decode (1×200) | 5/5 **0.0** | 0.57 ✅ | none | 1 |
+| mixed batch (prefill+2 decode, per-row scatter) | 5/5 **0.0** | 4.31 ✅ | none | 1 |
+| long decode (1×4096, split-KV) | 5/5 **0.0** | 0.14 ✅ | none | 1 |
 
-- **Bit-identical** (max abs diff 0.0) across every scattering: same logical KV
-  in scattered physical blocks ⇒ same key order ⇒ same math. Stronger than
-  `virtual_split`'s "numerically equivalent" because here only the *physical
-  address* changes, not the reduction order.
-- The **control differs** (4.09 prefill / 0.57 decode) ⇒ the captured graph
-  genuinely **re-reads the live block-table** each replay; the 0.0 matches are
-  not an artifact of the kernel ignoring it.
-- **0 faults, captured once** across 7 replays/mode.
+- **Bit-identical** (max abs diff 0.0) across every scattering and every case:
+  same logical KV in scattered physical blocks ⇒ same key order ⇒ same math.
+  Stronger than `virtual_split`'s "numerically equivalent" (only the *physical
+  address* changes, not reduction order).
+- The **control differs** in all cases ⇒ the captured graph genuinely
+  **re-reads the live block-table** each replay; the 0.0 matches are not the
+  kernel ignoring it.
+- **0 faults, captured exactly once** (measured counter) across 7 replays/case;
+  multi-sequence **per-row** scatter and split-KV (`num_splits=32`) both hold.
 
 ## Conclusion
 
@@ -65,11 +74,18 @@ design-level showstopper risk is retired.
 
 ## Scope / caveats
 
-- Real GPU, real `flash_attn_varlen_func` (the prod kernel), but a **standalone
-  call**, not the full engine + allocator. It proves the *kernel + captured
-  graph* tolerate scattered block-tables; the engine integration (building such
-  block-tables from the two-level allocator, persistent-buffer plumbing) is
-  exercised in `1_allocator`.
-- Single sequence. The block-table is read per-row (`block_table[req]`), so
-  multi-sequence batches use the identical read path; not separately swept here.
-- `fa_version` left at the library default (the version `virtual_split` runs).
+- Real GPU, real `flash_attn_varlen_func` under the **prod CUDA-graph config**
+  (FA3 + `num_splits=32` + `scheduler_metadata`), but a **standalone call**, not
+  the full engine. It proves the *kernel + captured graph* tolerate scattered /
+  per-row block-tables; the engine plumbing is exercised in `1_allocator`.
+- **Single residual (integration-only, → `1_allocator`):** the kernel tolerates
+  the scatter (proven here), but whether the two-level allocator writes the
+  scattered kernel-block ids into the **exact persistent `input_block_tables`
+  buffer the captured graph baked** (`block_table.py:140-145` /
+  `get_dummy_block_tables`) — rather than allocating a fresh tensor — is an
+  integration property only the real impl can confirm.
+
+*History:* an audit (`a49bf77f`) found v1 of this probe omitted the prod args
+(`num_splits` / `scheduler_metadata` / `fa_version`) and ran single-sequence; it
+verified the conclusion was unchanged with them, and those + multi-seq + split-KV
+are now folded into the probe above (all bit-identical).

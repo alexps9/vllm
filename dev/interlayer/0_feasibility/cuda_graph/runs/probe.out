@@ -1,19 +1,38 @@
-=== cuda_graph probe: prefill (S_q=200, S_kv=200, ksize=32) ===
-{"mode": "prefill", "replay": 0, "kind": "contig", "max_abs_diff_vs_ref": 0.0, "match": true}
-{"mode": "prefill", "replay": 1, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
-{"mode": "prefill", "replay": 2, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
-{"mode": "prefill", "replay": 3, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
-{"mode": "prefill", "replay": 4, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
-{"mode": "prefill", "replay": 5, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
-{"mode": "prefill", "S_q": 200, "S_kv": 200, "ksize": 32, "eager_scatter_max_diff": 0.0, "control_diff_vs_ref": 4.0938, "control_differs(expected True)": true, "replay_fault": false, "all_scatter_replays_match_ref": true, "n_replays": 7, "captured_once": true}
+=== cuda_graph probe: prefill [(200, 200)] (FA3, num_splits=32, ksize=32) ===
+{"case": "prefill", "variant": 0, "kind": "contig", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"case": "prefill", "variant": 1, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"case": "prefill", "variant": 2, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"case": "prefill", "variant": 3, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"case": "prefill", "variant": 4, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"case": "prefill", "variant": 5, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"case": "prefill", "seqs": [[200, 200]], "fa_version": 3, "num_splits": 32, "ksize": 32, "control_diff_vs_ref": 4.0938, "control_differs(expect True)": true, "replay_fault": false, "all_scatter_match_ref": true, "n_captures(expect 1)": 1, "n_replays": 7}
 
-=== cuda_graph probe: decode (S_q=1, S_kv=200, ksize=32) ===
-{"mode": "decode", "replay": 0, "kind": "contig", "max_abs_diff_vs_ref": 0.0, "match": true}
-{"mode": "decode", "replay": 1, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
-{"mode": "decode", "replay": 2, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
-{"mode": "decode", "replay": 3, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
-{"mode": "decode", "replay": 4, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
-{"mode": "decode", "replay": 5, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
-{"mode": "decode", "S_q": 1, "S_kv": 200, "ksize": 32, "eager_scatter_max_diff": 0.0, "control_diff_vs_ref": 0.5703, "control_differs(expected True)": true, "replay_fault": false, "all_scatter_replays_match_ref": true, "n_replays": 7, "captured_once": true}
+=== cuda_graph probe: decode [(1, 200)] (FA3, num_splits=32, ksize=32) ===
+{"case": "decode", "variant": 0, "kind": "contig", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"case": "decode", "variant": 1, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"case": "decode", "variant": 2, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"case": "decode", "variant": 3, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"case": "decode", "variant": 4, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"case": "decode", "variant": 5, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"case": "decode", "seqs": [[1, 200]], "fa_version": 3, "num_splits": 32, "ksize": 32, "control_diff_vs_ref": 0.5703, "control_differs(expect True)": true, "replay_fault": false, "all_scatter_match_ref": true, "n_captures(expect 1)": 1, "n_replays": 7}
 
-VERDICT: PASS {"prefill": true, "decode": true} - scattered sub-block block-table replays correctly under a captured graph (no fault, no recapture, == contiguous ref); the graph re-reads the live block-table (control differs).
+=== cuda_graph probe: batch_mixed_prefill+2decode [(200, 200), (1, 96), (1, 160)] (FA3, num_splits=32, ksize=32) ===
+{"case": "batch_mixed_prefill+2decode", "variant": 0, "kind": "contig", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"case": "batch_mixed_prefill+2decode", "variant": 1, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"case": "batch_mixed_prefill+2decode", "variant": 2, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"case": "batch_mixed_prefill+2decode", "variant": 3, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"case": "batch_mixed_prefill+2decode", "variant": 4, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"case": "batch_mixed_prefill+2decode", "variant": 5, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"case": "batch_mixed_prefill+2decode", "seqs": [[200, 200], [1, 96], [1, 160]], "fa_version": 3, "num_splits": 32, "ksize": 32, "control_diff_vs_ref": 4.3125, "control_differs(expect True)": true, "replay_fault": false, "all_scatter_match_ref": true, "n_captures(expect 1)": 1, "n_replays": 7}
+
+=== cuda_graph probe: long_decode_splitKV [(1, 4096)] (FA3, num_splits=32, ksize=32) ===
+{"case": "long_decode_splitKV", "variant": 0, "kind": "contig", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"case": "long_decode_splitKV", "variant": 1, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"case": "long_decode_splitKV", "variant": 2, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"case": "long_decode_splitKV", "variant": 3, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"case": "long_decode_splitKV", "variant": 4, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"case": "long_decode_splitKV", "variant": 5, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"case": "long_decode_splitKV", "seqs": [[1, 4096]], "fa_version": 3, "num_splits": 32, "ksize": 32, "control_diff_vs_ref": 0.1406, "control_differs(expect True)": true, "replay_fault": false, "all_scatter_match_ref": true, "n_captures(expect 1)": 1, "n_replays": 7}
+
+VERDICT: PASS {"prefill": true, "decode": true, "batch_mixed_prefill+2decode": true, "long_decode_splitKV": true}
+- scattered/per-row sub-block block-tables replay correctly under a captured graph (prod FA3 + num_splits=32 + scheduler_metadata): 0 faults, captured once, == contiguous ref; control differs (live read).
