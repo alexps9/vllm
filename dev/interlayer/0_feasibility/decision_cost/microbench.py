@@ -482,6 +482,65 @@ def query_and_correctness(events, n_pages, K, heap_factory):
     }
 
 
+def _check_indexed(ih, ref) -> None:
+    """Full structural invariants of the hand-rolled IndexedHeap vs a brute
+    reference dict. Raises on any breach."""
+    h, pos = ih._h, ih._pos
+    if not (len(h) == len(pos) == len(ref)):
+        raise AssertionError(f"size: heap={len(h)} pos={len(pos)} ref={len(ref)}")
+    if {k for _, k in h} != set(pos) or set(pos) != set(ref):
+        raise AssertionError("keyset mismatch")
+    for i, (sc, k) in enumerate(h):
+        if pos[k] != i:
+            raise AssertionError(f"pos map: key {k} at {i} but pos says {pos[k]}")
+        if abs(ref[k] - sc) > 1e-12:
+            raise AssertionError(f"stale score on {k}: {sc} vs ref {ref[k]}")
+        if i > 0 and h[(i - 1) >> 1][0] > sc:
+            raise AssertionError(f"heap order broken at {i}")
+
+
+def property_test(seeds=30, ops=12_000):
+    """Hammer IndexedHeap correctness vs a dict+min() reference, checking every
+    invariant after every op. Stresses the paths the workload under-exercises
+    (audit-4 F4/F5): interior remove, remove-min, remove-then-readd, decrease
+    AND increase the same key, heavy ties (small keyspace), drain-to-empty."""
+    fails = 0
+    total = 0
+    interior_removes = drains = 0
+    for seed in range(seeds):
+        rng = random.Random(1000 + seed)
+        ih = IndexedHeap()
+        ref: dict[int, float] = {}
+        keyspace = (8, 25, 300)[seed % 3]      # small => many ties + interior churn
+        for _ in range(ops):
+            total += 1
+            r = rng.random(); k = rng.randrange(keyspace)
+            if r < 0.50:                       # add / update (in-place re-key)
+                sc = round(rng.random() * 8, 3)
+                ih.add_or_update(k, sc); ref[k] = sc
+            elif r < 0.82:                     # remove (often interior)
+                if k in ref and ih._pos.get(k, 0) != 0:
+                    interior_removes += 1
+                ih.remove(k); ref.pop(k, None)
+            elif r < 0.88 and ref:             # remove current min
+                mk = min(ref, key=ref.get)
+                ih.remove(mk); ref.pop(mk)
+            else:                              # query + verify
+                ans = ih.peek()
+                truth = min(ref.values()) if ref else None
+                if (ans is None) != (truth is None):
+                    fails += 1
+                elif ans is not None and abs(ans[1] - truth) > 1e-9:
+                    fails += 1
+            _check_indexed(ih, ref)
+        # drain to empty (exercises root-remove repeatedly)
+        for k in list(ref):
+            ih.remove(k); ref.pop(k); _check_indexed(ih, ref)
+        drains += 1
+    return {"ops": total, "seeds": seeds, "interior_removes": interior_removes,
+            "drains_to_empty": drains, "violations": fails}
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--n-ops", type=int, default=200_000)
@@ -489,6 +548,12 @@ def main() -> None:
     K = 33
 
     print("=== decision_cost microbench v4 (correlated workload, IndexedHeap, p50/p99/MAX) ===\n")
+
+    print("--- (0) IndexedHeap correctness property test (vs dict+min reference) ---")
+    pt = property_test()
+    print(json.dumps(pt))
+    assert pt["violations"] == 0, "IndexedHeap property test FAILED"
+    print("  (full invariants checked after EVERY op; interior remove / remove-min / drain exercised)\n")
 
     print("--- workload realism: page occupancy + reclaimable distribution ---")
     for n_pages in (1000, 4000):
@@ -509,22 +574,46 @@ def main() -> None:
                           "lru_ns_per_ev": round(t_lru / max(1, n_u), 1),
                           "ratio_inc_over_lru": round(t_inc / t_lru, 2)}))
     print(f"per-op ratio Indexed/LRU (batch-timed): {ratios}  (target <= ~3x)")
-    # honest bare-op ratio (no apply() wrapper, no LRU make-work): worst case
+    # Bare-op decomposition (no apply() wrapper): how much of the ratio is the
+    # eager-delete ALGORITHM vs the hand-rolled-Python-sift-vs-C constant?
+    # (audit-4 F3) — idx/lazy isolates algorithm; idx/od is the full constant.
     rng = random.Random(0)
     ks = [rng.randrange(4000) for _ in range(200_000)]
+    scs = [rng.random() * 100 for _ in range(200_000)]
     ih = IndexedHeap()
     for p in range(4000):
         ih.add_or_update(p, rng.random())
     t0 = time.perf_counter_ns()
-    for k in ks:
-        ih.add_or_update(k, rng.random() * 100)
-    t_h = time.perf_counter_ns() - t0
+    for k, s in zip(ks, scs):
+        ih.add_or_update(k, s)
+    t_idx = time.perf_counter_ns() - t0
+    lh = LazyHeap()                       # C heapq.heappush (the prod primitive)
+    for p in range(4000):
+        lh.add_or_update(p, rng.random())
+    t0 = time.perf_counter_ns()
+    for k, s in zip(ks, scs):
+        lh.add_or_update(k, s)
+    t_lazy = time.perf_counter_ns() - t0
     od = OrderedDict((p, None) for p in range(4000))
     t0 = time.perf_counter_ns()
     for k in ks:
         od.pop(k, None); od[k] = None
-    t_o = time.perf_counter_ns() - t0
-    print(f"bare-op IndexedHeap.update / OrderedDict.move = {t_h / t_o:.2f}x\n")
+    t_od = time.perf_counter_ns() - t0
+    print(json.dumps({"bare_idx_ns": round(t_idx / len(ks), 1),
+                      "bare_lazy_heapq_ns": round(t_lazy / len(ks), 1),
+                      "bare_od_ns": round(t_od / len(ks), 1),
+                      "idx_over_lazy(algorithm)": round(t_idx / t_lazy, 2),
+                      "idx_over_od(full_constant)": round(t_idx / t_od, 2)}))
+    print("  (idx/lazy ~2x = algorithm; idx/od ~5x = mostly Python-sift vs C; "
+          "a C-backed indexed heap would likely beat lazy on per-op too)")
+    # timer floor on this box, to contextualize the sub-µs query numbers (F2)
+    N = 1_000_000
+    t0 = time.perf_counter_ns()
+    for _ in range(N):
+        time.perf_counter_ns()
+    floor = (time.perf_counter_ns() - t0) / N
+    print(f"  perf_counter_ns() call floor on this box: ~{floor:.0f} ns "
+          f"(=> sub-µs query numbers are ~half timer overhead)\n")
 
     print("--- (1)+(3) query latency vs P: LazyHeap(prod) vs IndexedHeap(fix) vs naive O(P) ---")
     print("  reporting p50 / p99 / MAX (the mean hides the lazy-delete O(P) spikes):")
@@ -537,27 +626,32 @@ def main() -> None:
                           "idx_p50": idx["q_p50"], "idx_p99": idx["q_p99"], "idx_MAX": idx["q_max"],
                           "naive_mean": idx["naive_mean"],
                           "viols_lazy": lazy["viols"], "viols_idx": idx["viols"]}))
-    print("  (LazyHeap MAX = O(P) trim spikes; IndexedHeap MAX stays ~µs => the fix)\n")
+    print("  (LazyHeap MAX = real O(P) trim spike, scales with P; IndexedHeap MAX is\n"
+          "   scheduler JITTER not peek cost — batched worst per-call ~125ns, sub-µs)\n")
 
-    # Structural complexity of peek, isolated from workload coupling: hold the
-    # update rate (updates between queries) FIXED and vary P. If peek is
-    # O(log P) it stays ~flat; if it's secretly O(P) it grows linearly.
-    print("--- (1b) query STRUCTURAL complexity: fixed churn, vary P (IndexedHeap, isolates O(log P)) ---")
+    # Structural complexity, fixed churn, vary P. Reports BOTH peek (query) and
+    # update (maintenance). peek should be O(1)-flat; update should be O(log P)
+    # — maintenance is NOT flat (audit-4 F1), it grows with sift depth, but
+    # stays sub-3µs even at 256k pages, << any forward-pass step.
+    print("--- (1b) structural complexity vs P (IndexedHeap): peek O(1), maintenance O(log P) ---")
     rng = random.Random(0)
     for n_pages in (1000, 4000, 16000, 64000, 256000):
         inc = CostDecision(n_pages, IndexedHeap())
         for p in range(n_pages):
             inc.apply(('U', p, rng.random() * 100))
         inc.cheapest()
-        UPD, Q = 4, 4000          # 4 updates then 1 query, fixed regardless of P
-        ts = []
+        UPD, Q = 4, 4000
+        peeks, upd_t, upd_n = [], 0.0, 0
         for _ in range(Q):
+            t0 = time.perf_counter_ns()
             for _ in range(UPD):
                 inc.apply(('U', rng.randrange(n_pages), rng.random() * 100))
-            t0 = time.perf_counter_ns(); inc.cheapest(); ts.append(time.perf_counter_ns() - t0)
-        print(json.dumps({"n_pages": n_pages, "peek_p50_ns": round(_pct(ts, 0.5), 1),
-                          "peek_MAX_ns": round(max(ts), 1)}))
-    print("  (IndexedHeap: p50 AND max flat in P — no O(P) tail, unlike LazyHeap)\n")
+            upd_t += time.perf_counter_ns() - t0; upd_n += UPD
+            t0 = time.perf_counter_ns(); inc.cheapest(); peeks.append(time.perf_counter_ns() - t0)
+        print(json.dumps({"n_pages": n_pages,
+                          "peek_p50_ns": round(_pct(peeks, 0.5), 1),
+                          "maintenance_ns_per_ev": round(upd_t / upd_n, 1)}))
+    print("  (peek flat O(1); maintenance O(log P): ~0.7µs@1k -> ~2.3µs@256k, all << ms step)\n")
 
     print("--- (4) heap bloat: direct LazyHeap stress (update-heavy, rare pops) ---")
     n_keys, rounds = 5000, 1000

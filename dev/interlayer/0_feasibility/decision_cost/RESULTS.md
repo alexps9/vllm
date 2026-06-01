@@ -1,28 +1,34 @@
 # decision_cost — RESULTS
 
-**PASS. Chosen structure: `IndexedHeap` (eager-delete).** On a realistic
-correlated workload, the per-step "cheapest page to vacate for mamba" decision
-is **incremental** (query O(1)/peek; structurally O(log P) — flat across 256×
-pool size), **correct** (0 violations, never returns a mamba page), with a
-**bounded worst case** (~7 µs vs the lazy-delete heap's ~50 ms O(P) spikes) and
-**no memory bloat**. The per-op maintenance constant (~1.2 µs, ~4× LRU) is over
-the literal ≤3× bar but is **operationally irrelevant** (see "decision criterion"
-below). The production `LPBPriorityQueue` is lazy-delete and carries the spike +
-bloat defect — task #99.
+**PASS (audited ×4). Chosen structure: `IndexedHeap` (eager-delete).** On a
+realistic correlated workload, the per-step "cheapest page to vacate for mamba"
+decision is **incremental** (query **O(1) peek, ~140 ns**, flat across 256× pool
+size), **correct** (property test 360k ops × 30 seeds + workload, 0 violations,
+never returns a mamba page), with a **bounded sub-µs worst case** (the lazy-delete
+heap instead has **real O(P) spikes growing to ~70 ms**) and **no memory bloat**
+(1.0× vs lazy 600–900×). Per-op maintenance is **O(log P), ~1–3 µs (~4× LRU)** —
+over the literal ≤3× bar, but the 4× is *mostly* hand-rolled-Python-vs-C constant
+(algorithmic gap only ~1.3–1.7×), and µs ≪ a 10–50 ms step makes it
+**operationally irrelevant** (see "decision criterion"). The production
+`LPBPriorityQueue` is lazy-delete and carries the spike + bloat defect — task #99.
+
+A steelman (audit-4): cheaply capping the lazy heap's trim to bound its tail
+produces **31% wrong answers** — you cannot get bounded-tail AND correctness from
+the lazy heap, so the eager-delete per-op cost is warranted.
 
 Reproduce: `.venv/bin/python microbench.py` (pure-CPU, no GPU/vLLM import).
 Raw: [`runs/microbench.out`](runs/microbench.out).
 
-## History — v4, after THREE adversarial audits (each changed the result)
+## History — v4, after FOUR adversarial audits (each changed or sharpened the result)
 
 | version | tested | audit found |
 |---|---|---|
 | v1 | page-events, per-op timing | timer-inflated ratio; bloat dismissed untested |
 | v2 | independent random slots; reclaimable-only heap | unrealistic dynamics (real pages bimodal); reclaimable heap trivially empty under pressure |
 | v3 | correlated workload; all-page vacate-cost lazy heap | **lazy-delete heap has unbounded O(P) peek spikes (~50 ms), hidden by reporting the mean** |
-| **v4** | + `IndexedHeap` (eager delete); p50/p99/MAX | this doc |
+| **v4** | + `IndexedHeap` (eager delete); p50/p99/MAX | audit-4: decision JUSTIFIED; fixed reporting — maintenance is O(log P) not flat (F1); 140 ns is ~½ timer floor & idx MAX is jitter not peek (F2); 4× is mostly Python-vs-C, algorithmic gap ~1.3–1.7× (F3); added permanent property test (F4/F5) |
 
-That this took 4 versions / 3 audits is itself the finding: a subtle structure
+That this took 4 versions / 4 audits is itself the finding: a subtle structure
 under churn has real tradeoffs that first-cut tests miss. The audit gate is
 load-bearing here, not decorative.
 
@@ -64,27 +70,48 @@ Correlated alloc/free ⇒ pages are bimodal (not the independent-slot model's
 rank **all** pages by vacate-cost (free → cached → live-preempt-penalty), which
 the cost asymmetry orders correctly.
 
+### (0) Correctness — property test (the backbone, audit-4 F5)
+The hand-rolled IndexedHeap is checked vs a `dict`+`min()` reference with FULL
+invariants (peek==reference-min; pos-map bijective with the heap array; heap
+order parent≤children; contents match) **after every op**, over **360k ops × 30
+seeds** with small keyspaces (heavy ties), **54k interior removes**, remove-min,
+remove-then-readd, and drain-to-empty: **0 violations**. The correlated workload
+itself drives interior removes (the hard sift path) with 0 violations too.
+
 ### (1) Query latency vs P — LazyHeap vs IndexedHeap vs naive O(P)
-p50 / p99 / **MAX** (the mean hides the lazy spikes):
+p50 / p99 / **MAX** (the *mean* hides the lazy O(P) spikes):
 
-| P | lazy p50/p99/MAX | **idx p50/p99/MAX** | naive O(P) mean |
+| P | lazy p50/p99/MAX | idx p50/p99/MAX | naive O(P) mean |
 |---:|---|---|---:|
-| 1,000  | 250 ns / 3.9 µs / **1.2 ms** | 140 ns / 210 ns / **6.6 µs** | 39 µs |
-| 4,000  | 290 ns / 7.0 µs / **6.8 ms** | 150 ns / 340 ns / **7.1 µs** | 164 µs |
-| 16,000 | 540 ns / 11.5 µs / **51.9 ms** | 250 ns / 540 ns / **6.6 µs** | 747 µs |
+| 1,000  | 260 ns / 4.2 µs / **1.6 ms** | 140 ns / 280 ns / 4.8 µs* | 41 µs |
+| 4,000  | 310 ns / 7.7 µs / **5.7 ms** | 160 ns / 400 ns / 11 µs* | 172 µs |
+| 16,000 | 560 ns / 14 µs / **70.5 ms** | 260 ns / 570 ns / 51 µs* | 751 µs |
 
-IndexedHeap: tight, **bounded ~7 µs tail flat in P**. Lazy: O(P) MAX growing to
-**52 ms**. Fixed-churn structural probe (isolates big-O): IndexedHeap peek p50
-**flat 140 ns** and MAX flat ~µs across **256× P** ⇒ O(log P), no O(P) tail.
+LazyHeap MAX is a **real O(P) trim spike** — scales 1.6→70 ms with P. IndexedHeap
+p50/p99 are tight (140–570 ns); its **MAX\* is scheduler JITTER, not peek cost**
+(audit-4 F2): batched worst per-call is ~125 ns and the bare `perf_counter_ns()`
+floor on this box is ~56 ns, so the real peek is sub-µs (~68 ns net). Fixed-churn
+probe: peek p50 **flat ~140 ns across 256× P** ⇒ O(1).
 
-### (2) Per-op maintenance — IndexedHeap ~3.7–4.4× LRU
-P=4000, 3 seeds: inc ~1.21–1.27 µs/event, LRU ~0.27–0.34 µs/event, ratio
-3.71 / 3.77 / 4.44; bare-op (no wrapper) 4.6×. Over the literal ≤3× bar; per
-the corrected criterion above, **operationally irrelevant** (µs ≪ ms step).
+### (2) Per-op maintenance — IndexedHeap, and how much is algorithm vs Python
+Batch-timed, P=4000, 3 seeds: inc ~1.2–1.3 µs/event, LRU ~0.27–0.34 µs/event →
+**3.74 / 4.04 / 4.37× LRU** (load-dependent; ~2.9× at lighter load).
 
-### (3) Correctness — **0** violations
+Bare-op decomposition (audit-4 F3 — *how much of the 4× is algorithm vs the
+hand-rolled-Python-sift-vs-C constant*): IndexedHeap.update 0.78 µs, LazyHeap
+`heapq.heappush` 0.62 µs, OrderedDict.move 0.19 µs ⇒ **idx/lazy = 1.3–1.7×
+(algorithmic)**, idx/OrderedDict = **4.1× (mostly Python-sift vs C primitive)**.
+So the 4× is *predominantly* implementation constant, not algorithm — a
+C-backed indexed heap would likely beat the lazy heap on per-op too.
+
+Maintenance is **O(log P)**, not flat (audit-4 F1): ~1.0 µs @1k → ~1.1 µs @16k →
+~2.9 µs @64k → ~3.2 µs @256k. Still **≪ a 10–50 ms step** at every size.
+
+### (3) Correctness in the workload — **0** violations
 Across all P and ~21k queries/run: IndexedHeap (and LazyHeap) returned the true
-min-vacate-cost page and **never a mamba-owned page**. 0 violations.
+min-vacate-cost page and **never a mamba-owned page**. 0 violations. (mamba-take
++ near-empty-pool paths are lightly hit in the workload — audit-4 F4 — but
+hammered by the (0) property test.)
 
 ### (4) Memory — IndexedHeap has no bloat by construction
 5M updates, 5000 keys: lazy no-compaction **600–900×**; lazy compaction(8) ~5×

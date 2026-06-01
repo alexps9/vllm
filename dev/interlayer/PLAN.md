@@ -26,23 +26,27 @@ before writing any vLLM integration. Each is a subfolder; each gets audited.
 | [`page_bubble`](0_feasibility/page_bubble/) | ✅ done | the bubble exists | waste at 1056 ≈ waste at 16 (it's 42.6% vs 0.69%) |
 | [`virtual_split`](0_feasibility/virtual_split/) | ✅ done | kernel runs at `ksize=32 ≪ 1056`, valid attention at sub-page granularity, no kernel change | kernel pinned to 1056 / wrong output at 16-vs-32 (it's numerically equivalent; bit-identical was retired as fp-impossible) |
 | [`sub_block_allocator`](0_feasibility/sub_block_allocator/) | ✅ done | two-level allocator is memory-safe **with ref-counting + cached lifecycle + sharing** | any invariant violation / leak (0 over 3 seeds × 150k ops + adversarial; ref_cnt→290) |
-| [`decision_cost`](0_feasibility/decision_cost/) | ✅ done (audited ×3) | "cheapest page to vacate" incremental & correct; **structure chosen = `IndexedHeap` (eager-delete)**: O(1) query, bounded ~7µs tail, no bloat, ~4× LRU per-op (µs ≪ ms step → fine) | query O(P)/unbounded tail (lazy heap: 50ms — that's why eager-delete) / wrong page (0 viol). Lazy `LPBPriorityQueue` carries the defect → task #99 |
+| [`decision_cost`](0_feasibility/decision_cost/) | ✅ done (audited ×4) | "cheapest page to vacate" incremental & correct; **structure chosen = `IndexedHeap` (eager-delete)**: O(1) query, bounded ~7µs tail, no bloat, ~4× LRU per-op (µs ≪ ms step → fine) | query O(P)/unbounded tail (lazy heap: 50ms — that's why eager-delete) / wrong page (0 viol). Lazy `LPBPriorityQueue` carries the defect → task #99 |
 | [`prefix_cache`](0_feasibility/prefix_cache/) | ⬜ todo (#94) ⚠ | mixed-granularity prefix cache correct + finer reuse | correctness violation / hit doesn't round to ksize. **⚠ may need minimal impl — revisit (see below).** |
 | [`cuda_graph`](0_feasibility/cuda_graph/) | ⬜ todo (#95) ⚠ | sub-block block-table safe under captured-graph replay | replay fault / recapture. **⚠ may need minimal impl — revisit.** |
 
 **Gate**: all six pass (audited). `decision_cost` ✅ done (self-contained;
-carries a required compaction follow-up into `1_allocator` + task #99).
+structure chosen = eager-delete `IndexedHeap`; real-engine profiling of its
+maintenance cost → task #100; the prod lazy `LPBPriorityQueue` defect → #99).
 `prefix_cache` and `cuda_graph` test properties of the *real* block-table /
 prefix-cache changes, so they likely need the Phase-1 allocator to exist —
 flagged for reclassification to implementation if a faithful pre-impl check
 isn't possible.
 
-**Audit note (decision_cost):** took TWO audits. v1 had timer-inflated numbers
-+ dismissed heap bloat; v2 used an unrealistic independent-slot workload and a
-reclaimable-only heap (trivially empty under pressure). v3 (correlated workload
-+ all-page vacate-cost heap) is the version of record. The recurring lesson
-holds: the first-cut workload tests the easy case; audits force the realistic
-regime.
+**Audit note (decision_cost):** took FOUR audits. v1 timer-inflated + dismissed
+bloat; v2 unrealistic independent-slot workload + reclaimable-only heap; v3
+(correlated + all-page vacate-cost) revealed the lazy-delete heap's unbounded
+O(P) ~50 ms peek spikes hidden by the mean; v4 chose an eager-delete
+`IndexedHeap` (O(1) peek, sub-µs tail, no bloat) — audit-4 confirmed the choice
+(capping the lazy heap's trim instead gives 31% wrong answers) and sharpened
+the numbers (maintenance is O(log P) not flat; 4× is mostly Python-vs-C). The
+recurring lesson: first-cut tests verify the easy case / report the metric that
+hides the bad behavior; audits force the realistic regime.
 
 ---
 
@@ -89,7 +93,8 @@ KV-bound agent load, n=3, fix vs stock on the real engine.
   `ninja` + `.venv/bin` on PATH for the GDN JIT.
 
 ## Status snapshot
-4/6 feasibility checks done (all audited). prefix_cache / cuda_graph remain
-(both ⚠ likely need the real allocator → may reclassify to implementation).
-No implementation started — gate not closed. decision_cost carries a required
-heap-compaction follow-up into `1_allocator` (+ task #99 for L1).
+4/6 feasibility checks done (all audited; decision_cost audited ×4).
+prefix_cache / cuda_graph remain (both ⚠ likely need the real allocator → may
+reclassify to implementation). No implementation started — gate not closed.
+decision_cost open follow-ups: real-engine maintenance profiling (#100), L1
+lazy-heap fix (#99).
