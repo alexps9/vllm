@@ -1,0 +1,5 @@
+seed 0: OK — {"n_pages": 2000, "K": 33, "n_ops": 1000000, "invariant_violations": 0, "attn_oom_events": 344347, "mamba_starve_events": 246506, "adv_starve_when_full": true, "adv_starve_max_scatter": true, "adv_mamba_recovered_after_freeing_one_page": true, "seed": 0}
+seed 1: OK — {"n_pages": 2000, "K": 33, "n_ops": 1000000, "invariant_violations": 0, "attn_oom_events": 343386, "mamba_starve_events": 246751, "adv_starve_when_full": true, "adv_starve_max_scatter": true, "adv_mamba_recovered_after_freeing_one_page": true, "seed": 1}
+seed 2: OK — {"n_pages": 2000, "K": 33, "n_ops": 1000000, "invariant_violations": 0, "attn_oom_events": 343388, "mamba_starve_events": 246921, "adv_starve_when_full": true, "adv_starve_max_scatter": true, "adv_mamba_recovered_after_freeing_one_page": true, "seed": 2}
+
+ALL PASS — zero invariant violations across 3 seeds
