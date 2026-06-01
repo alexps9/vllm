@@ -77,15 +77,27 @@ change**, mamba contiguity intact. The bubble drops from rounding-to-1056 to
 rounding-to-`kernel_block_size` (~`ksize/2` tokens per sequence, e.g. ~8–16
 instead of ~528).
 
-## Open: target regime (mamba `none` vs `align`)
+## Target regime: prefix-caching (`align`) — resolved
 
-This architecture assumes **mamba = one whole indivisible page** — true in
-`mamba_cache_mode="none"`. With prefix caching on, vLLM uses `"align"` mode,
-where mamba allocates *many small blocks* (and may be non-contiguous). The
-1056 inflation is observed live in `align` too (so the bubble is real there),
-but mamba's shape — hence whether this exact fix applies — differs. **Which
-regime we target, and whether the fix holds in `align`, is being confirmed
-before this design is final.**
+We target the production agent setting: **prefix caching on**, which forces
+`mamba_cache_mode="align"`. Confirmed in code + live:
+
+- The **attention 1056 bubble is identical in `align`** (attention still
+  allocates `cdiv(tokens,1056)` mostly-empty blocks; measured live).
+- In `align`, mamba does **not** hoard `cdiv(L,1056)` snapshots — it keeps a
+  **rolling 1–2 live state pages** per request (state copied forward at each
+  block boundary, the old block freed → `null_block`;
+  `single_type_kv_cache_manager.py:916-933, 988-1001`), plus **cached
+  snapshot pages** shared via prefix cache. Each mamba block is **one whole
+  physical page**.
+- Therefore mamba **never needs multi-page contiguous runs** — in *either*
+  mode it needs a **whole single page** at a time (1/req in `none`; rolling
+  few + snapshots in `align`). So the hard property (below) is "≥1 fully-free
+  page when mamba needs one," not "N contiguous pages."
+
+Net: the fix applies **unchanged** in `align`, and by freeing whole pages it
+*helps* mamba claim its rolling/snapshot pages. (Replace "indivisible big
+page" everywhere with "whole single page".)
 
 ## The one hard property
 
