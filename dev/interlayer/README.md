@@ -25,7 +25,7 @@ PLAN.md.
 | [`virtual_split/`](0_feasibility/virtual_split/) | kernel runs at `ksize=32 ≪ 1056`, valid at sub-page granularity, no kernel change (numerically-equiv) | ✅ done |
 | [`sub_block_allocator/`](0_feasibility/sub_block_allocator/) | two-level allocator memory-safe **with ref-counting + cached lifecycle** (0 violations) | ✅ done |
 | [`decision_cost/`](0_feasibility/decision_cost/) | "cheapest page to vacate" incremental & correct; chose **`IndexedHeap`** (eager-delete): O(1) query, sub-µs bounded tail, no bloat, ~4× LRU per-op (mostly Python-vs-C; µs ≪ ms step). Prod lazy `LPBPriorityQueue` has O(P) spikes + bloat → task #99 | ✅ done (audited ×4) |
-| [`cuda_graph/`](0_feasibility/cuda_graph/) | scattered sub-block block-table safe under captured-graph replay | 🔄 GPU probe |
+| [`cuda_graph/`](0_feasibility/cuda_graph/) | scattered sub-block block-table safe under captured-graph replay (0 faults, no recapture, bit-identical; prefill+decode) | ✅ done (GPU probe) |
 | ~~prefix_cache~~ | reclassified → `1_allocator` (trivial-by-param + integration-bound) | → impl (#94) |
 
 **Implementation phases** (PLAN.md): `1_allocator` → `2_cost_reclaim`

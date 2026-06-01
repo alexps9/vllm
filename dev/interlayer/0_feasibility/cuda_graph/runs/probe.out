@@ -1,0 +1,19 @@
+=== cuda_graph probe: prefill (S_q=200, S_kv=200, ksize=32) ===
+{"mode": "prefill", "replay": 0, "kind": "contig", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"mode": "prefill", "replay": 1, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"mode": "prefill", "replay": 2, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"mode": "prefill", "replay": 3, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"mode": "prefill", "replay": 4, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"mode": "prefill", "replay": 5, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"mode": "prefill", "S_q": 200, "S_kv": 200, "ksize": 32, "eager_scatter_max_diff": 0.0, "control_diff_vs_ref": 4.0938, "control_differs(expected True)": true, "replay_fault": false, "all_scatter_replays_match_ref": true, "n_replays": 7, "captured_once": true}
+
+=== cuda_graph probe: decode (S_q=1, S_kv=200, ksize=32) ===
+{"mode": "decode", "replay": 0, "kind": "contig", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"mode": "decode", "replay": 1, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"mode": "decode", "replay": 2, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"mode": "decode", "replay": 3, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"mode": "decode", "replay": 4, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"mode": "decode", "replay": 5, "kind": "scatter", "max_abs_diff_vs_ref": 0.0, "match": true}
+{"mode": "decode", "S_q": 1, "S_kv": 200, "ksize": 32, "eager_scatter_max_diff": 0.0, "control_diff_vs_ref": 0.5703, "control_differs(expected True)": true, "replay_fault": false, "all_scatter_replays_match_ref": true, "n_replays": 7, "captured_once": true}
+
+VERDICT: PASS {"prefill": true, "decode": true} - scattered sub-block block-table replays correctly under a captured graph (no fault, no recapture, == contiguous ref); the graph re-reads the live block-table (control differs).

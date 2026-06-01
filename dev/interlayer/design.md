@@ -212,17 +212,19 @@ ref-counting of shared sub-blocks on a co-owned page, eviction lifecycle) is the
 cache machinery × the two-level allocator — verify on the real impl. *Pass
 (ideal, on impl)*: zero correctness violations; hit length rounds to `ksize`.
 
-**cuda_graph** — the **scattered** sub-block block-table is safe under
-capture/replay. Code read: the block-table is a per-step-written *persistent
-input* tensor (same address across replays, `block_table.py:140-145`), read
-data-driven by the kernel (no fixed `N*ratio` contiguity assumption,
-`block_table.py:226-288`), and virtual-splitting already fans out to `ksize`
-blocks under graphs — so scattered ids are "just different data."
-- *Test*: hand-build a **scattered** block-table (non-contiguous sub-block ids)
-  vs a contiguous reference holding the same logical KV; run the real flash-attn
-  kernel under CUDA-graph **capture then replay with changed values**.
-- *Pass (ideal)*: **zero** replay faults; **no recapture**; scattered output
-  numerically matches the contiguous reference.
+**cuda_graph** — ✅ **done** (GPU probe). The **scattered** sub-block
+block-table is safe under capture/replay. Code read: the block-table is a
+per-step-written *persistent input* tensor (same address across replays,
+`block_table.py:140-145`), read data-driven by the kernel (no fixed `N*ratio`
+contiguity assumption, `block_table.py:226-288`).
+- *Test*: scattered block-table (non-contiguous ids) vs a contiguous reference
+  holding the same logical KV; real `flash_attn_varlen_func` under CUDA-graph
+  **capture once → replay with changed block-table values**; + a control where
+  the block-table points at *different* KV.
+- *Result*: **0 faults, no recapture, bit-identical** to the contiguous ref
+  across 5 scatterings × {prefill, decode}; control differs (graph re-reads the
+  live table). ⇒ scattered ids are "just different data": **no kernel change,
+  no eager-mode fallback**. See `0_feasibility/cuda_graph/RESULTS.md`.
 
 **Implementation-phase checks** (top-level `1_…`/`2_…`, on a minimal real
 impl — see [`PLAN.md`](PLAN.md)): **cost_reclaim** (mamba starvation /

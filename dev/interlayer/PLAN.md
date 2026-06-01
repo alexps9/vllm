@@ -27,7 +27,7 @@ before writing any vLLM integration. Each is a subfolder; each gets audited.
 | [`virtual_split`](0_feasibility/virtual_split/) | ✅ done | kernel runs at `ksize=32 ≪ 1056`, valid attention at sub-page granularity, no kernel change | kernel pinned to 1056 / wrong output at 16-vs-32 (it's numerically equivalent; bit-identical was retired as fp-impossible) |
 | [`sub_block_allocator`](0_feasibility/sub_block_allocator/) | ✅ done | two-level allocator is memory-safe **with ref-counting + cached lifecycle + sharing** | any invariant violation / leak (0 over 3 seeds × 150k ops + adversarial; ref_cnt→290) |
 | [`decision_cost`](0_feasibility/decision_cost/) | ✅ done (audited ×4) | "cheapest page to vacate" incremental & correct; **structure chosen = `IndexedHeap` (eager-delete)**: O(1) query, bounded ~7µs tail, no bloat, ~4× LRU per-op (µs ≪ ms step → fine) | query O(P)/unbounded tail (lazy heap: 50ms — that's why eager-delete) / wrong page (0 viol). Lazy `LPBPriorityQueue` carries the defect → task #99 |
-| [`cuda_graph`](0_feasibility/cuda_graph/) | 🔄 probe (#95) | scattered sub-block block-table safe under captured-graph replay | replay fault / recapture / scattered ids ≠ contiguous reference |
+| [`cuda_graph`](0_feasibility/cuda_graph/) | ✅ done (GPU probe) | scattered sub-block block-table safe under captured-graph replay (prefill+decode: 0 faults, no recapture, bit-identical to contiguous; control differs) | replay fault / recapture / scattered ≠ contiguous ref — none |
 | ~~prefix_cache~~ | → impl (#94) | reclassified to `1_allocator` | — |
 
 **Gate**: page_bubble / virtual_split / sub_block_allocator / decision_cost ✅
@@ -35,13 +35,13 @@ done (audited). **`prefix_cache` reclassified → `1_allocator` (#94)**: its onl
 paper-checkable part ("hit rounds to ksize") is trivially true by a parameter
 (hash chunk size); the real risk (collision / shared-sub-block ref-count /
 eviction) is the cache machinery × the allocator — model≠integration, needs the
-real impl. **`cuda_graph` (#95)** is the last gate item: a code read shows the
-block-table is a per-step-written *persistent input* tensor (same address across
-CUDA-graph replays, `block_table.py:140-145`) read data-driven by the kernel
-(no fixed `N*ratio` assumption), and virtual-splitting already fans out to
-`ksize` blocks under graphs — so scattered sub-block ids are "just different
-data." A minimal-GPU probe confirms the one residual (no downstream contiguity
-assumption) before building.
+real impl. **`cuda_graph` (#95) ✅ done**: a minimal-GPU probe on the real
+`flash_attn_varlen_func` confirmed the code-read — a scattered sub-block
+block-table replays under a captured graph with **0 faults, no recapture,
+bit-identical to the contiguous reference** (prefill + decode), and a control
+(block-table → different KV) differs, proving the graph re-reads the live table.
+Scattered ids are "just different data": **no kernel change, no eager-mode
+fallback**. The feasibility gate is now **CLOSED**.
 
 **Audit note (decision_cost):** took FOUR audits. v1 timer-inflated + dismissed
 bloat; v2 unrealistic independent-slot workload + reclaimable-only heap; v3
@@ -98,8 +98,10 @@ KV-bound agent load, n=3, fix vs stock on the real engine.
   `ninja` + `.venv/bin` on PATH for the GDN JIT.
 
 ## Status snapshot
-4/6 feasibility checks done (all audited; decision_cost audited ×4).
-prefix_cache / cuda_graph remain (both ⚠ likely need the real allocator → may
-reclassify to implementation). No implementation started — gate not closed.
-decision_cost open follow-ups: real-engine maintenance profiling (#100), L1
-lazy-heap fix (#99).
+**Feasibility gate CLOSED.** page_bubble / virtual_split / sub_block_allocator /
+decision_cost (audited ×4) / cuda_graph (GPU probe) all ✅; prefix_cache
+reclassified → `1_allocator` (#94). Next: build **`1_allocator`** (#97), which
+pulls in the **L2 cost model** (#98) for `2_cost_reclaim`. Carried follow-ups:
+decision-structure = eager-delete `IndexedHeap`; real-engine maintenance
+profiling (#100); L1 lazy-heap fix (#99); prefix-cache verified on impl (#94).
+No implementation started yet.
